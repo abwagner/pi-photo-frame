@@ -1,0 +1,1740 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pi Photo Frame</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            min-height: 100vh;
+            color: #e0e0e0;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        .header-top {
+            display: flex;
+            justify-content: flex-end;
+            gap: 15px;
+            margin-bottom: 10px;
+        }
+
+        .header-link {
+            color: #888;
+            text-decoration: none;
+            font-size: 0.9rem;
+            transition: color 0.2s;
+        }
+
+        .header-link:hover {
+            color: #00d4ff;
+        }
+
+        h1 {
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+            background: linear-gradient(90deg, #00d4ff, #7b2cbf);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .subtitle {
+            color: #888;
+        }
+
+        .display-link {
+            display: inline-block;
+            margin-top: 15px;
+            padding: 10px 25px;
+            background: linear-gradient(90deg, #7b2cbf, #00d4ff);
+            color: white;
+            text-decoration: none;
+            border-radius: 25px;
+            font-weight: 500;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        .display-link:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 20px rgba(123, 44, 191, 0.4);
+        }
+
+        /* ===== Preview Section ===== */
+        .preview-section {
+            display: none;
+            margin-bottom: 20px;
+        }
+
+        .preview-section.active {
+            display: block;
+        }
+
+        .mat-preview {
+            width: 100%;
+            aspect-ratio: 16/9;
+            border-radius: 16px 16px 0 0;
+            position: relative;
+            overflow: hidden;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 4px 30px rgba(0, 0, 0, 0.4);
+        }
+
+        .preview-section:not(.has-controls) .mat-preview {
+            border-radius: 16px;
+        }
+
+        #preview-content {
+            width: 100%;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .mat-preview img {
+            max-width: 90%;
+            max-height: 90%;
+            object-fit: contain;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+        }
+
+        .preview-close-btn {
+            position: absolute;
+            top: 12px;
+            right: 12px;
+            background: rgba(0, 0, 0, 0.5);
+            color: rgba(255, 255, 255, 0.7);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 50%;
+            width: 32px;
+            height: 32px;
+            cursor: pointer;
+            font-size: 1rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 10;
+            transition: background 0.2s;
+        }
+
+        .preview-close-btn:hover {
+            background: rgba(0, 0, 0, 0.7);
+        }
+
+        /* Preview controls bar (below the image) */
+        .preview-controls {
+            display: none;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-top: none;
+            border-radius: 0 0 16px 16px;
+            padding: 16px;
+            backdrop-filter: blur(10px);
+        }
+
+        .preview-controls.active {
+            display: block;
+        }
+
+        .preview-controls-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 12px;
+            padding-bottom: 8px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+        }
+
+        .preview-controls-header h3 {
+            font-size: 0.9rem;
+            color: #e0e0e0;
+            font-weight: 500;
+        }
+
+        .preview-controls-actions {
+            display: flex;
+            gap: 6px;
+        }
+
+        .btn-refresh {
+            background: rgba(0, 212, 255, 0.15);
+            color: #00d4ff;
+            border: 1px solid rgba(0, 212, 255, 0.3);
+        }
+
+        /* ===== Main Layout ===== */
+        .panels {
+            display: grid;
+            grid-template-columns: 1fr 300px;
+            gap: 20px;
+        }
+
+        @media (max-width: 900px) {
+            .panels {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .panel {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 16px;
+            padding: 20px;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .panel h2 {
+            font-size: 1.2rem;
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .settings-column {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        /* ===== Upload Zone ===== */
+        .upload-zone {
+            border: 2px dashed rgba(255, 255, 255, 0.2);
+            border-radius: 12px;
+            padding: 30px;
+            text-align: center;
+            transition: all 0.3s;
+            cursor: pointer;
+            margin-bottom: 15px;
+        }
+
+        .upload-zone:hover, .upload-zone.dragover {
+            border-color: #00d4ff;
+            background: rgba(0, 212, 255, 0.1);
+        }
+
+        .upload-zone svg {
+            width: 40px;
+            height: 40px;
+            margin-bottom: 10px;
+            opacity: 0.5;
+        }
+
+        .upload-zone p {
+            color: #888;
+        }
+
+        #file-input {
+            display: none;
+        }
+
+        /* ===== Stats Bar ===== */
+        .stats-bar {
+            display: flex;
+            gap: 25px;
+            padding: 12px 0;
+            color: #888;
+            font-size: 0.9rem;
+        }
+
+        .stat {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .stat-value {
+            color: #e0e0e0;
+            font-weight: 600;
+        }
+
+        /* ===== Toolbar ===== */
+        .toolbar {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 10px;
+            padding: 12px 16px;
+            margin-bottom: 15px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 12px;
+            border: 1px solid rgba(255, 255, 255, 0.08);
+        }
+
+        .toolbar-left {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .toolbar-right {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        .select-all-wrapper {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .select-all-wrapper input {
+            width: 18px;
+            height: 18px;
+            cursor: pointer;
+        }
+
+        .selection-count {
+            color: #888;
+            font-size: 0.85rem;
+        }
+
+        /* ===== Filter Tabs ===== */
+        .filter-tabs {
+            display: flex;
+            gap: 4px;
+            background: rgba(0, 0, 0, 0.2);
+            padding: 3px;
+            border-radius: 8px;
+        }
+
+        .filter-tab {
+            padding: 6px 14px;
+            border: none;
+            background: transparent;
+            color: #888;
+            cursor: pointer;
+            border-radius: 6px;
+            font-size: 0.85rem;
+            transition: all 0.2s;
+        }
+
+        .filter-tab:hover {
+            color: #e0e0e0;
+        }
+
+        .filter-tab.active {
+            background: rgba(255, 255, 255, 0.1);
+            color: #e0e0e0;
+        }
+
+        /* ===== Buttons ===== */
+        .btn {
+            padding: 8px 14px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 0.85rem;
+            font-weight: 500;
+            transition: all 0.2s;
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .btn:hover:not(:disabled) {
+            transform: translateY(-1px);
+        }
+
+        .btn-success {
+            background: rgba(0, 255, 136, 0.2);
+            color: #00ff88;
+            border: 1px solid rgba(0, 255, 136, 0.3);
+        }
+
+        .btn-warning {
+            background: rgba(255, 193, 7, 0.2);
+            color: #ffc107;
+            border: 1px solid rgba(255, 193, 7, 0.3);
+        }
+
+        .btn-danger {
+            background: rgba(255, 71, 87, 0.2);
+            color: #ff4757;
+            border: 1px solid rgba(255, 71, 87, 0.3);
+        }
+
+        /* ===== Gallery Grid ===== */
+        .gallery-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 16px;
+        }
+
+        .image-card {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 12px;
+            overflow: hidden;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            transition: transform 0.2s, border-color 0.2s;
+            position: relative;
+        }
+
+        .image-card:hover {
+            transform: translateY(-3px);
+        }
+
+        .image-card.selected {
+            border-color: #00d4ff;
+            box-shadow: 0 0 0 2px rgba(0, 212, 255, 0.3);
+        }
+
+        .image-card.disabled {
+            opacity: 0.6;
+        }
+
+        .image-card.disabled .card-thumb::after {
+            content: 'HIDDEN';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0, 0, 0, 0.7);
+            color: #ff4757;
+            padding: 6px 14px;
+            border-radius: 16px;
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+
+        .card-thumb {
+            position: relative;
+            aspect-ratio: 4/3;
+            overflow: hidden;
+            cursor: pointer;
+        }
+
+        .card-thumb img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .image-checkbox {
+            position: absolute;
+            top: 8px;
+            left: 8px;
+            width: 20px;
+            height: 20px;
+            cursor: pointer;
+            z-index: 10;
+        }
+
+        .status-badge {
+            position: absolute;
+            top: 8px;
+            right: 8px;
+            padding: 3px 8px;
+            border-radius: 10px;
+            font-size: 0.65rem;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+
+        .status-enabled {
+            background: rgba(0, 255, 136, 0.2);
+            color: #00ff88;
+        }
+
+        .status-disabled {
+            background: rgba(255, 71, 87, 0.2);
+            color: #ff4757;
+        }
+
+        .card-info {
+            padding: 10px;
+        }
+
+        .card-filename {
+            font-size: 0.8rem;
+            color: #e0e0e0;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            margin-bottom: 4px;
+        }
+
+        .card-meta {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.7rem;
+            color: #888;
+            margin-bottom: 8px;
+        }
+
+        .mat-color-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 8px;
+            font-size: 0.8rem;
+        }
+
+        .mat-color-row label {
+            color: #888;
+        }
+
+        .mat-color-picker {
+            width: 36px;
+            height: 24px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            background: transparent;
+            padding: 0;
+        }
+
+        .mat-color-picker::-webkit-color-swatch-wrapper {
+            padding: 2px;
+        }
+
+        .mat-color-picker::-webkit-color-swatch {
+            border-radius: 4px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .card-actions {
+            display: flex;
+            gap: 6px;
+        }
+
+        .card-actions button {
+            flex: 1;
+            padding: 6px;
+            font-size: 0.75rem;
+        }
+
+        /* ===== Group Cards ===== */
+        .group-card {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 12px;
+            overflow: hidden;
+            border: 2px solid rgba(123, 44, 191, 0.4);
+            transition: transform 0.2s, border-color 0.2s;
+            position: relative;
+        }
+
+        .group-card:hover {
+            transform: translateY(-3px);
+        }
+
+        .group-mosaic {
+            position: relative;
+            aspect-ratio: 4/3;
+            overflow: hidden;
+            cursor: pointer;
+            display: grid;
+            gap: 2px;
+            background: rgba(0, 0, 0, 0.3);
+        }
+
+        .group-mosaic.cols-2 { grid-template-columns: 1fr 1fr; }
+        .group-mosaic.cols-3 { grid-template-columns: 1fr 1fr 1fr; }
+        .group-mosaic.cols-2x2 { grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; }
+
+        .group-mosaic img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .group-badge {
+            position: absolute;
+            top: 8px;
+            right: 8px;
+            background: rgba(123, 44, 191, 0.8);
+            color: white;
+            padding: 3px 10px;
+            border-radius: 10px;
+            font-size: 0.65rem;
+            font-weight: 600;
+            z-index: 5;
+        }
+
+        .btn-group {
+            background: rgba(123, 44, 191, 0.2);
+            color: #c084fc;
+            border: 1px solid rgba(123, 44, 191, 0.4);
+        }
+
+        .btn-ungroup {
+            background: rgba(255, 255, 255, 0.1);
+            color: #aaa;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .btn-edit {
+            background: rgba(0, 212, 255, 0.15);
+            color: #00d4ff;
+            border: 1px solid rgba(0, 212, 255, 0.3);
+        }
+
+        .group-edit-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 6px 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .group-edit-item:last-child {
+            border-bottom: none;
+        }
+
+        .group-edit-thumb {
+            width: 40px;
+            height: 40px;
+            border-radius: 4px;
+            object-fit: cover;
+            flex-shrink: 0;
+        }
+
+        .group-edit-controls {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            flex: 1;
+            min-width: 0;
+        }
+
+        .group-edit-controls input[type="range"] {
+            flex: 1;
+            min-width: 60px;
+            accent-color: #00d4ff;
+        }
+
+        .scale-value {
+            font-size: 0.7rem;
+            color: #aaa;
+            min-width: 32px;
+            text-align: center;
+        }
+
+        .move-btn {
+            background: rgba(255, 255, 255, 0.08);
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            color: #ccc;
+            width: 26px;
+            height: 26px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.75rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0;
+            flex-shrink: 0;
+        }
+
+        .move-btn:hover {
+            background: rgba(255, 255, 255, 0.15);
+        }
+
+        .move-btn:disabled {
+            opacity: 0.3;
+            cursor: not-allowed;
+        }
+
+        /* Group preview */
+        .mat-preview .group-preview-images {
+            display: flex;
+            align-items: center;
+            justify-content: space-evenly;
+            width: 100%;
+            height: 100%;
+        }
+
+        .mat-preview .group-preview-images img {
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+        }
+
+        .mat-preview .group-preview-grid {
+            display: grid;
+            width: 100%;
+            height: 100%;
+            align-items: center;
+            justify-items: center;
+            justify-content: space-evenly;
+            align-content: space-evenly;
+        }
+
+        .mat-preview .group-preview-grid img {
+            max-width: 100%;
+            max-height: 100%;
+            object-fit: contain;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+        }
+
+        /* ===== Settings Panel ===== */
+        .setting-group {
+            margin-bottom: 18px;
+        }
+
+        .setting-group label {
+            display: block;
+            margin-bottom: 6px;
+            font-size: 0.85rem;
+            color: #aaa;
+        }
+
+        .setting-group input[type="color"] {
+            width: 100%;
+            height: 42px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            background: transparent;
+        }
+
+        .setting-group input[type="number"],
+        .setting-group select {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 8px;
+            background: rgba(0, 0, 0, 0.3);
+            color: #e0e0e0;
+            font-size: 0.95rem;
+        }
+
+        .setting-group input[type="number"]:focus,
+        .setting-group select:focus {
+            outline: none;
+            border-color: #00d4ff;
+        }
+
+        .color-presets {
+            display: flex;
+            gap: 7px;
+            margin-top: 8px;
+            flex-wrap: wrap;
+        }
+
+        .color-preset {
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            border: 2px solid transparent;
+            cursor: pointer;
+            transition: transform 0.2s, border-color 0.2s;
+        }
+
+        .color-preset:hover {
+            transform: scale(1.1);
+        }
+
+        .color-preset.active {
+            border-color: #00d4ff;
+        }
+
+        .toggle-group {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+
+        .toggle-group label {
+            margin-bottom: 0;
+        }
+
+        .toggle {
+            position: relative;
+            width: 50px;
+            height: 26px;
+        }
+
+        .toggle input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+
+        .toggle-slider {
+            position: absolute;
+            cursor: pointer;
+            inset: 0;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 26px;
+            transition: 0.3s;
+        }
+
+        .toggle-slider:before {
+            content: "";
+            position: absolute;
+            height: 20px;
+            width: 20px;
+            left: 3px;
+            bottom: 3px;
+            background: white;
+            border-radius: 50%;
+            transition: 0.3s;
+        }
+
+        .toggle input:checked + .toggle-slider {
+            background: linear-gradient(90deg, #7b2cbf, #00d4ff);
+        }
+
+        .toggle input:checked + .toggle-slider:before {
+            transform: translateX(24px);
+        }
+
+        /* ===== Status Messages ===== */
+        .status {
+            padding: 10px 15px;
+            border-radius: 8px;
+            margin-bottom: 15px;
+            display: none;
+        }
+
+        .status.success {
+            display: block;
+            background: rgba(0, 255, 136, 0.1);
+            border: 1px solid rgba(0, 255, 136, 0.3);
+            color: #00ff88;
+        }
+
+        .status.error {
+            display: block;
+            background: rgba(255, 71, 87, 0.1);
+            border: 1px solid rgba(255, 71, 87, 0.3);
+            color: #ff4757;
+        }
+
+        /* ===== Empty State ===== */
+        .empty-state {
+            text-align: center;
+            padding: 40px;
+            color: #666;
+        }
+
+        .empty-state svg {
+            width: 60px;
+            height: 60px;
+            margin-bottom: 12px;
+            opacity: 0.3;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <div class="header-top">
+                {% if is_admin %}
+                <a href="/backup" class="header-link">Backup</a>
+                {% endif %}
+                <a href="/change-password" class="header-link">Password</a>
+                {% if is_admin %}
+                <a href="/admin/users" class="header-link">Users</a>
+                {% endif %}
+                <a href="/logout" class="header-link">Logout</a>
+            </div>
+            <h1>🖼️ Pi Photo Frame</h1>
+            <p class="subtitle">Logged in as {{ username }}</p>
+            <a href="/display" class="display-link" target="_blank">Open TV Display →</a>
+        </header>
+
+        <!-- Preview Section -->
+        <div class="preview-section" id="preview-section">
+            <div class="mat-preview" id="mat-preview">
+                <div id="preview-content"></div>
+                <button class="preview-close-btn" onclick="closePreview()" title="Close">&times;</button>
+            </div>
+            <div class="preview-controls" id="preview-controls">
+                <div class="preview-controls-header">
+                    <h3 id="preview-controls-title">Group Controls</h3>
+                    <div class="preview-controls-actions">
+                        <button class="btn btn-refresh" onclick="autoMatchHeights()">Match Heights</button>
+                        <button class="btn btn-refresh" onclick="refreshPreview()">Refresh Preview</button>
+                    </div>
+                </div>
+                <div id="preview-controls-body"></div>
+            </div>
+        </div>
+
+        <div class="panels">
+            <!-- Main Content Panel -->
+            <div class="panel">
+                <div id="status" class="status"></div>
+
+                <div class="upload-zone" id="upload-zone">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                    </svg>
+                    <p>Drag & drop images here or click to browse</p>
+                    <p style="font-size: 0.8rem; margin-top: 8px;">Supports: JPG, PNG, GIF, WebP</p>
+                </div>
+                <input type="file" id="file-input" multiple accept="image/*">
+
+                <!-- Stats -->
+                <div class="stats-bar">
+                    <div class="stat">
+                        <span>Total:</span>
+                        <span class="stat-value" id="total-count">0</span>
+                    </div>
+                    <div class="stat">
+                        <span>Visible:</span>
+                        <span class="stat-value" id="enabled-count">0</span>
+                    </div>
+                    <div class="stat">
+                        <span>Hidden:</span>
+                        <span class="stat-value" id="disabled-count">0</span>
+                    </div>
+                </div>
+
+                <!-- Toolbar -->
+                <div class="toolbar">
+                    <div class="toolbar-left">
+                        <div class="select-all-wrapper">
+                            <input type="checkbox" id="select-all" title="Select all">
+                            <span class="selection-count"><span id="selected-count">0</span> selected</span>
+                        </div>
+                        <div class="filter-tabs">
+                            <button class="filter-tab active" data-filter="all">All</button>
+                            <button class="filter-tab" data-filter="enabled">Visible</button>
+                            <button class="filter-tab" data-filter="disabled">Hidden</button>
+                        </div>
+                    </div>
+                    <div class="toolbar-right">
+                        <button class="btn btn-group" id="bulk-group" disabled>📐 Group</button>
+                        <button class="btn btn-success" id="bulk-enable" disabled>✓ Show</button>
+                        <button class="btn btn-warning" id="bulk-disable" disabled>⊘ Hide</button>
+                        <button class="btn btn-danger" id="bulk-delete" disabled>🗑 Delete</button>
+                    </div>
+                </div>
+
+                <!-- Gallery Grid -->
+                <div class="gallery-grid" id="gallery-grid"></div>
+
+                <div class="empty-state" id="empty-state" style="display: none;">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                    </svg>
+                    <p>No photos yet</p>
+                    <p style="font-size: 0.9rem;">Upload some photos to get started</p>
+                </div>
+            </div>
+
+            <!-- Settings Sidebar -->
+            <div class="settings-column">
+                <!-- Mat Settings -->
+                <div class="panel">
+                    <h2>🎨 Mat Settings</h2>
+
+                    <div class="setting-group">
+                        <label>Default Mat Color</label>
+                        <input type="color" id="mat-color" value="{{ settings.mat_color }}">
+                        <div class="color-presets">
+                            <div class="color-preset" style="background: #000000;" data-color="#000000" title="Black"></div>
+                            <div class="color-preset" style="background: #1a1a1a;" data-color="#1a1a1a" title="Near Black"></div>
+                            <div class="color-preset" style="background: #2c2c2c;" data-color="#2c2c2c" title="Dark Gray"></div>
+                            <div class="color-preset" style="background: #4a4a4a;" data-color="#4a4a4a" title="Gray"></div>
+                            <div class="color-preset" style="background: #f5f5f5;" data-color="#f5f5f5" title="Off White"></div>
+                            <div class="color-preset" style="background: #ffffff;" data-color="#ffffff" title="White"></div>
+                            <div class="color-preset" style="background: #f5f0e6;" data-color="#f5f0e6" title="Cream"></div>
+                            <div class="color-preset" style="background: #2d3436;" data-color="#2d3436" title="Charcoal"></div>
+                            <div class="color-preset" style="background: #1e3a5f;" data-color="#1e3a5f" title="Navy"></div>
+                            <div class="color-preset" style="background: #4a0e0e;" data-color="#4a0e0e" title="Burgundy"></div>
+                        </div>
+                    </div>
+
+                    <p style="font-size: 0.75rem; color: #666;">
+                        Set per-image mat colors in the gallery below.
+                    </p>
+                </div>
+
+                <!-- Slideshow Settings -->
+                <div class="panel">
+                    <h2>📺 Slideshow Settings</h2>
+
+                    <div class="setting-group">
+                        <label>Slideshow Interval (seconds)</label>
+                        <input type="number" id="slideshow-interval" min="3" max="300" value="{{ settings.slideshow_interval }}">
+                    </div>
+
+                    <div class="setting-group">
+                        <label>Transition Duration (seconds)</label>
+                        <input type="number" id="transition-duration" min="0" max="5" step="0.5" value="{{ settings.transition_duration }}">
+                    </div>
+
+                    <div class="setting-group">
+                        <label>Image Fit</label>
+                        <select id="fit-mode">
+                            <option value="contain" {% if settings.fit_mode == 'contain' %}selected{% endif %}>Contain (show full image)</option>
+                            <option value="cover" {% if settings.fit_mode == 'cover' %}selected{% endif %}>Cover (fill screen, may crop)</option>
+                        </select>
+                    </div>
+
+                    <div class="toggle-group">
+                        <label>Shuffle Order</label>
+                        <label class="toggle">
+                            <input type="checkbox" id="shuffle" {% if settings.shuffle %}checked{% endif %}>
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </div>
+
+                    <div class="setting-group">
+                        <label>Target Screen Ratio</label>
+                        <select id="target-aspect-ratio">
+                            <option value="16:9" {% if settings.target_aspect_ratio == '16:9' %}selected{% endif %}>16:9 (4K TV)</option>
+                            <option value="21:9" {% if settings.target_aspect_ratio == '21:9' %}selected{% endif %}>21:9 (Ultrawide)</option>
+                            <option value="4:3" {% if settings.target_aspect_ratio == '4:3' %}selected{% endif %}>4:3 (Standard)</option>
+                            <option value="1:1" {% if settings.target_aspect_ratio == '1:1' %}selected{% endif %}>1:1 (Square)</option>
+                        </select>
+                    </div>
+
+                    <p style="font-size: 0.75rem; color: #666; text-align: center;">
+                        Settings are saved automatically.
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ===== DOM Elements =====
+        const uploadZone = document.getElementById('upload-zone');
+        const fileInput = document.getElementById('file-input');
+        const galleryGrid = document.getElementById('gallery-grid');
+        const emptyState = document.getElementById('empty-state');
+        const statusEl = document.getElementById('status');
+        const previewSection = document.getElementById('preview-section');
+        const matPreview = document.getElementById('mat-preview');
+        const previewContent = document.getElementById('preview-content');
+        const previewControls = document.getElementById('preview-controls');
+        const previewControlsBody = document.getElementById('preview-controls-body');
+        const previewControlsTitle = document.getElementById('preview-controls-title');
+
+        // Settings elements
+        const matColorInput = document.getElementById('mat-color');
+        const slideshowIntervalInput = document.getElementById('slideshow-interval');
+        const transitionDurationInput = document.getElementById('transition-duration');
+        const fitModeSelect = document.getElementById('fit-mode');
+        const targetAspectRatioSelect = document.getElementById('target-aspect-ratio');
+        const shuffleCheckbox = document.getElementById('shuffle');
+        const colorPresets = document.querySelectorAll('.color-preset');
+
+        // ===== State =====
+        let images = [];
+        let groups = {};  // group_id -> {images: [...], mat_color, created_at}
+        let selectedImages = new Set();
+        let currentFilter = 'all';
+        let previewFilename = null;
+        let previewGroupId = null;
+
+        // ===== Initialize =====
+        loadGallery();
+
+        // ===== Upload Handling =====
+        uploadZone.addEventListener('click', () => fileInput.click());
+
+        uploadZone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadZone.classList.add('dragover');
+        });
+
+        uploadZone.addEventListener('dragleave', () => {
+            uploadZone.classList.remove('dragover');
+        });
+
+        uploadZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadZone.classList.remove('dragover');
+            handleFiles(e.dataTransfer.files);
+        });
+
+        fileInput.addEventListener('change', (e) => {
+            handleFiles(e.target.files);
+        });
+
+        async function handleFiles(files) {
+            const formData = new FormData();
+            for (const file of files) {
+                formData.append('files', file);
+            }
+
+            showStatus('Uploading...', 'success');
+
+            try {
+                const response = await fetch('/api/upload', {
+                    method: 'POST',
+                    body: formData
+                });
+                const data = await response.json();
+
+                if (data.uploaded.length > 0) {
+                    showStatus(`Uploaded ${data.uploaded.length} image(s)`, 'success');
+                    loadGallery();
+                }
+                if (data.errors.length > 0) {
+                    showStatus(data.errors.join(', '), 'error');
+                }
+            } catch (err) {
+                showStatus('Upload failed: ' + err.message, 'error');
+            }
+
+            fileInput.value = '';
+        }
+
+        // ===== Gallery Loading =====
+        async function loadGallery() {
+            try {
+                const response = await fetch('/api/gallery');
+                const data = await response.json();
+                images = data.images;
+                groups = data.groups || {};
+                renderGallery();
+                updateStats();
+            } catch (err) {
+                showStatus('Failed to load gallery', 'error');
+            }
+        }
+
+        function renderGallery() {
+            const grid = galleryGrid;
+
+            // Build set of grouped filenames
+            const groupedFilenames = new Set();
+            for (const group of Object.values(groups)) {
+                (group.images || []).forEach(f => groupedFilenames.add(f));
+            }
+
+            let filtered = images;
+            if (currentFilter === 'enabled') {
+                filtered = images.filter(img => img.enabled);
+            } else if (currentFilter === 'disabled') {
+                filtered = images.filter(img => !img.enabled);
+            }
+
+            // Separate ungrouped images from grouped
+            const ungrouped = filtered.filter(img => !groupedFilenames.has(img.filename));
+
+            if (images.length === 0 && Object.keys(groups).length === 0) {
+                grid.style.display = 'none';
+                emptyState.style.display = 'block';
+                return;
+            }
+
+            grid.style.display = 'grid';
+            emptyState.style.display = 'none';
+
+            // Render group cards first, then ungrouped images
+            let html = '';
+
+            // Group cards (only show if filter is 'all' or 'enabled' since groups are visible)
+            if (currentFilter !== 'disabled') {
+                for (const [groupId, group] of Object.entries(groups)) {
+                    const groupImages = (group.images || []).map(f => images.find(i => i.filename === f)).filter(Boolean);
+                    if (groupImages.length < 2) continue;
+
+                    const count = groupImages.length;
+                    const mosaicClass = count === 2 ? 'cols-2' : count === 3 ? 'cols-3' : 'cols-2x2';
+                    const displayImages = groupImages.slice(0, 4);
+
+                    html += `
+                        <div class="group-card" data-group-id="${groupId}">
+                            <div class="group-mosaic ${mosaicClass}" onclick="openGroupPreview('${groupId}')">
+                                <span class="group-badge">${count} images</span>
+                                ${displayImages.map(img => `<img src="/uploads/${img.filename}" alt="${img.filename}" loading="lazy">`).join('')}
+                            </div>
+                            <div class="card-info">
+                                <div class="card-filename">Group (${count} images)</div>
+                                <div class="mat-color-row">
+                                    <label>Mat:</label>
+                                    <input type="color"
+                                           class="mat-color-picker"
+                                           value="${group.mat_color || matColorInput.value}"
+                                           onchange="updateGroupMatColor('${groupId}', this.value)">
+                                </div>
+                                <div class="card-actions">
+                                    <button class="btn btn-edit" onclick="openGroupPreview('${groupId}')">Edit</button>
+                                    <button class="btn btn-ungroup" onclick="ungroupGroup('${groupId}')">Ungroup</button>
+                                    <button class="btn btn-danger" onclick="deleteGroup('${groupId}')">🗑</button>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                }
+            }
+
+            // Ungrouped image cards
+            html += ungrouped.map(img => `
+                <div class="image-card ${img.enabled ? '' : 'disabled'} ${selectedImages.has(img.filename) ? 'selected' : ''}"
+                     data-filename="${img.filename}">
+                    <div class="card-thumb" onclick="openPreview('${img.filename}')">
+                        <input type="checkbox" class="image-checkbox"
+                               ${selectedImages.has(img.filename) ? 'checked' : ''}
+                               onclick="event.stopPropagation()"
+                               onchange="toggleSelect('${img.filename}')">
+                        <span class="status-badge ${img.enabled ? 'status-enabled' : 'status-disabled'}">
+                            ${img.enabled ? 'Visible' : 'Hidden'}
+                        </span>
+                        <img src="/uploads/${img.filename}" alt="${img.filename}" loading="lazy">
+                    </div>
+                    <div class="card-info">
+                        <div class="card-filename" title="${img.filename}">${cleanFilename(img.filename)}</div>
+                        <div class="card-meta">
+                            <span>${formatSize(img.size)}</span>
+                            <span>${img.uploaded_by || 'Unknown'}</span>
+                        </div>
+                        <div class="mat-color-row">
+                            <label>Mat:</label>
+                            <input type="color"
+                                   class="mat-color-picker"
+                                   value="${img.mat_color || matColorInput.value}"
+                                   data-filename="${img.filename}"
+                                   onchange="updateMatColor('${img.filename}', this.value)">
+                        </div>
+                        <div class="card-actions">
+                            <button class="btn ${img.enabled ? 'btn-warning' : 'btn-success'}"
+                                    onclick="toggleImage('${img.filename}', ${!img.enabled})">
+                                ${img.enabled ? '⊘ Hide' : '✓ Show'}
+                            </button>
+                            <button class="btn btn-danger" onclick="deleteImage('${img.filename}')">🗑</button>
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+
+            grid.innerHTML = html;
+            updateSelectionUI();
+        }
+
+        // ===== Preview =====
+        function openPreview(filename) {
+            const img = images.find(i => i.filename === filename);
+            if (!img) return;
+
+            const matColor = img.mat_color || matColorInput.value;
+            matPreview.style.backgroundColor = matColor;
+            previewContent.innerHTML = `<img src="/uploads/${filename}" alt="${filename}" style="max-width:90%;max-height:90%;object-fit:contain;box-shadow:0 4px 20px rgba(0,0,0,0.3);">`;
+
+            // No controls for single images
+            previewControls.classList.remove('active');
+            previewSection.classList.remove('has-controls');
+            previewSection.classList.add('active');
+            previewFilename = filename;
+            previewGroupId = null;
+        }
+
+        function openGroupPreview(groupId) {
+            const group = groups[groupId];
+            if (!group) return;
+
+            previewGroupId = groupId;
+            previewFilename = null;
+
+            // Make section visible FIRST so container has real dimensions
+            previewControls.classList.add('active');
+            previewSection.classList.add('has-controls');
+            previewSection.classList.add('active');
+
+            // Now render (container clientWidth/clientHeight are non-zero)
+            renderGroupPreviewImage(groupId);
+            renderGroupControls(groupId);
+        }
+
+        function renderGroupPreviewImage(groupId) {
+            const group = groups[groupId];
+            if (!group) return;
+
+            const matColor = group.mat_color || matColorInput.value;
+            matPreview.style.backgroundColor = matColor;
+
+            const groupImages = (group.images || []).map(f => images.find(i => i.filename === f)).filter(Boolean);
+            const scales = group.scales || {};
+            const count = groupImages.length;
+
+            if (count <= 3) {
+                // Compute explicit pixel sizes so all images render at the same height (when scale=1)
+                const containerW = matPreview.clientWidth;
+                const containerH = matPreview.clientHeight;
+
+                const imgInfos = groupImages.map(img => ({
+                    filename: img.filename,
+                    ar: (img.width || 1) / (img.height || 1),
+                    scale: scales[img.filename] || 1.0
+                }));
+
+                // At base height h=1, each image has width = ar * scale
+                const totalWidthAtUnitHeight = imgInfos.reduce((sum, info) => sum + info.ar * info.scale, 0);
+                const maxScale = Math.max(...imgInfos.map(i => i.scale));
+                // Reserve space for N+1 equal gaps (space-evenly) — each gap ~5% of container
+                const gapFraction = 0.05;
+                const totalGapFraction = gapFraction * (count + 1);
+                const usableW = containerW * (1 - totalGapFraction);
+                const usableH = containerH * 0.85;
+                // Base height: largest h such that total width fits and tallest image fits
+                const baseHeight = Math.min(usableH / maxScale, usableW / totalWidthAtUnitHeight);
+
+                previewContent.innerHTML = `<div class="group-preview-images">${imgInfos.map(info => {
+                    const h = baseHeight * info.scale;
+                    const w = h * info.ar;
+                    return `<img src="/uploads/${info.filename}" alt="${info.filename}" style="width:${w}px;height:${h}px;max-width:none;max-height:none;flex-shrink:0;box-shadow:0 4px 20px rgba(0,0,0,0.3);">`;
+                }).join('')}</div>`;
+            } else {
+                const cols = Math.ceil(Math.sqrt(count));
+                previewContent.innerHTML = `<div class="group-preview-grid" style="grid-template-columns:repeat(${cols},1fr);">${groupImages.map(img => {
+                    return `<img src="/uploads/${img.filename}" alt="${img.filename}">`;
+                }).join('')}</div>`;
+            }
+        }
+
+        function renderGroupControls(groupId) {
+            const group = groups[groupId];
+            if (!group) return;
+
+            const groupImages = (group.images || []).map(f => images.find(i => i.filename === f)).filter(Boolean);
+            const scales = group.scales || {};
+            const count = groupImages.length;
+
+            previewControlsTitle.textContent = `Group (${count} images)`;
+            previewControlsBody.innerHTML = groupImages.map((img, idx) => `
+                <div class="group-edit-item">
+                    <img class="group-edit-thumb" src="/uploads/${img.filename}" alt="${img.filename}">
+                    <div class="group-edit-controls">
+                        <button class="move-btn" ${idx === 0 ? 'disabled' : ''} onclick="moveGroupImage('${groupId}', ${idx}, -1)" title="Move left">&larr;</button>
+                        <input type="range" min="0.25" max="3" step="0.05"
+                               value="${scales[img.filename] || 1.0}"
+                               oninput="updateGroupScalePreview('${groupId}', '${img.filename}', this.value); this.nextElementSibling.textContent = parseFloat(this.value).toFixed(2) + 'x'"
+                               onchange="updateGroupScale('${groupId}', '${img.filename}', this.value)">
+                        <span class="scale-value">${parseFloat(scales[img.filename] || 1.0).toFixed(2)}x</span>
+                        <button class="move-btn" ${idx === count - 1 ? 'disabled' : ''} onclick="moveGroupImage('${groupId}', ${idx}, 1)" title="Move right">&rarr;</button>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function refreshPreview() {
+            if (previewGroupId) {
+                renderGroupPreviewImage(previewGroupId);
+            }
+        }
+
+        async function autoMatchHeights() {
+            if (!previewGroupId) return;
+            const group = groups[previewGroupId];
+            if (!group) return;
+
+            const groupImages = (group.images || []).map(f => images.find(i => i.filename === f)).filter(Boolean);
+            if (groupImages.length < 2) return;
+
+            // Set all scales to 1.0 — the explicit sizing logic in renderGroupPreviewImage
+            // already ensures equal heights when all scales are the same
+            const newScales = {};
+            groupImages.forEach(img => {
+                newScales[img.filename] = 1.0;
+            });
+
+            group.scales = newScales;
+
+            try {
+                await fetch(`/api/groups/${previewGroupId}`, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ scales: newScales })
+                });
+                renderGroupControls(previewGroupId);
+                renderGroupPreviewImage(previewGroupId);
+                showStatus('Heights matched', 'success');
+            } catch (err) {
+                showStatus('Failed to match heights', 'error');
+            }
+        }
+
+        function closePreview() {
+            previewSection.classList.remove('active');
+            previewSection.classList.remove('has-controls');
+            previewControls.classList.remove('active');
+            previewFilename = null;
+            previewGroupId = null;
+        }
+
+        // ===== Helpers =====
+        function cleanFilename(filename) {
+            return filename.replace(/^[a-f0-9]+_/, '');
+        }
+
+        function formatSize(bytes) {
+            if (bytes < 1024) return bytes + ' B';
+            if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+            return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+        }
+
+        function updateStats() {
+            const total = images.length;
+            const enabled = images.filter(img => img.enabled).length;
+            document.getElementById('total-count').textContent = total;
+            document.getElementById('enabled-count').textContent = enabled;
+            document.getElementById('disabled-count').textContent = total - enabled;
+        }
+
+        // ===== Selection =====
+        function toggleSelect(filename) {
+            if (selectedImages.has(filename)) {
+                selectedImages.delete(filename);
+            } else {
+                selectedImages.add(filename);
+            }
+            updateSelectionUI();
+        }
+
+        function updateSelectionUI() {
+            document.getElementById('selected-count').textContent = selectedImages.size;
+
+            const hasSelection = selectedImages.size > 0;
+            document.getElementById('bulk-enable').disabled = !hasSelection;
+            document.getElementById('bulk-disable').disabled = !hasSelection;
+            document.getElementById('bulk-delete').disabled = !hasSelection;
+            document.getElementById('bulk-group').disabled = selectedImages.size < 2;
+
+            const visibleImages = getFilteredImages();
+            const allSelected = visibleImages.length > 0 &&
+                               visibleImages.every(img => selectedImages.has(img.filename));
+            document.getElementById('select-all').checked = allSelected;
+
+            document.querySelectorAll('.image-card').forEach(card => {
+                const filename = card.dataset.filename;
+                card.classList.toggle('selected', selectedImages.has(filename));
+                const cb = card.querySelector('.image-checkbox');
+                if (cb) cb.checked = selectedImages.has(filename);
+            });
+        }
+
+        function getFilteredImages() {
+            if (currentFilter === 'enabled') return images.filter(img => img.enabled);
+            if (currentFilter === 'disabled') return images.filter(img => !img.enabled);
+            return images;
+        }
+
+        // Select all
+        document.getElementById('select-all').addEventListener('change', (e) => {
+            const filtered = getFilteredImages();
+            if (e.target.checked) {
+                filtered.forEach(img => selectedImages.add(img.filename));
+            } else {
+                filtered.forEach(img => selectedImages.delete(img.filename));
+            }
+            updateSelectionUI();
+        });
+
+        // Filter tabs
+        document.querySelectorAll('.filter-tab').forEach(tab => {
+            tab.addEventListener('click', () => {
+                document.querySelectorAll('.filter-tab').forEach(t => t.classList.remove('active'));
+                tab.classList.add('active');
+                currentFilter = tab.dataset.filter;
+                renderGallery();
+            });
+        });
+
+        // ===== Image Actions =====
+        async function updateMatColor(filename, color) {
+            try {
+                const response = await fetch(`/api/gallery/${filename}`, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ mat_color: color })
+                });
+                if (response.ok) {
+                    const img = images.find(i => i.filename === filename);
+                    if (img) img.mat_color = color;
+                    // Update preview if this image is being previewed
+                    if (previewFilename === filename) {
+                        matPreview.style.backgroundColor = color;
+                    }
+                    showStatus('Mat color updated', 'success');
+                }
+            } catch (err) {
+                showStatus('Failed to update mat color', 'error');
+            }
+        }
+
+        async function toggleImage(filename, enabled) {
+            try {
+                const response = await fetch(`/api/gallery/${filename}`, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ enabled })
+                });
+                if (response.ok) {
+                    const img = images.find(i => i.filename === filename);
+                    if (img) img.enabled = enabled;
+                    renderGallery();
+                    updateStats();
+                    showStatus(enabled ? 'Image visible' : 'Image hidden', 'success');
+                }
+            } catch (err) {
+                showStatus('Failed to update image', 'error');
+            }
+        }
+
+        async function deleteImage(filename) {
+            if (!confirm('Delete this image permanently?')) return;
+
+            try {
+                const response = await fetch(`/api/gallery/${filename}`, {
+                    method: 'DELETE'
+                });
+                if (response.ok) {
+                    images = images.filter(i => i.filename !== filename);
+                    selectedImages.delete(filename);
+                    if (previewFilename === filename) closePreview();
+                    renderGallery();
+                    updateStats();
+                    showStatus('Image deleted', 'success');
+                }
+            } catch (err) {
+                showStatus('Failed to delete image', 'error');
+            }
+        }
+
+        // ===== Bulk Actions =====
+        document.getElementById('bulk-enable').addEventListener('click', () => bulkAction('enable'));
+        document.getElementById('bulk-disable').addEventListener('click', () => bulkAction('disable'));
+        document.getElementById('bulk-delete').addEventListener('click', async () => {
+            if (!confirm(`Delete ${selectedImages.size} images permanently?`)) return;
+            await bulkAction('delete');
+        });
+
+        async function bulkAction(action) {
+            const filenames = Array.from(selectedImages);
+            try {
+                const response = await fetch('/api/gallery/bulk', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action, filenames })
+                });
+                const data = await response.json();
+                if (response.ok) {
+                    showStatus(data.message, 'success');
+                    if (action === 'delete') {
+                        images = images.filter(i => !filenames.includes(i.filename));
+                        if (filenames.includes(previewFilename)) closePreview();
+                    } else {
+                        filenames.forEach(f => {
+                            const img = images.find(i => i.filename === f);
+                            if (img) img.enabled = (action === 'enable');
+                        });
+                    }
+                    selectedImages.clear();
+                    renderGallery();
+                    updateStats();
+                }
+            } catch (err) {
+                showStatus('Action failed', 'error');
+            }
+        }
+
+        // ===== Group Actions =====
+        document.getElementById('bulk-group').addEventListener('click', createGroup);
+
+        async function createGroup() {
+            const filenames = Array.from(selectedImages);
+            if (filenames.length < 2) return;
+
+            try {
+                const response = await fetch('/api/groups', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ images: filenames })
+                });
+                if (response.ok) {
+                    selectedImages.clear();
+                    showStatus(`Created group with ${filenames.length} images`, 'success');
+                    loadGallery();
+                }
+            } catch (err) {
+                showStatus('Failed to create group', 'error');
+            }
+        }
+
+        async function ungroupGroup(groupId) {
+            try {
+                const response = await fetch(`/api/groups/${groupId}`, {
+                    method: 'DELETE'
+                });
+                if (response.ok) {
+                    if (previewGroupId === groupId) closePreview();
+                    showStatus('Group dissolved', 'success');
+                    loadGallery();
+                }
+            } catch (err) {
+                showStatus('Failed to ungroup', 'error');
+            }
+        }
+
+        async function deleteGroup(groupId) {
+            const group = groups[groupId];
+            if (!group) return;
+            if (!confirm(`Delete this group and all ${group.images.length} images permanently?`)) return;
+
+            try {
+                // Delete each image in the group
+                for (const filename of group.images) {
+                    await fetch(`/api/gallery/${filename}`, { method: 'DELETE' });
+                }
+                // Then delete the group itself
+                await fetch(`/api/groups/${groupId}`, { method: 'DELETE' });
+                if (previewGroupId === groupId) closePreview();
+                showStatus('Group and images deleted', 'success');
+                loadGallery();
+            } catch (err) {
+                showStatus('Failed to delete group', 'error');
+            }
+        }
+
+        function updateGroupScalePreview(groupId, filename, scaleValue) {
+            const group = groups[groupId];
+            if (!group) return;
+            if (!group.scales) group.scales = {};
+            group.scales[filename] = parseFloat(scaleValue);
+            renderGroupPreviewImage(groupId);
+        }
+
+        async function updateGroupScale(groupId, filename, scaleValue) {
+            const group = groups[groupId];
+            if (!group) return;
+
+            if (!group.scales) group.scales = {};
+            group.scales[filename] = parseFloat(scaleValue);
+
+            try {
+                await fetch(`/api/groups/${groupId}`, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ scales: group.scales })
+                });
+                renderGroupPreviewImage(groupId);
+            } catch (err) {
+                showStatus('Failed to update scale', 'error');
+            }
+        }
+
+        async function moveGroupImage(groupId, currentIdx, direction) {
+            const group = groups[groupId];
+            if (!group) return;
+
+            const imgs = [...group.images];
+            const newIdx = currentIdx + direction;
+            if (newIdx < 0 || newIdx >= imgs.length) return;
+
+            // Swap
+            [imgs[currentIdx], imgs[newIdx]] = [imgs[newIdx], imgs[currentIdx]];
+            group.images = imgs;
+
+            try {
+                const response = await fetch(`/api/groups/${groupId}`, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ images: imgs })
+                });
+                if (response.ok) {
+                    renderGallery();
+                    // Re-render controls and preview
+                    renderGroupControls(groupId);
+                    renderGroupPreviewImage(groupId);
+                }
+            } catch (err) {
+                showStatus('Failed to reorder images', 'error');
+            }
+        }
+
+        async function updateGroupMatColor(groupId, color) {
+            try {
+                const response = await fetch(`/api/groups/${groupId}`, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ mat_color: color })
+                });
+                if (response.ok) {
+                    groups[groupId].mat_color = color;
+                    if (previewGroupId === groupId) {
+                        matPreview.style.backgroundColor = color;
+                    }
+                    showStatus('Group mat color updated', 'success');
+                }
+            } catch (err) {
+                showStatus('Failed to update group mat color', 'error');
+            }
+        }
+
+        // ===== Settings =====
+        function saveSettings() {
+            const settings = {
+                mat_color: matColorInput.value,
+                slideshow_interval: parseInt(slideshowIntervalInput.value),
+                transition_duration: parseFloat(transitionDurationInput.value),
+                fit_mode: fitModeSelect.value,
+                shuffle: shuffleCheckbox.checked,
+                target_aspect_ratio: targetAspectRatioSelect.value
+            };
+
+            fetch('/api/settings', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(settings)
+            });
+
+            updateColorPresets();
+        }
+
+        matColorInput.addEventListener('input', saveSettings);
+        slideshowIntervalInput.addEventListener('change', saveSettings);
+        transitionDurationInput.addEventListener('change', saveSettings);
+        fitModeSelect.addEventListener('change', saveSettings);
+        shuffleCheckbox.addEventListener('change', saveSettings);
+        targetAspectRatioSelect.addEventListener('change', saveSettings);
+
+        // Color presets
+        colorPresets.forEach(preset => {
+            preset.addEventListener('click', () => {
+                matColorInput.value = preset.dataset.color;
+                saveSettings();
+            });
+        });
+
+        function updateColorPresets() {
+            colorPresets.forEach(preset => {
+                preset.classList.toggle('active', preset.dataset.color === matColorInput.value);
+            });
+        }
+        updateColorPresets();
+
+        // ===== Status Messages =====
+        function showStatus(message, type) {
+            statusEl.textContent = message;
+            statusEl.className = 'status ' + type;
+            setTimeout(() => {
+                statusEl.className = 'status';
+            }, 3000);
+        }
+    </script>
+</body>
+</html>

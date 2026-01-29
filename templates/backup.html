@@ -1,0 +1,630 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Backup Settings - Pi Photo Frame</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            min-height: 100vh;
+            color: #e0e0e0;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        .header-top {
+            display: flex;
+            justify-content: flex-end;
+            gap: 15px;
+            margin-bottom: 10px;
+        }
+
+        .header-link {
+            color: #888;
+            text-decoration: none;
+            font-size: 0.9rem;
+            transition: color 0.2s;
+        }
+
+        .header-link:hover {
+            color: #00d4ff;
+        }
+
+        h1 {
+            font-size: 2rem;
+            margin-bottom: 10px;
+            background: linear-gradient(90deg, #00d4ff, #7b2cbf);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .subtitle {
+            color: #888;
+        }
+
+        .panel {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 16px;
+            padding: 20px;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            margin-bottom: 20px;
+        }
+
+        .panel h2 {
+            font-size: 1.2rem;
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        /* Status indicator */
+        .status-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+
+        .status-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            flex-shrink: 0;
+        }
+
+        .status-dot.green { background: #00ff88; box-shadow: 0 0 8px rgba(0, 255, 136, 0.4); }
+        .status-dot.yellow { background: #ffc107; box-shadow: 0 0 8px rgba(255, 193, 7, 0.4); }
+        .status-dot.red { background: #ff4757; box-shadow: 0 0 8px rgba(255, 71, 87, 0.4); }
+        .status-dot.gray { background: #666; }
+        .status-dot.blue {
+            background: #00d4ff;
+            box-shadow: 0 0 8px rgba(0, 212, 255, 0.4);
+            animation: pulse 1.5s ease-in-out infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.4; }
+        }
+
+        .status-text {
+            font-size: 0.95rem;
+        }
+
+        .status-meta {
+            font-size: 0.8rem;
+            color: #888;
+            margin-top: 4px;
+        }
+
+        /* Buttons */
+        .btn {
+            padding: 10px 18px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            font-weight: 500;
+            transition: all 0.2s;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .btn:hover:not(:disabled) {
+            transform: translateY(-1px);
+        }
+
+        .btn-success {
+            background: rgba(0, 255, 136, 0.2);
+            color: #00ff88;
+            border: 1px solid rgba(0, 255, 136, 0.3);
+        }
+
+        .btn-primary {
+            background: rgba(0, 212, 255, 0.2);
+            color: #00d4ff;
+            border: 1px solid rgba(0, 212, 255, 0.3);
+        }
+
+        .btn-danger {
+            background: rgba(255, 71, 87, 0.2);
+            color: #ff4757;
+            border: 1px solid rgba(255, 71, 87, 0.3);
+        }
+
+        .btn-row {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+
+        /* Form elements */
+        .setting-group {
+            margin-bottom: 18px;
+        }
+
+        .setting-group label {
+            display: block;
+            margin-bottom: 6px;
+            font-size: 0.85rem;
+            color: #aaa;
+        }
+
+        .setting-group input[type="text"],
+        .setting-group input[type="time"],
+        .setting-group textarea {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 8px;
+            background: rgba(0, 0, 0, 0.3);
+            color: #e0e0e0;
+            font-size: 0.95rem;
+        }
+
+        .setting-group textarea {
+            font-family: 'SF Mono', 'Fira Code', monospace;
+            font-size: 0.8rem;
+            resize: vertical;
+        }
+
+        .setting-group input:focus,
+        .setting-group textarea:focus {
+            outline: none;
+            border-color: #00d4ff;
+        }
+
+        .help-text {
+            font-size: 0.8rem;
+            color: #888;
+            margin-top: 4px;
+        }
+
+        /* Setup instructions */
+        .setup-steps {
+            font-size: 0.85rem;
+            color: #aaa;
+            margin-bottom: 18px;
+            padding-left: 20px;
+        }
+
+        .setup-steps li {
+            margin-bottom: 8px;
+            line-height: 1.4;
+        }
+
+        .setup-steps code {
+            background: rgba(0, 212, 255, 0.1);
+            color: #00d4ff;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 0.85em;
+        }
+
+        /* History table */
+        .history-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.85rem;
+        }
+
+        .history-table th {
+            text-align: left;
+            padding: 8px 10px;
+            color: #888;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            font-weight: 500;
+        }
+
+        .history-table td {
+            padding: 8px 10px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .history-table tr.success td:first-child {
+            color: #00ff88;
+        }
+
+        .history-table tr.error td:first-child {
+            color: #ff4757;
+        }
+
+        .history-empty {
+            text-align: center;
+            color: #666;
+            padding: 20px;
+            font-size: 0.9rem;
+        }
+
+        /* Status messages */
+        .status-msg {
+            padding: 10px 15px;
+            border-radius: 8px;
+            margin-bottom: 15px;
+            display: none;
+        }
+
+        .status-msg.success {
+            display: block;
+            background: rgba(0, 255, 136, 0.1);
+            border: 1px solid rgba(0, 255, 136, 0.3);
+            color: #00ff88;
+        }
+
+        .status-msg.error {
+            display: block;
+            background: rgba(255, 71, 87, 0.1);
+            border: 1px solid rgba(255, 71, 87, 0.3);
+            color: #ff4757;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <div class="header-top">
+                <a href="/upload" class="header-link">Gallery</a>
+                <a href="/change-password" class="header-link">Password</a>
+                {% if is_admin %}
+                <a href="/admin/users" class="header-link">Users</a>
+                {% endif %}
+                <a href="/logout" class="header-link">Logout</a>
+            </div>
+            <h1>Backup Settings</h1>
+            <p class="subtitle">Automated Dropbox backups via rclone</p>
+        </header>
+
+        <div id="status-msg" class="status-msg"></div>
+
+        <!-- Status Panel -->
+        <div class="panel">
+            <h2>Status</h2>
+            <div id="status-area">
+                <div class="status-row">
+                    <div class="status-dot gray" id="status-dot"></div>
+                    <div>
+                        <div class="status-text" id="status-text">Loading...</div>
+                        <div class="status-meta" id="status-meta"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Setup Panel (shown when not configured) -->
+        <div class="panel" id="setup-panel" style="display:none;">
+            <h2>Connect Dropbox</h2>
+            <p style="font-size:0.9rem; color:#aaa; margin-bottom:15px;">
+                To enable backups, you need to authorize rclone with your Dropbox account:
+            </p>
+            <ol class="setup-steps">
+                <li>Install <a href="https://rclone.org/install/" style="color:#00d4ff;">rclone</a> on a computer with a web browser</li>
+                <li>Run: <code>rclone authorize "dropbox"</code></li>
+                <li>Log in to Dropbox when the browser opens</li>
+                <li>Copy the JSON token that rclone prints</li>
+                <li>Paste it below and click "Connect"</li>
+            </ol>
+            <div class="setting-group">
+                <label>Dropbox Token</label>
+                <textarea id="dropbox-token" rows="4"
+                          placeholder='Paste the {"access_token":"...","token_type":"bearer",...} JSON here'></textarea>
+                <p class="help-text">This is the full JSON object printed by rclone authorize.</p>
+            </div>
+            <button class="btn btn-success" onclick="configureBackup()" id="connect-btn" style="width:100%;">
+                Connect Dropbox
+            </button>
+        </div>
+
+        <!-- Controls Panel (shown when configured) -->
+        <div class="panel" id="controls-panel" style="display:none;">
+            <h2>Backup Controls</h2>
+            <div class="btn-row">
+                <button class="btn btn-success" onclick="triggerBackup()" id="backup-now-btn">
+                    Backup Now
+                </button>
+                <button class="btn btn-danger" onclick="disconnectBackup()">
+                    Disconnect Dropbox
+                </button>
+            </div>
+        </div>
+
+        <!-- Settings Panel (shown when configured) -->
+        <div class="panel" id="settings-panel" style="display:none;">
+            <h2>Schedule</h2>
+            <div class="setting-group">
+                <label>Daily Backup Time</label>
+                <input type="time" id="backup-time" value="03:00" onchange="saveBackupSettings()">
+                <p class="help-text">Backups run automatically once per day at this time.</p>
+            </div>
+            <div class="setting-group">
+                <label>Dropbox Folder</label>
+                <input type="text" id="backup-path" value="PhotoFrameBackup" onchange="saveBackupSettings()">
+                <p class="help-text">Files are backed up to this folder in your Dropbox.</p>
+            </div>
+        </div>
+
+        <!-- History Panel -->
+        <div class="panel" id="history-panel" style="display:none;">
+            <h2>Backup History</h2>
+            <div id="history-body">
+                <div class="history-empty">No backups yet</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let pollTimer = null;
+
+        // Load on page init
+        loadBackupStatus();
+
+        async function loadBackupStatus() {
+            try {
+                const response = await fetch('/api/backup/status');
+                if (!response.ok) return;
+                const data = await response.json();
+                renderStatus(data);
+                loadHistory();
+            } catch (err) {
+                console.error('Failed to load backup status:', err);
+            }
+        }
+
+        function renderStatus(status) {
+            const dot = document.getElementById('status-dot');
+            const text = document.getElementById('status-text');
+            const meta = document.getElementById('status-meta');
+            const setupPanel = document.getElementById('setup-panel');
+            const controlsPanel = document.getElementById('controls-panel');
+            const settingsPanel = document.getElementById('settings-panel');
+            const historyPanel = document.getElementById('history-panel');
+
+            if (status.in_progress) {
+                dot.className = 'status-dot blue';
+                text.textContent = 'Backup in progress...';
+                meta.textContent = '';
+                if (!pollTimer) {
+                    pollTimer = setInterval(loadBackupStatus, 5000);
+                }
+            } else if (!status.configured) {
+                dot.className = 'status-dot gray';
+                text.textContent = 'Not configured';
+                meta.textContent = 'Connect your Dropbox account to enable backups.';
+                clearPollTimer();
+            } else if (status.last_result === 'success') {
+                dot.className = 'status-dot green';
+                text.textContent = 'Connected — Last backup successful';
+                meta.textContent = formatMeta(status);
+                clearPollTimer();
+            } else if (status.last_result === 'error') {
+                dot.className = 'status-dot red';
+                text.textContent = 'Connected — Last backup failed';
+                meta.textContent = status.last_error || '';
+                clearPollTimer();
+            } else {
+                dot.className = 'status-dot yellow';
+                text.textContent = 'Connected — No backups run yet';
+                meta.textContent = formatMeta(status);
+                clearPollTimer();
+            }
+
+            // Toggle panels
+            setupPanel.style.display = status.configured ? 'none' : 'block';
+            controlsPanel.style.display = status.configured ? 'block' : 'none';
+            settingsPanel.style.display = status.configured ? 'block' : 'none';
+            historyPanel.style.display = status.configured ? 'block' : 'none';
+
+            // Update settings fields
+            if (status.backup_time) {
+                document.getElementById('backup-time').value = status.backup_time;
+            }
+            if (status.backup_path) {
+                document.getElementById('backup-path').value = status.backup_path;
+            }
+
+            // Update backup button state
+            const btn = document.getElementById('backup-now-btn');
+            if (status.in_progress) {
+                btn.disabled = true;
+                btn.textContent = 'Backing up...';
+            } else {
+                btn.disabled = false;
+                btn.textContent = 'Backup Now';
+            }
+        }
+
+        function formatMeta(status) {
+            let parts = [];
+            if (status.last_backup) {
+                const d = new Date(status.last_backup);
+                parts.push('Last: ' + d.toLocaleString());
+            }
+            if (status.next_scheduled) {
+                const d = new Date(status.next_scheduled);
+                parts.push('Next: ' + d.toLocaleString());
+            }
+            return parts.join(' | ');
+        }
+
+        function clearPollTimer() {
+            if (pollTimer) {
+                clearInterval(pollTimer);
+                pollTimer = null;
+            }
+        }
+
+        async function loadHistory() {
+            try {
+                const response = await fetch('/api/backup/history');
+                if (!response.ok) return;
+                const data = await response.json();
+                renderHistory(data.history || []);
+            } catch (err) {
+                console.error('Failed to load history:', err);
+            }
+        }
+
+        function renderHistory(history) {
+            const body = document.getElementById('history-body');
+            if (history.length === 0) {
+                body.innerHTML = '<div class="history-empty">No backups yet</div>';
+                return;
+            }
+
+            // Show most recent first
+            const rows = [...history].reverse().map(entry => {
+                const d = new Date(entry.timestamp);
+                const time = d.toLocaleString();
+                const result = entry.result === 'success' ? 'Success' : 'Failed';
+                const duration = entry.duration_seconds ? entry.duration_seconds + 's' : '-';
+                const error = entry.error ? `<br><span style="color:#888;font-size:0.8em;">${escapeHtml(entry.error.substring(0, 100))}</span>` : '';
+                return `<tr class="${entry.result}">
+                    <td>${result}${error}</td>
+                    <td>${time}</td>
+                    <td>${duration}</td>
+                </tr>`;
+            }).join('');
+
+            body.innerHTML = `<table class="history-table">
+                <thead><tr><th>Result</th><th>Time</th><th>Duration</th></tr></thead>
+                <tbody>${rows}</tbody>
+            </table>`;
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        async function configureBackup() {
+            const token = document.getElementById('dropbox-token').value.trim();
+            if (!token) {
+                showMessage('Please paste a token', 'error');
+                return;
+            }
+
+            const btn = document.getElementById('connect-btn');
+            btn.disabled = true;
+            btn.textContent = 'Connecting...';
+
+            try {
+                const response = await fetch('/api/backup/configure', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ token })
+                });
+                const data = await response.json();
+                if (response.ok) {
+                    showMessage('Dropbox connected successfully', 'success');
+                    loadBackupStatus();
+                } else {
+                    showMessage(data.error || 'Failed to connect', 'error');
+                }
+            } catch (err) {
+                showMessage('Connection failed: ' + err.message, 'error');
+            } finally {
+                btn.disabled = false;
+                btn.textContent = 'Connect Dropbox';
+            }
+        }
+
+        async function triggerBackup() {
+            const btn = document.getElementById('backup-now-btn');
+            btn.disabled = true;
+            btn.textContent = 'Starting...';
+
+            try {
+                const response = await fetch('/api/backup/run', { method: 'POST' });
+                const data = await response.json();
+                if (response.ok) {
+                    showMessage('Backup started', 'success');
+                    // Start polling for completion
+                    pollTimer = setInterval(loadBackupStatus, 5000);
+                    loadBackupStatus();
+                } else {
+                    showMessage(data.error || 'Failed to start backup', 'error');
+                    btn.disabled = false;
+                    btn.textContent = 'Backup Now';
+                }
+            } catch (err) {
+                showMessage('Failed: ' + err.message, 'error');
+                btn.disabled = false;
+                btn.textContent = 'Backup Now';
+            }
+        }
+
+        async function disconnectBackup() {
+            if (!confirm('Disconnect Dropbox? Existing backups in Dropbox will not be deleted.')) return;
+
+            try {
+                const response = await fetch('/api/backup/configure', { method: 'DELETE' });
+                if (response.ok) {
+                    showMessage('Dropbox disconnected', 'success');
+                    loadBackupStatus();
+                }
+            } catch (err) {
+                showMessage('Failed to disconnect', 'error');
+            }
+        }
+
+        async function saveBackupSettings() {
+            const backupTime = document.getElementById('backup-time').value;
+            const backupPath = document.getElementById('backup-path').value.trim();
+
+            try {
+                const response = await fetch('/api/backup/settings', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        backup_time: backupTime,
+                        backup_path: backupPath
+                    })
+                });
+                if (response.ok) {
+                    showMessage('Backup settings saved', 'success');
+                    loadBackupStatus();
+                } else {
+                    const data = await response.json();
+                    showMessage(data.error || 'Failed to save settings', 'error');
+                }
+            } catch (err) {
+                showMessage('Failed to save settings', 'error');
+            }
+        }
+
+        function showMessage(message, type) {
+            const el = document.getElementById('status-msg');
+            el.textContent = message;
+            el.className = 'status-msg ' + type;
+            setTimeout(() => {
+                el.className = 'status-msg';
+            }, 5000);
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,548 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, height=device-height, initial-scale=1.0">
+    <title>Photo Frame Display</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        html, body {
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            cursor: none;
+        }
+
+        body {
+            background-color: var(--mat-color, #2c2c2c);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: background-color 0.5s ease;
+        }
+
+        .frame-container {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            /* Dynamic mat sizing via CSS variables */
+            padding-top: var(--mat-padding-vertical, 5%);
+            padding-bottom: var(--mat-padding-vertical, 5%);
+            padding-left: var(--mat-padding-horizontal, 5%);
+            padding-right: var(--mat-padding-horizontal, 5%);
+        }
+
+        .image-wrapper {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        /* Single photo or slide container */
+        .slide {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            opacity: 0;
+            transition: opacity var(--transition-duration, 1s) ease-in-out;
+        }
+
+        .slide.active {
+            opacity: 1;
+            z-index: 1;
+        }
+
+        .slide.previous {
+            opacity: 0;
+            z-index: 0;
+        }
+
+        .slide img {
+            max-width: 100%;
+            max-height: 100%;
+            object-fit: contain;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+        }
+
+        .slide img.cover {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        /* Grid layout for group slides */
+        .slide-grid {
+            display: flex;
+            align-items: center;
+            justify-content: space-evenly;
+            width: 100%;
+            height: 100%;
+        }
+
+        .slide-grid.grid-layout {
+            display: grid;
+            align-items: center;
+            justify-items: center;
+            justify-content: space-evenly;
+            align-content: space-evenly;
+        }
+
+        .slide-grid img {
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+        }
+
+        /* Loading state */
+        .loading {
+            color: rgba(255, 255, 255, 0.3);
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            font-size: 1.5rem;
+            text-align: center;
+        }
+
+        .loading-spinner {
+            width: 40px;
+            height: 40px;
+            border: 3px solid rgba(255, 255, 255, 0.1);
+            border-top-color: rgba(255, 255, 255, 0.4);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 20px;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        /* No images state */
+        .no-images {
+            color: rgba(255, 255, 255, 0.4);
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            text-align: center;
+        }
+
+        .no-images h2 {
+            font-size: 2rem;
+            margin-bottom: 10px;
+        }
+
+        .no-images p {
+            font-size: 1rem;
+            opacity: 0.7;
+        }
+
+        /* Hidden controls that appear on mouse move */
+        .controls {
+            position: fixed;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            gap: 10px;
+            opacity: 0;
+            transition: opacity 0.3s;
+            z-index: 200;
+        }
+
+        body:hover .controls {
+            opacity: 1;
+        }
+
+        body:hover {
+            cursor: default;
+        }
+
+        .control-btn {
+            padding: 10px 20px;
+            background: rgba(0, 0, 0, 0.5);
+            color: white;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 25px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: background 0.2s;
+        }
+
+        .control-btn:hover {
+            background: rgba(0, 0, 0, 0.7);
+        }
+    </style>
+</head>
+<body>
+    <div class="frame-container">
+        <div class="image-wrapper" id="image-wrapper">
+            <div class="loading" id="loading">
+                <div class="loading-spinner"></div>
+                Loading photos...
+            </div>
+        </div>
+    </div>
+
+    <div class="controls">
+        <button class="control-btn" onclick="previousSlide()">← Prev</button>
+        <button class="control-btn" onclick="togglePause()">⏯ Pause</button>
+        <button class="control-btn" onclick="nextSlide()">Next →</button>
+        <button class="control-btn" onclick="location.reload()">↻ Refresh</button>
+    </div>
+
+    <script>
+        let slides = [];      // Array of {type, images, mat_color, group_id?}
+        let settings = {};
+        let currentIndex = 0;
+        let isPaused = false;
+        let slideshowTimer = null;
+        let currentSlideEl = null;
+        let previousSlideEl = null;
+
+        const imageWrapper = document.getElementById('image-wrapper');
+        const loadingEl = document.getElementById('loading');
+
+        // Initial load
+        loadData();
+
+        // Poll for updates every 5 seconds
+        setInterval(checkForUpdates, 5000);
+
+        async function loadData() {
+            try {
+                const response = await fetch('/api/images');
+                const data = await response.json();
+
+                settings = data.settings;
+                applySettings();
+
+                const newSlides = data.slides || [];
+                const shuffled = settings.shuffle ? shuffleArray([...newSlides]) : newSlides;
+
+                // Check if slides changed
+                const newKey = JSON.stringify(shuffled.map(s => s.type === 'group' ? s.group_id : s.images[0]?.filename));
+                const oldKey = JSON.stringify(slides.map(s => s.type === 'group' ? s.group_id : s.images[0]?.filename));
+
+                if (newKey !== oldKey) {
+                    slides = shuffled;
+                    currentIndex = 0;
+
+                    if (slides.length > 0) {
+                        loadingEl.style.display = 'none';
+                        showSlide(currentIndex);
+                        startSlideshow();
+                    } else {
+                        showNoImages();
+                    }
+                }
+            } catch (err) {
+                console.error('Failed to load data:', err);
+                loadingEl.innerHTML = '<div class="no-images"><h2>Connection Error</h2><p>Unable to connect to server</p></div>';
+            }
+        }
+
+        async function checkForUpdates() {
+            try {
+                const response = await fetch('/api/settings');
+                const newSettings = await response.json();
+
+                if (JSON.stringify(newSettings) !== JSON.stringify(settings)) {
+                    settings = newSettings;
+                    applySettings();
+                    if (!isPaused) {
+                        startSlideshow();
+                    }
+                }
+
+                // Check for slide changes
+                const imgResponse = await fetch('/api/images');
+                const imgData = await imgResponse.json();
+                const newSlides = imgData.slides || [];
+
+                if (newSlides.length !== slides.length) {
+                    slides = settings.shuffle ? shuffleArray([...newSlides]) : newSlides;
+                    if (currentIndex >= slides.length) {
+                        currentIndex = 0;
+                    }
+                    if (slides.length > 0 && loadingEl.style.display !== 'none') {
+                        loadingEl.style.display = 'none';
+                        showSlide(currentIndex);
+                        startSlideshow();
+                    } else if (slides.length === 0) {
+                        showNoImages();
+                    }
+                }
+            } catch (err) {
+                console.error('Update check failed:', err);
+            }
+        }
+
+        function applySettings() {
+            document.body.style.setProperty('--mat-color', settings.mat_color);
+            document.body.style.setProperty('--transition-duration', settings.transition_duration + 's');
+        }
+
+        function showSlide(index) {
+            if (slides.length === 0) return;
+
+            const slide = slides[index];
+            const matColor = slide.mat_color || settings.mat_color;
+            document.body.style.setProperty('--mat-color', matColor);
+
+            // Calculate mat padding based on slide content
+            const container = document.querySelector('.frame-container');
+            if (slide.type === 'single') {
+                const img = slide.images[0];
+                const padding = calculateMatPadding(img.width, img.height);
+                container.style.setProperty('--mat-padding-vertical', padding.vertical);
+                container.style.setProperty('--mat-padding-horizontal', padding.horizontal);
+            } else {
+                // For groups, no mat padding - space-evenly handles all spacing
+                container.style.setProperty('--mat-padding-vertical', '0');
+                container.style.setProperty('--mat-padding-horizontal', '0');
+            }
+
+            // Create slide element
+            const slideEl = document.createElement('div');
+            slideEl.className = 'slide';
+
+            if (slide.type === 'single') {
+                // Single image slide
+                const img = document.createElement('img');
+                if (settings.fit_mode === 'cover') img.className = 'cover';
+                img.src = '/uploads/' + slide.images[0].filename;
+                img.alt = slide.images[0].filename;
+                slideEl.appendChild(img);
+            } else {
+                // Group slide - create grid layout
+                const count = slide.images.length;
+                const layout = getGridLayout(count);
+                const gridEl = document.createElement('div');
+
+                if (count <= 3) {
+                    // Row layout with explicit pixel sizes for matched heights
+                    gridEl.className = 'slide-grid';
+                    const containerW = window.innerWidth;
+                    const containerH = window.innerHeight;
+
+                    const imgInfos = slide.images.map(imgData => ({
+                        filename: imgData.filename,
+                        ar: (imgData.width || 1) / (imgData.height || 1),
+                        scale: imgData.scale || 1.0
+                    }));
+
+                    // At base height h=1, each image width = ar * scale
+                    const totalWidthAtUnitHeight = imgInfos.reduce((sum, info) => sum + info.ar * info.scale, 0);
+                    const maxScale = Math.max(...imgInfos.map(i => i.scale));
+                    // Reserve space for N+1 equal gaps (space-evenly) — each gap ~5% of container
+                    const gapFraction = 0.05;
+                    const totalGapFraction = gapFraction * (count + 1);
+                    const usableW = containerW * (1 - totalGapFraction);
+                    const usableH = containerH * 0.85;
+                    // Base height: largest h such that total width fits and tallest image fits
+                    const baseHeight = Math.min(usableH / maxScale, usableW / totalWidthAtUnitHeight);
+
+                    imgInfos.forEach(info => {
+                        const img = document.createElement('img');
+                        img.src = '/uploads/' + info.filename;
+                        img.alt = info.filename;
+                        const h = baseHeight * info.scale;
+                        const w = h * info.ar;
+                        img.style.width = w + 'px';
+                        img.style.height = h + 'px';
+                        img.style.maxWidth = 'none';
+                        img.style.maxHeight = 'none';
+                        img.style.flexShrink = '0';
+                        gridEl.appendChild(img);
+                    });
+                } else {
+                    // Grid layout
+                    gridEl.className = 'slide-grid grid-layout';
+                    gridEl.style.gridTemplateColumns = `repeat(${layout.cols}, 1fr)`;
+                    gridEl.style.gridTemplateRows = `repeat(${layout.rows}, 1fr)`;
+                    slide.images.forEach(imgData => {
+                        const img = document.createElement('img');
+                        img.src = '/uploads/' + imgData.filename;
+                        img.alt = imgData.filename;
+                        gridEl.appendChild(img);
+                    });
+                }
+                slideEl.appendChild(gridEl);
+            }
+
+            // Wait for all images to load before transitioning
+            const allImgs = slideEl.querySelectorAll('img');
+            let loadedCount = 0;
+            const totalImgs = allImgs.length;
+
+            const onAllLoaded = () => {
+                // Remove old previous
+                if (previousSlideEl) {
+                    previousSlideEl.remove();
+                }
+
+                // Current becomes previous
+                if (currentSlideEl) {
+                    currentSlideEl.classList.remove('active');
+                    currentSlideEl.classList.add('previous');
+                    previousSlideEl = currentSlideEl;
+
+                    setTimeout(() => {
+                        if (previousSlideEl && previousSlideEl.parentNode) {
+                            previousSlideEl.remove();
+                        }
+                    }, settings.transition_duration * 1000 + 100);
+                }
+
+                // New becomes current
+                imageWrapper.appendChild(slideEl);
+                slideEl.offsetHeight; // Force reflow
+                slideEl.classList.add('active');
+                currentSlideEl = slideEl;
+            };
+
+            const onImgLoad = () => {
+                loadedCount++;
+                if (loadedCount >= totalImgs) {
+                    onAllLoaded();
+                }
+            };
+
+            const onImgError = (e) => {
+                console.error('Failed to load image:', e.target.src);
+                loadedCount++;
+                if (loadedCount >= totalImgs) {
+                    // If all failed, skip; if some loaded, show anyway
+                    if (loadedCount === totalImgs && slideEl.querySelectorAll('img[src]').length === 0) {
+                        nextSlide();
+                    } else {
+                        onAllLoaded();
+                    }
+                }
+            };
+
+            allImgs.forEach(img => {
+                img.onload = onImgLoad;
+                img.onerror = onImgError;
+            });
+
+            // Fallback if no images
+            if (totalImgs === 0) {
+                nextSlide();
+            }
+        }
+
+        function getGridLayout(count) {
+            if (count <= 3) return { cols: count, rows: 1 };
+            const cols = Math.ceil(Math.sqrt(count));
+            const rows = Math.ceil(count / cols);
+            return { cols, rows };
+        }
+
+        function showNoImages() {
+            loadingEl.innerHTML = `
+                <div class="no-images">
+                    <h2>No Photos</h2>
+                    <p>Upload photos at:<br><strong>http://${location.hostname}:5000/upload</strong></p>
+                </div>
+            `;
+            loadingEl.style.display = 'block';
+        }
+
+        function startSlideshow() {
+            if (slideshowTimer) {
+                clearInterval(slideshowTimer);
+            }
+
+            if (slides.length <= 1) return;
+
+            slideshowTimer = setInterval(() => {
+                if (!isPaused) {
+                    nextSlide();
+                }
+            }, settings.slideshow_interval * 1000);
+        }
+
+        function nextSlide() {
+            currentIndex = (currentIndex + 1) % slides.length;
+            showSlide(currentIndex);
+        }
+
+        function previousSlide() {
+            currentIndex = (currentIndex - 1 + slides.length) % slides.length;
+            showSlide(currentIndex);
+        }
+
+        function togglePause() {
+            isPaused = !isPaused;
+        }
+
+        function shuffleArray(array) {
+            for (let i = array.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [array[i], array[j]] = [array[j], array[i]];
+            }
+            return array;
+        }
+
+        function calculateMatPadding(imgWidth, imgHeight) {
+            if (!imgWidth || !imgHeight) {
+                return { vertical: '5%', horizontal: '5%' };
+            }
+
+            const ratioStr = settings.target_aspect_ratio || '16:9';
+            const [targetW, targetH] = ratioStr.split(':').map(Number);
+            const targetRatio = targetW / targetH;
+
+            const screenWidth = window.innerWidth;
+            const screenHeight = window.innerHeight;
+            const imgRatio = imgWidth / imgHeight;
+
+            const minMat = 0.02;
+            const availableWidth = screenWidth * (1 - 2 * minMat);
+            const availableHeight = screenHeight * (1 - 2 * minMat);
+
+            let displayWidth, displayHeight;
+            if (imgRatio > availableWidth / availableHeight) {
+                displayWidth = availableWidth;
+                displayHeight = availableWidth / imgRatio;
+            } else {
+                displayHeight = availableHeight;
+                displayWidth = availableHeight * imgRatio;
+            }
+
+            const horizontalMat = (screenWidth - displayWidth) / 2;
+            const verticalMat = (screenHeight - displayHeight) / 2;
+
+            const hPadding = (horizontalMat / screenWidth * 100).toFixed(2) + '%';
+            const vPadding = (verticalMat / screenHeight * 100).toFixed(2) + '%';
+
+            return { vertical: vPadding, horizontal: hPadding };
+        }
+
+        // Keyboard controls
+        document.addEventListener('keydown', (e) => {
+            switch (e.key) {
+                case 'ArrowLeft':
+                    previousSlide();
+                    break;
+                case 'ArrowRight':
+                case ' ':
+                    nextSlide();
+                    break;
+                case 'p':
+                    togglePause();
+                    break;
+            }
+        });
+    </script>
+</body>
+</html>

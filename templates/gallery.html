@@ -1,0 +1,746 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gallery - Pi Photo Frame</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            min-height: 100vh;
+            color: #e0e0e0;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        header {
+            margin-bottom: 30px;
+        }
+
+        .header-top {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        .nav-links {
+            display: flex;
+            gap: 20px;
+            flex-wrap: wrap;
+        }
+
+        .nav-links a {
+            color: #888;
+            text-decoration: none;
+            transition: color 0.2s;
+        }
+
+        .nav-links a:hover, .nav-links a.active {
+            color: #00d4ff;
+        }
+
+        h1 {
+            font-size: 1.8rem;
+        }
+
+        /* Toolbar */
+        .toolbar {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 12px;
+            padding: 15px 20px;
+            margin-bottom: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 15px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .toolbar-left {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .toolbar-right {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .select-all-wrapper {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .select-all-wrapper input {
+            width: 18px;
+            height: 18px;
+            cursor: pointer;
+        }
+
+        .selection-count {
+            color: #888;
+            font-size: 0.9rem;
+        }
+
+        .btn {
+            padding: 10px 18px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            font-weight: 500;
+            transition: all 0.2s;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .btn-primary {
+            background: linear-gradient(90deg, #7b2cbf, #00d4ff);
+            color: white;
+        }
+
+        .btn-success {
+            background: rgba(0, 255, 136, 0.2);
+            color: #00ff88;
+            border: 1px solid rgba(0, 255, 136, 0.3);
+        }
+
+        .btn-warning {
+            background: rgba(255, 193, 7, 0.2);
+            color: #ffc107;
+            border: 1px solid rgba(255, 193, 7, 0.3);
+        }
+
+        .btn-danger {
+            background: rgba(255, 71, 87, 0.2);
+            color: #ff4757;
+            border: 1px solid rgba(255, 71, 87, 0.3);
+        }
+
+        .btn:hover:not(:disabled) {
+            transform: translateY(-1px);
+        }
+
+        /* Filter tabs */
+        .filter-tabs {
+            display: flex;
+            gap: 5px;
+            background: rgba(0, 0, 0, 0.2);
+            padding: 4px;
+            border-radius: 8px;
+        }
+
+        .filter-tab {
+            padding: 8px 16px;
+            border: none;
+            background: transparent;
+            color: #888;
+            cursor: pointer;
+            border-radius: 6px;
+            font-size: 0.9rem;
+            transition: all 0.2s;
+        }
+
+        .filter-tab:hover {
+            color: #e0e0e0;
+        }
+
+        .filter-tab.active {
+            background: rgba(255, 255, 255, 0.1);
+            color: #e0e0e0;
+        }
+
+        /* Image Grid */
+        .image-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+            gap: 20px;
+        }
+
+        .image-card {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 12px;
+            overflow: hidden;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            transition: transform 0.2s, border-color 0.2s;
+            position: relative;
+        }
+
+        .image-card:hover {
+            transform: translateY(-3px);
+        }
+
+        .image-card.selected {
+            border-color: #00d4ff;
+            box-shadow: 0 0 0 2px rgba(0, 212, 255, 0.3);
+        }
+
+        .image-card.disabled {
+            opacity: 0.6;
+        }
+
+        .image-card.disabled .image-wrapper::after {
+            content: 'HIDDEN';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0, 0, 0, 0.7);
+            color: #ff4757;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            font-weight: 600;
+        }
+
+        .image-wrapper {
+            position: relative;
+            aspect-ratio: 4/3;
+            overflow: hidden;
+        }
+
+        .image-wrapper img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .image-checkbox {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            width: 22px;
+            height: 22px;
+            cursor: pointer;
+            z-index: 10;
+        }
+
+        .image-info {
+            padding: 12px;
+        }
+
+        .image-filename {
+            font-size: 0.85rem;
+            color: #e0e0e0;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            margin-bottom: 6px;
+        }
+
+        .image-meta {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.75rem;
+            color: #888;
+            margin-bottom: 10px;
+        }
+
+        .image-actions {
+            display: flex;
+            gap: 8px;
+        }
+
+        .image-actions button {
+            flex: 1;
+            padding: 8px;
+            font-size: 0.8rem;
+        }
+
+        /* Status badge */
+        .status-badge {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            padding: 4px 10px;
+            border-radius: 12px;
+            font-size: 0.7rem;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+
+        .status-enabled {
+            background: rgba(0, 255, 136, 0.2);
+            color: #00ff88;
+        }
+
+        .status-disabled {
+            background: rgba(255, 71, 87, 0.2);
+            color: #ff4757;
+        }
+
+        /* Messages */
+        .message {
+            padding: 12px 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            display: none;
+        }
+
+        .message.success {
+            display: block;
+            background: rgba(0, 255, 136, 0.1);
+            border: 1px solid rgba(0, 255, 136, 0.3);
+            color: #00ff88;
+        }
+
+        .message.error {
+            display: block;
+            background: rgba(255, 71, 87, 0.1);
+            border: 1px solid rgba(255, 71, 87, 0.3);
+            color: #ff4757;
+        }
+
+        /* Empty state */
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: #666;
+        }
+
+        .empty-state h2 {
+            font-size: 1.5rem;
+            margin-bottom: 10px;
+            color: #888;
+        }
+
+        /* Stats bar */
+        .stats-bar {
+            display: flex;
+            gap: 30px;
+            padding: 15px 0;
+            margin-bottom: 10px;
+            color: #888;
+            font-size: 0.9rem;
+        }
+
+        .stat {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .stat-value {
+            color: #e0e0e0;
+            font-weight: 600;
+        }
+
+        /* Mat color picker */
+        .mat-color-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 10px;
+            font-size: 0.8rem;
+        }
+
+        .mat-color-row label {
+            color: #888;
+        }
+
+        .mat-color-picker {
+            width: 40px;
+            height: 28px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            background: transparent;
+            padding: 0;
+        }
+
+        .mat-color-picker::-webkit-color-swatch-wrapper {
+            padding: 2px;
+        }
+
+        .mat-color-picker::-webkit-color-swatch {
+            border-radius: 4px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <div class="header-top">
+                <h1>🖼️ Gallery Management</h1>
+                <nav class="nav-links">
+                    <a href="/upload">📤 Upload</a>
+                    <a href="/gallery" class="active">🖼️ Gallery</a>
+                    {% if is_admin %}
+                    <a href="/admin/users">👥 Users</a>
+                    {% endif %}
+                    <a href="/display" target="_blank">📺 Display</a>
+                    <a href="/change-password">🔑 Password</a>
+                    <a href="/logout">🚪 Logout</a>
+                </nav>
+            </div>
+
+            <div class="stats-bar">
+                <div class="stat">
+                    <span>Total:</span>
+                    <span class="stat-value" id="total-count">0</span>
+                </div>
+                <div class="stat">
+                    <span>Visible:</span>
+                    <span class="stat-value" id="enabled-count">0</span>
+                </div>
+                <div class="stat">
+                    <span>Hidden:</span>
+                    <span class="stat-value" id="disabled-count">0</span>
+                </div>
+            </div>
+        </header>
+
+        <div id="message" class="message"></div>
+
+        <!-- Toolbar -->
+        <div class="toolbar">
+            <div class="toolbar-left">
+                <div class="select-all-wrapper">
+                    <input type="checkbox" id="select-all" title="Select all">
+                    <span class="selection-count"><span id="selected-count">0</span> selected</span>
+                </div>
+                
+                <div class="filter-tabs">
+                    <button class="filter-tab active" data-filter="all">All</button>
+                    <button class="filter-tab" data-filter="enabled">Visible</button>
+                    <button class="filter-tab" data-filter="disabled">Hidden</button>
+                </div>
+            </div>
+
+            <div class="toolbar-right">
+                <button class="btn btn-success" id="bulk-enable" disabled>✓ Show Selected</button>
+                <button class="btn btn-warning" id="bulk-disable" disabled>⊘ Hide Selected</button>
+                <button class="btn btn-danger" id="bulk-delete" disabled>🗑 Delete Selected</button>
+            </div>
+        </div>
+
+        <!-- Image Grid -->
+        <div class="image-grid" id="image-grid">
+            <!-- Images loaded via JS -->
+        </div>
+
+        <div class="empty-state" id="empty-state" style="display: none;">
+            <h2>No images yet</h2>
+            <p>Upload some photos to get started</p>
+            <a href="/upload" class="btn btn-primary" style="margin-top: 20px;">Go to Upload</a>
+        </div>
+    </div>
+
+    <script>
+        let images = [];
+        let selectedImages = new Set();
+        let currentFilter = 'all';
+        let globalMatColor = '#2c2c2c';
+
+        // Load global settings and images
+        loadGlobalSettings();
+        loadGallery();
+
+        async function loadGlobalSettings() {
+            try {
+                const response = await fetch('/api/settings');
+                const settings = await response.json();
+                globalMatColor = settings.mat_color || '#2c2c2c';
+            } catch (err) {
+                console.error('Failed to load settings');
+            }
+        }
+
+        async function loadGallery() {
+            try {
+                const response = await fetch('/api/gallery');
+                const data = await response.json();
+                images = data.images;
+                renderGallery();
+                updateStats();
+            } catch (err) {
+                showMessage('Failed to load gallery', 'error');
+            }
+        }
+
+        function renderGallery() {
+            const grid = document.getElementById('image-grid');
+            const emptyState = document.getElementById('empty-state');
+            
+            // Filter images
+            let filtered = images;
+            if (currentFilter === 'enabled') {
+                filtered = images.filter(img => img.enabled);
+            } else if (currentFilter === 'disabled') {
+                filtered = images.filter(img => !img.enabled);
+            }
+
+            if (images.length === 0) {
+                grid.style.display = 'none';
+                emptyState.style.display = 'block';
+                return;
+            }
+
+            grid.style.display = 'grid';
+            emptyState.style.display = 'none';
+
+            grid.innerHTML = filtered.map(img => `
+                <div class="image-card ${img.enabled ? '' : 'disabled'} ${selectedImages.has(img.filename) ? 'selected' : ''}"
+                     data-filename="${img.filename}">
+                    <div class="image-wrapper">
+                        <input type="checkbox" class="image-checkbox"
+                               ${selectedImages.has(img.filename) ? 'checked' : ''}
+                               onchange="toggleSelect('${img.filename}')">
+                        <span class="status-badge ${img.enabled ? 'status-enabled' : 'status-disabled'}">
+                            ${img.enabled ? 'Visible' : 'Hidden'}
+                        </span>
+                        <img src="/uploads/${img.filename}" alt="${img.filename}" loading="lazy">
+                    </div>
+                    <div class="image-info">
+                        <div class="image-filename" title="${img.filename}">${cleanFilename(img.filename)}</div>
+                        <div class="image-meta">
+                            <span>${formatSize(img.size)}</span>
+                            <span>${img.uploaded_by || 'Unknown'}</span>
+                        </div>
+                        <div class="mat-color-row">
+                            <label>Mat:</label>
+                            <input type="color"
+                                   class="mat-color-picker"
+                                   value="${img.mat_color || globalMatColor}"
+                                   data-filename="${img.filename}"
+                                   onchange="updateMatColor('${img.filename}', this.value)">
+                        </div>
+                        <div class="image-actions">
+                            <button class="btn ${img.enabled ? 'btn-warning' : 'btn-success'}"
+                                    onclick="toggleImage('${img.filename}', ${!img.enabled})">
+                                ${img.enabled ? '⊘ Hide' : '✓ Show'}
+                            </button>
+                            <button class="btn btn-danger" onclick="deleteImage('${img.filename}')">🗑</button>
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+
+            updateSelectionUI();
+        }
+
+        function cleanFilename(filename) {
+            // Remove the UUID prefix
+            return filename.replace(/^[a-f0-9]+_/, '');
+        }
+
+        function formatSize(bytes) {
+            if (bytes < 1024) return bytes + ' B';
+            if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+            return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+        }
+
+        function updateStats() {
+            const total = images.length;
+            const enabled = images.filter(img => img.enabled).length;
+            const disabled = total - enabled;
+
+            document.getElementById('total-count').textContent = total;
+            document.getElementById('enabled-count').textContent = enabled;
+            document.getElementById('disabled-count').textContent = disabled;
+        }
+
+        // Selection handling
+        function toggleSelect(filename) {
+            if (selectedImages.has(filename)) {
+                selectedImages.delete(filename);
+            } else {
+                selectedImages.add(filename);
+            }
+            updateSelectionUI();
+        }
+
+        function updateSelectionUI() {
+            document.getElementById('selected-count').textContent = selectedImages.size;
+            
+            const hasSelection = selectedImages.size > 0;
+            document.getElementById('bulk-enable').disabled = !hasSelection;
+            document.getElementById('bulk-disable').disabled = !hasSelection;
+            document.getElementById('bulk-delete').disabled = !hasSelection;
+
+            // Update select all checkbox
+            const visibleImages = getVisibleImages();
+            const allSelected = visibleImages.length > 0 && 
+                               visibleImages.every(img => selectedImages.has(img.filename));
+            document.getElementById('select-all').checked = allSelected;
+
+            // Update card styles
+            document.querySelectorAll('.image-card').forEach(card => {
+                const filename = card.dataset.filename;
+                card.classList.toggle('selected', selectedImages.has(filename));
+                card.querySelector('.image-checkbox').checked = selectedImages.has(filename);
+            });
+        }
+
+        function getVisibleImages() {
+            if (currentFilter === 'enabled') return images.filter(img => img.enabled);
+            if (currentFilter === 'disabled') return images.filter(img => !img.enabled);
+            return images;
+        }
+
+        // Select all
+        document.getElementById('select-all').addEventListener('change', (e) => {
+            const visibleImages = getVisibleImages();
+            if (e.target.checked) {
+                visibleImages.forEach(img => selectedImages.add(img.filename));
+            } else {
+                visibleImages.forEach(img => selectedImages.delete(img.filename));
+            }
+            updateSelectionUI();
+        });
+
+        // Filter tabs
+        document.querySelectorAll('.filter-tab').forEach(tab => {
+            tab.addEventListener('click', () => {
+                document.querySelectorAll('.filter-tab').forEach(t => t.classList.remove('active'));
+                tab.classList.add('active');
+                currentFilter = tab.dataset.filter;
+                renderGallery();
+            });
+        });
+
+        // Single image actions
+        async function updateMatColor(filename, color) {
+            try {
+                const response = await fetch(`/api/gallery/${filename}`, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ mat_color: color })
+                });
+
+                if (response.ok) {
+                    const img = images.find(i => i.filename === filename);
+                    if (img) img.mat_color = color;
+                    showMessage('Mat color updated', 'success');
+                }
+            } catch (err) {
+                showMessage('Failed to update mat color', 'error');
+            }
+        }
+
+        async function toggleImage(filename, enabled) {
+            try {
+                const response = await fetch(`/api/gallery/${filename}`, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ enabled })
+                });
+                
+                if (response.ok) {
+                    const img = images.find(i => i.filename === filename);
+                    if (img) img.enabled = enabled;
+                    renderGallery();
+                    updateStats();
+                    showMessage(enabled ? 'Image will now be shown' : 'Image hidden from display', 'success');
+                }
+            } catch (err) {
+                showMessage('Failed to update image', 'error');
+            }
+        }
+
+        async function deleteImage(filename) {
+            if (!confirm('Delete this image permanently?')) return;
+
+            try {
+                const response = await fetch(`/api/gallery/${filename}`, {
+                    method: 'DELETE'
+                });
+                
+                if (response.ok) {
+                    images = images.filter(i => i.filename !== filename);
+                    selectedImages.delete(filename);
+                    renderGallery();
+                    updateStats();
+                    showMessage('Image deleted', 'success');
+                }
+            } catch (err) {
+                showMessage('Failed to delete image', 'error');
+            }
+        }
+
+        // Bulk actions
+        document.getElementById('bulk-enable').addEventListener('click', async () => {
+            await bulkAction('enable');
+        });
+
+        document.getElementById('bulk-disable').addEventListener('click', async () => {
+            await bulkAction('disable');
+        });
+
+        document.getElementById('bulk-delete').addEventListener('click', async () => {
+            if (!confirm(`Delete ${selectedImages.size} images permanently?`)) return;
+            await bulkAction('delete');
+        });
+
+        async function bulkAction(action) {
+            const filenames = Array.from(selectedImages);
+            
+            try {
+                const response = await fetch('/api/gallery/bulk', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action, filenames })
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    showMessage(data.message, 'success');
+                    
+                    if (action === 'delete') {
+                        images = images.filter(i => !filenames.includes(i.filename));
+                    } else {
+                        filenames.forEach(f => {
+                            const img = images.find(i => i.filename === f);
+                            if (img) img.enabled = (action === 'enable');
+                        });
+                    }
+                    
+                    selectedImages.clear();
+                    renderGallery();
+                    updateStats();
+                } else {
+                    showMessage(data.error || 'Action failed', 'error');
+                }
+            } catch (err) {
+                showMessage('Action failed', 'error');
+            }
+        }
+
+        function showMessage(text, type) {
+            const el = document.getElementById('message');
+            el.textContent = text;
+            el.className = 'message ' + type;
+            
+            setTimeout(() => {
+                el.className = 'message';
+            }, 3000);
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,36 @@
+# Git
+.git
+.gitignore
+
+# Python
+__pycache__
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+ENV/
+.venv
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Data (handled by volumes)
+uploads/
+data/
+*.json
+
+# Documentation
+*.md
+!requirements.txt
+
+# Kiosk scripts (not needed in container)
+setup_kiosk.sh
+start_kiosk.sh
+
+# Misc
+.DS_Store
+Thumbs.db

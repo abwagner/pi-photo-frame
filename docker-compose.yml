@@ -1,0 +1,30 @@
+services:
+  photo-frame:
+    build: .
+    # Or use pre-built image (if you publish one):
+    # image: your-registry/pi-photo-frame:latest
+    container_name: pi-photo-frame
+    restart: unless-stopped
+    ports:
+      - "5001:5000"
+    volumes:
+      # Persist uploaded photos
+      - photo_uploads:/app/uploads
+      # Persist settings, users, gallery data
+      - photo_data:/app/data
+    environment:
+      - TZ=America/New_York  # Change to your timezone
+      - BACKUP_TIME=03:00    # Daily backup time (HH:MM, 24h format)
+    # Healthcheck is defined in Dockerfile
+
+    # Resource limits (optional, good for Pi)
+    # deploy:
+    #   resources:
+    #     limits:
+    #       memory: 256M
+
+volumes:
+  photo_uploads:
+    name: photoframe_uploads
+  photo_data:
+    name: photoframe_data
