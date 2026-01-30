@@ -3,6 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="csrf-token" content="{{ csrf_token() }}">
     <title>Backup Settings - Pi Photo Frame</title>
     <style>
         * {
@@ -346,10 +347,17 @@
                 <button class="btn btn-success" onclick="triggerBackup()" id="backup-now-btn">
                     Backup Now
                 </button>
+                <button class="btn btn-primary" onclick="triggerRestore()" id="restore-now-btn">
+                    Restore from Dropbox
+                </button>
                 <button class="btn btn-danger" onclick="disconnectBackup()">
                     Disconnect Dropbox
                 </button>
             </div>
+            <p class="help-text" style="margin-top:-5px;">
+                Restore copies photos and settings from Dropbox without deleting local files.
+                Your login credentials and session key are not overwritten.
+            </p>
         </div>
 
         <!-- Settings Panel (shown when configured) -->
@@ -377,6 +385,20 @@
     </div>
 
     <script>
+        const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+        const _origFetch = window.fetch;
+        window.fetch = function(url, options = {}) {
+            if (options.method && options.method !== 'GET') {
+                options.headers = options.headers || {};
+                if (options.headers instanceof Headers) {
+                    options.headers.set('X-CSRFToken', csrfToken);
+                } else {
+                    options.headers['X-CSRFToken'] = csrfToken;
+                }
+            }
+            return _origFetch.call(this, url, options);
+        };
+
         let pollTimer = null;
 
         // Load on page init
@@ -403,7 +425,14 @@
             const settingsPanel = document.getElementById('settings-panel');
             const historyPanel = document.getElementById('history-panel');
 
-            if (status.in_progress) {
+            if (status.restore_in_progress) {
+                dot.className = 'status-dot blue';
+                text.textContent = 'Restore in progress...';
+                meta.textContent = 'Copying files from Dropbox';
+                if (!pollTimer) {
+                    pollTimer = setInterval(loadBackupStatus, 5000);
+                }
+            } else if (status.in_progress) {
                 dot.className = 'status-dot blue';
                 text.textContent = 'Backup in progress...';
                 meta.textContent = '';
@@ -448,12 +477,21 @@
 
             // Update backup button state
             const btn = document.getElementById('backup-now-btn');
+            const restoreBtn = document.getElementById('restore-now-btn');
+            const busy = status.in_progress || status.restore_in_progress;
             if (status.in_progress) {
                 btn.disabled = true;
                 btn.textContent = 'Backing up...';
             } else {
-                btn.disabled = false;
+                btn.disabled = busy;
                 btn.textContent = 'Backup Now';
+            }
+            if (status.restore_in_progress) {
+                restoreBtn.disabled = true;
+                restoreBtn.textContent = 'Restoring...';
+            } else {
+                restoreBtn.disabled = busy;
+                restoreBtn.textContent = 'Restore from Dropbox';
             }
         }
 
@@ -575,6 +613,32 @@
                 showMessage('Failed: ' + err.message, 'error');
                 btn.disabled = false;
                 btn.textContent = 'Backup Now';
+            }
+        }
+
+        async function triggerRestore() {
+            if (!confirm('Restore from Dropbox? This will copy photos and settings from your backup. Local files not in the backup will be kept. Your login credentials will not be changed.')) return;
+
+            const btn = document.getElementById('restore-now-btn');
+            btn.disabled = true;
+            btn.textContent = 'Starting...';
+
+            try {
+                const response = await fetch('/api/backup/restore', { method: 'POST' });
+                const data = await response.json();
+                if (response.ok) {
+                    showMessage('Restore started', 'success');
+                    pollTimer = setInterval(loadBackupStatus, 5000);
+                    loadBackupStatus();
+                } else {
+                    showMessage(data.error || 'Failed to start restore', 'error');
+                    btn.disabled = false;
+                    btn.textContent = 'Restore from Dropbox';
+                }
+            } catch (err) {
+                showMessage('Failed: ' + err.message, 'error');
+                btn.disabled = false;
+                btn.textContent = 'Restore from Dropbox';
             }
         }
 

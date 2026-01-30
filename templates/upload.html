@@ -3,6 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="csrf-token" content="{{ csrf_token() }}">
     <title>Pi Photo Frame</title>
     <style>
         * {
@@ -1018,6 +1019,23 @@
     </div>
 
     <script>
+        // ===== CSRF Token =====
+        const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+
+        // Wrap fetch to automatically include CSRF token
+        const _origFetch = window.fetch;
+        window.fetch = function(url, options = {}) {
+            if (options.method && options.method !== 'GET') {
+                options.headers = options.headers || {};
+                if (options.headers instanceof Headers) {
+                    options.headers.set('X-CSRFToken', csrfToken);
+                } else {
+                    options.headers['X-CSRFToken'] = csrfToken;
+                }
+            }
+            return _origFetch.call(this, url, options);
+        };
+
         // ===== DOM Elements =====
         const uploadZone = document.getElementById('upload-zone');
         const fileInput = document.getElementById('file-input');
@@ -1161,7 +1179,7 @@
                         <div class="group-card" data-group-id="${groupId}">
                             <div class="group-mosaic ${mosaicClass}" onclick="openGroupPreview('${groupId}')">
                                 <span class="group-badge">${count} images</span>
-                                ${displayImages.map(img => `<img src="/uploads/${img.filename}" alt="${img.filename}" loading="lazy">`).join('')}
+                                ${displayImages.map(img => `<img src="/uploads/${escAttr(img.filename)}" alt="${escAttr(img.filename)}" loading="lazy">`).join('')}
                             </div>
                             <div class="card-info">
                                 <div class="card-filename">Group (${count} images)</div>
@@ -1186,19 +1204,19 @@
             // Ungrouped image cards
             html += ungrouped.map(img => `
                 <div class="image-card ${img.enabled ? '' : 'disabled'} ${selectedImages.has(img.filename) ? 'selected' : ''}"
-                     data-filename="${img.filename}">
-                    <div class="card-thumb" onclick="openPreview('${img.filename}')">
+                     data-filename="${escAttr(img.filename)}">
+                    <div class="card-thumb" onclick="openPreview('${escAttr(img.filename)}')">
                         <input type="checkbox" class="image-checkbox"
                                ${selectedImages.has(img.filename) ? 'checked' : ''}
                                onclick="event.stopPropagation()"
-                               onchange="toggleSelect('${img.filename}')">
+                               onchange="toggleSelect('${escAttr(img.filename)}')">
                         <span class="status-badge ${img.enabled ? 'status-enabled' : 'status-disabled'}">
                             ${img.enabled ? 'Visible' : 'Hidden'}
                         </span>
-                        <img src="/uploads/${img.filename}" alt="${img.filename}" loading="lazy">
+                        <img src="/uploads/${escAttr(img.filename)}" alt="${escAttr(img.filename)}" loading="lazy">
                     </div>
                     <div class="card-info">
-                        <div class="card-filename" title="${img.filename}">${cleanFilename(img.filename)}</div>
+                        <div class="card-filename" title="${escAttr(img.filename)}">${cleanFilename(escAttr(img.filename))}</div>
                         <div class="card-meta">
                             <span>${formatSize(img.size)}</span>
                             <span>${img.uploaded_by || 'Unknown'}</span>
@@ -1208,15 +1226,15 @@
                             <input type="color"
                                    class="mat-color-picker"
                                    value="${img.mat_color || matColorInput.value}"
-                                   data-filename="${img.filename}"
-                                   onchange="updateMatColor('${img.filename}', this.value)">
+                                   data-filename="${escAttr(img.filename)}"
+                                   onchange="updateMatColor('${escAttr(img.filename)}', this.value)">
                         </div>
                         <div class="card-actions">
                             <button class="btn ${img.enabled ? 'btn-warning' : 'btn-success'}"
-                                    onclick="toggleImage('${img.filename}', ${!img.enabled})">
+                                    onclick="toggleImage('${escAttr(img.filename)}', ${!img.enabled})">
                                 ${img.enabled ? '⊘ Hide' : '✓ Show'}
                             </button>
-                            <button class="btn btn-danger" onclick="deleteImage('${img.filename}')">🗑</button>
+                            <button class="btn btn-danger" onclick="deleteImage('${escAttr(img.filename)}')">🗑</button>
                         </div>
                     </div>
                 </div>
@@ -1377,6 +1395,10 @@
         }
 
         // ===== Helpers =====
+        function escAttr(str) {
+            return String(str).replace(/[&"'<>]/g, c => ({'&':'&amp;','"':'&quot;',"'":'&#39;','<':'&lt;','>':'&gt;'}[c]));
+        }
+
         function cleanFilename(filename) {
             return filename.replace(/^[a-f0-9]+_/, '');
         }

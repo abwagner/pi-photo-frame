@@ -44,6 +44,167 @@ chmod +x setup_kiosk.sh
 sudo reboot
 ```
 
+## Raspberry Pi Setup (End-to-End)
+
+This walks through everything from a fresh Raspberry Pi to a working photo frame on your TV.
+
+### What You Need
+
+- Raspberry Pi (3B+ or newer recommended) with Raspberry Pi OS (Desktop version)
+- microSD card (16GB+) with Raspberry Pi OS flashed via [Raspberry Pi Imager](https://www.raspberrypi.com/software/)
+- HDMI cable connecting the Pi to your TV
+- Network connection (Wi-Fi or Ethernet)
+
+### Step 1: Initial Pi Setup
+
+If you haven't already, flash Raspberry Pi OS with Desktop using [Raspberry Pi Imager](https://www.raspberrypi.com/software/). During setup in the imager, configure:
+- Hostname (e.g. `photoframe`)
+- Wi-Fi credentials
+- Enable SSH (so you can manage it headlessly later)
+- Set username/password
+
+Boot the Pi and ensure it's connected to your network.
+
+### Step 2: Get the Code onto the Pi
+
+**Option A: Clone from GitHub (on the Pi)**
+
+```bash
+ssh pi@photoframe.local    # or whatever hostname/IP you set
+git clone https://github.com/YOUR_USER/pi-photo-frame.git
+cd pi-photo-frame
+```
+
+**Option B: Copy from your computer**
+
+```bash
+# From your Mac/PC:
+scp -r pi-photo-frame pi@photoframe.local:~/
+```
+
+### Step 3: Install and Run
+
+Choose **one** of these approaches:
+
+#### Docker (Recommended)
+
+Docker handles all dependencies in an isolated container and auto-restarts on boot.
+
+```bash
+# Install Docker on the Pi
+curl -fsSL https://get.docker.com | sh
+sudo usermod -aG docker $USER
+# Log out and back in for group change to take effect
+exit
+ssh pi@photoframe.local
+
+# Start the photo frame
+cd ~/pi-photo-frame
+docker compose up -d
+```
+
+The app is now running at `http://photoframe.local:5001` (port 5001 as configured in docker-compose.yml).
+
+#### Native Python (Alternative)
+
+Runs directly without Docker. The `setup_kiosk.sh` script handles everything:
+
+```bash
+cd ~/pi-photo-frame
+chmod +x setup_kiosk.sh
+./setup_kiosk.sh
+```
+
+This installs dependencies, creates a systemd service (auto-starts on boot), and configures kiosk mode. The app runs at `http://photoframe.local:5000`.
+
+### Step 4: Set Up Kiosk Mode (Auto-Display on TV)
+
+This makes the Pi automatically open the slideshow fullscreen in Chromium when it boots.
+
+**If using Docker**, create the kiosk scripts manually:
+
+```bash
+# Install kiosk dependencies
+sudo apt-get install -y chromium-browser unclutter
+
+# Create autostart directory
+mkdir -p ~/.config/autostart
+
+# Create kiosk start script
+cat > ~/start-kiosk.sh << 'EOF'
+#!/bin/bash
+# Wait for Docker and the server to be ready
+echo "Waiting for photo frame server..."
+for i in {1..60}; do
+    if curl -s http://localhost:5001 > /dev/null 2>&1; then
+        echo "Server is ready!"
+        break
+    fi
+    sleep 2
+done
+
+# Disable screen blanking
+xset s off
+xset s noblank
+xset -dpms
+
+# Hide cursor
+unclutter -idle 0.5 -root &
+
+# Open Chromium in kiosk mode
+chromium-browser \
+    --kiosk \
+    --noerrdialogs \
+    --disable-infobars \
+    --disable-session-crashed-bubble \
+    --no-first-run \
+    --start-fullscreen \
+    http://localhost:5001/display
+EOF
+chmod +x ~/start-kiosk.sh
+
+# Create autostart entry
+cat > ~/.config/autostart/photo-frame-kiosk.desktop << 'EOF'
+[Desktop Entry]
+Type=Application
+Name=Photo Frame Kiosk
+Exec=/home/pi/start-kiosk.sh
+X-GNOME-Autostart-enabled=true
+EOF
+```
+
+**If using native Python**, the `setup_kiosk.sh` script already configured this.
+
+Reboot to start kiosk mode:
+
+```bash
+sudo reboot
+```
+
+### Step 5: Upload Photos
+
+From any device on your network (phone, laptop, etc.):
+
+1. Open `http://photoframe.local:5001/upload` in a browser
+2. Log in with `admin` / `password`
+3. **Change the default password** (Admin > Users)
+4. Upload photos — they appear on the TV automatically
+
+### Managing the Frame
+
+| Task | Command (SSH into Pi) |
+|------|----------------------|
+| View logs | `docker compose logs -f` |
+| Restart | `docker compose restart` |
+| Stop | `docker compose down` |
+| Update code | `git pull && docker compose build && docker compose up -d` |
+| Exit kiosk temporarily | Press `Ctrl+Alt+F1` to switch to terminal |
+| Return to kiosk | Press `Ctrl+Alt+F7` to switch back to desktop |
+
+### Headless Operation
+
+Once kiosk mode is set up, you never need to touch the Pi again. Everything is managed through the web interface from your phone or laptop. The Pi just needs power and an HDMI connection to your TV.
+
 ## Default Login
 
 ```

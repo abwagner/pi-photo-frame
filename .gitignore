@@ -1,0 +1,33 @@
+# Data and secrets (never commit)
+data/
+uploads/
+# In case secrets are ever at repo root
+.secret_key
+.display_token
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+ENV/
+.venv
+*.egg-info/
+.eggs/
+dist/
+build/
+
+# IDE and OS
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# Local / env (if you add .env later)
+.env
+.env.local
+*.local

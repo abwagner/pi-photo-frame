@@ -10,6 +10,7 @@ import uuid
 import secrets
 import hashlib
 import fcntl
+import re
 import subprocess
 import threading
 import logging
@@ -18,11 +19,14 @@ from pathlib import Path
 from functools import wraps
 from flask import Flask, render_template, request, jsonify, send_from_directory, redirect, url_for, session
 
+import bcrypt
+from flask_wtf.csrf import CSRFProtect
 from werkzeug.utils import secure_filename
 from PIL import Image, ImageOps
 from apscheduler.schedulers.background import BackgroundScheduler
 
 app = Flask(__name__)
+csrf = CSRFProtect(app)
 
 # Configuration
 UPLOAD_FOLDER = Path(__file__).parent / 'uploads'
@@ -59,16 +63,45 @@ if DISPLAY_TOKEN_FILE.exists():
 else:
     DISPLAY_TOKEN = secrets.token_urlsafe(32)
     DISPLAY_TOKEN_FILE.write_text(DISPLAY_TOKEN)
+try:
+    os.chmod(DISPLAY_TOKEN_FILE, 0o600)
+except OSError:
+    pass
+
+# Session cookie security
+app.config['SESSION_COOKIE_HTTPONLY'] = True
+app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
+# Enable Secure flag when behind HTTPS (set env var SECURE_COOKIES=1)
+if os.environ.get('SECURE_COOKIES', '').lower() in ('1', 'true'):
+    app.config['SESSION_COOKIE_SECURE'] = True
+
+# Reverse proxy support — enable with BEHIND_PROXY=1
+if os.environ.get('BEHIND_PROXY', '').lower() in ('1', 'true'):
+    from werkzeug.middleware.proxy_fix import ProxyFix
+    app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
 
 
 # ============ User Management ============
 
 def hash_password(password: str, salt: str = None) -> tuple:
-    """Hash a password with salt using SHA-256"""
-    if salt is None:
-        salt = secrets.token_hex(16)
-    hashed = hashlib.sha256((salt + password).encode()).hexdigest()
-    return hashed, salt
+    """Hash a password using bcrypt.
+
+    The salt parameter is accepted for backwards compatibility with legacy
+    SHA-256 hashes but is ignored for new bcrypt hashes.
+    """
+    hashed = bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
+    return hashed, None
+
+
+def _verify_legacy_sha256(password: str, stored_hash: str, salt: str) -> bool:
+    """Verify a password against a legacy salted SHA-256 hash."""
+    candidate = hashlib.sha256((salt + password).encode()).hexdigest()
+    return secrets.compare_digest(candidate, stored_hash)
+
+
+def _is_bcrypt_hash(stored_hash: str) -> bool:
+    """Check if a stored hash is in bcrypt format."""
+    return stored_hash.startswith('$2b$') or stored_hash.startswith('$2a$')
 
 
 def load_users():
@@ -76,7 +109,7 @@ def load_users():
     if USERS_FILE.exists():
         with open(USERS_FILE, 'r') as f:
             return json.load(f)
-    
+
     # Create default admin user
     hashed, salt = hash_password('password')
     users = {
@@ -99,13 +132,26 @@ def save_users(users):
 
 
 def verify_user(username: str, password: str) -> bool:
-    """Verify username and password"""
+    """Verify username and password, auto-migrating legacy SHA-256 hashes to bcrypt."""
     users = load_users()
     if username not in users:
         return False
     user = users[username]
-    hashed, _ = hash_password(password, user['salt'])
-    return secrets.compare_digest(hashed, user['password_hash'])
+
+    if _is_bcrypt_hash(user['password_hash']):
+        if not bcrypt.checkpw(password.encode(), user['password_hash'].encode()):
+            return False
+    else:
+        # Legacy salted SHA-256
+        if not _verify_legacy_sha256(password, user['password_hash'], user.get('salt', '')):
+            return False
+        # Auto-migrate to bcrypt on successful login
+        new_hash, _ = hash_password(password)
+        user['password_hash'] = new_hash
+        user['salt'] = None
+        save_users(users)
+
+    return True
 
 
 def get_user_role(username: str) -> str:
@@ -119,19 +165,19 @@ def get_user_role(username: str) -> str:
 def create_user(username: str, password: str, role: str = 'user') -> tuple:
     """Create a new user. Returns (success, message)"""
     users = load_users()
-    
+
     if username in users:
         return False, 'Username already exists'
-    
+
     if len(username) < 3:
         return False, 'Username must be at least 3 characters'
-    
+
     if len(password) < 4:
         return False, 'Password must be at least 4 characters'
-    
+
     if role not in ['admin', 'user']:
         return False, 'Invalid role'
-    
+
     hashed, salt = hash_password(password)
     users[username] = {
         'password_hash': hashed,
@@ -146,13 +192,13 @@ def create_user(username: str, password: str, role: str = 'user') -> tuple:
 def delete_user(username: str) -> tuple:
     """Delete a user. Returns (success, message)"""
     users = load_users()
-    
+
     if username not in users:
         return False, 'User not found'
-    
+
     if username == 'admin':
         return False, 'Cannot delete the admin user'
-    
+
     del users[username]
     save_users(users)
     return True, 'User deleted successfully'
@@ -161,13 +207,13 @@ def delete_user(username: str) -> tuple:
 def change_user_password(username: str, new_password: str) -> tuple:
     """Change a user's password. Returns (success, message)"""
     users = load_users()
-    
+
     if username not in users:
         return False, 'User not found'
-    
+
     if len(new_password) < 4:
         return False, 'Password must be at least 4 characters'
-    
+
     hashed, salt = hash_password(new_password)
     users[username]['password_hash'] = hashed
     users[username]['salt'] = salt
@@ -325,10 +371,10 @@ def get_uploaded_images():
     """Get list of all uploaded images with metadata"""
     if not UPLOAD_FOLDER.exists():
         return []
-    
+
     gallery = load_gallery()
     images = []
-    
+
     for f in sorted(UPLOAD_FOLDER.iterdir()):
         if f.is_file() and allowed_file(f.name):
             meta = gallery['images'].get(f.name, {
@@ -346,7 +392,7 @@ def get_uploaded_images():
                 'modified': datetime.fromtimestamp(f.stat().st_mtime).isoformat(),
                 **meta
             })
-    
+
     return images
 
 
@@ -464,12 +510,15 @@ def run_backup():
             capture_output=True, text=True, timeout=3600
         )
 
-        # Sync data (excluding rclone config and lock file)
+        # Sync data (excluding secrets, credentials, and lock files)
         result2 = subprocess.run(
             ['rclone', 'sync', str(DATA_FOLDER), f'dropbox:{remote_path}/data',
              '--config', config,
              '--exclude', 'rclone/**',
-             '--exclude', '.backup.lock'],
+             '--exclude', '.backup.lock',
+             '--exclude', '.secret_key',
+             '--exclude', '.display_token',
+             '--exclude', 'users.json'],
             capture_output=True, text=True, timeout=3600
         )
 
@@ -541,6 +590,78 @@ def run_backup_async():
     thread.start()
 
 
+restore_in_progress = False
+
+
+def run_restore():
+    """Restore photos and data from Dropbox backup"""
+    global restore_in_progress
+
+    if not is_backup_configured():
+        return {'success': False, 'error': 'Backup not configured'}
+
+    # Reuse the same file lock to prevent backup and restore from running concurrently
+    try:
+        lock_fd = open(BACKUP_LOCK_FILE, 'w')
+        fcntl.flock(lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except (IOError, OSError):
+        return {'success': False, 'error': 'A backup or restore is already in progress'}
+
+    restore_in_progress = True
+    start_time = datetime.now()
+
+    try:
+        backup_settings = get_backup_settings()
+        remote_path = backup_settings['backup_path']
+        config = str(RCLONE_CONFIG_FILE)
+
+        # Restore uploads (use copy so we don't delete local files missing from remote)
+        result1 = subprocess.run(
+            ['rclone', 'copy', f'dropbox:{remote_path}/uploads', str(UPLOAD_FOLDER),
+             '--config', config],
+            capture_output=True, text=True, timeout=3600
+        )
+
+        # Restore data (excluding rclone config, lock file, secret key, and users)
+        result2 = subprocess.run(
+            ['rclone', 'copy', f'dropbox:{remote_path}/data', str(DATA_FOLDER),
+             '--config', config,
+             '--exclude', 'rclone/**',
+             '--exclude', '.backup.lock',
+             '--exclude', '.secret_key',
+             '--exclude', 'users.json'],
+            capture_output=True, text=True, timeout=3600
+        )
+
+        duration = (datetime.now() - start_time).total_seconds()
+
+        if result1.returncode != 0 or result2.returncode != 0:
+            error_msg = (result1.stderr or '') + (result2.stderr or '')
+            return {'success': False, 'error': error_msg.strip()[:500]}
+
+        return {'success': True, 'duration_seconds': round(duration, 1)}
+
+    except subprocess.TimeoutExpired:
+        return {'success': False, 'error': 'Restore timed out after 1 hour'}
+
+    except Exception as e:
+        return {'success': False, 'error': str(e)[:500]}
+
+    finally:
+        restore_in_progress = False
+        try:
+            fcntl.flock(lock_fd, fcntl.LOCK_UN)
+            lock_fd.close()
+        except Exception:
+            pass
+
+
+def run_restore_async():
+    """Run restore in a background thread"""
+    thread = threading.Thread(target=run_restore, daemon=True)
+    thread.start()
+
+
 # ============ Backup Scheduler ============
 
 scheduler = BackgroundScheduler(daemon=True)
@@ -598,19 +719,19 @@ def login():
     """Login page"""
     if is_authenticated():
         return redirect(url_for('upload_page'))
-    
+
     if request.method == 'POST':
         username = request.form.get('username', '').strip().lower()
         password = request.form.get('password', '')
-        
+
         if verify_user(username, password):
             session['authenticated'] = True
             session['username'] = username
             session.permanent = True
             return redirect(url_for('upload_page'))
-        
+
         return render_template('login.html', error='Invalid username or password')
-    
+
     return render_template('login.html')
 
 
@@ -629,20 +750,20 @@ def change_password():
         current = request.form.get('current', '')
         new_password = request.form.get('new_password', '')
         confirm = request.form.get('confirm', '')
-        
+
         username = session.get('username')
-        
+
         if not verify_user(username, current):
             return render_template('change_password.html', error='Current password is incorrect', is_admin=is_admin(), username=username)
-        
+
         if new_password != confirm:
             return render_template('change_password.html', error='New passwords do not match', is_admin=is_admin(), username=username)
-        
+
         success, message = change_user_password(username, new_password)
         if success:
             return render_template('change_password.html', success=message, is_admin=is_admin(), username=username)
         return render_template('change_password.html', error=message, is_admin=is_admin(), username=username)
-    
+
     return render_template('change_password.html', is_admin=is_admin(), username=session.get('username'))
 
 
@@ -668,7 +789,7 @@ def api_create_user():
     username = data.get('username', '').strip().lower()
     password = data.get('password', '')
     role = data.get('role', 'user')
-    
+
     success, message = create_user(username, password, role)
     if success:
         return jsonify({'success': True, 'message': message})
@@ -691,7 +812,7 @@ def api_reset_password(username):
     """Reset a user's password (admin only)"""
     data = request.json
     new_password = data.get('password', '')
-    
+
     success, message = change_user_password(username, new_password)
     if success:
         return jsonify({'success': True, 'message': message})
@@ -711,8 +832,8 @@ def index():
 def upload_page():
     """Render the upload interface"""
     settings = load_settings()
-    return render_template('upload.html', 
-                          settings=settings, 
+    return render_template('upload.html',
+                          settings=settings,
                           is_admin=is_admin(),
                           username=session.get('username'))
 
@@ -731,15 +852,15 @@ def display_page():
     # 1. Request is from localhost (the Pi itself)
     # 2. Valid token is provided
     # 3. User is authenticated via session
-    
+
     is_localhost = request.remote_addr in ['127.0.0.1', '::1']
     token = request.args.get('token', '')
     valid_token = token == DISPLAY_TOKEN
-    
+
     if is_localhost or valid_token or is_authenticated():
         settings = load_settings()
         return render_template('display.html', settings=settings)
-    
+
     return redirect(url_for('login'))
 
 
@@ -751,17 +872,17 @@ def api_upload():
     """Handle image uploads"""
     if 'files' not in request.files:
         return jsonify({'error': 'No files provided'}), 400
-    
+
     files = request.files.getlist('files')
     uploaded = []
     errors = []
-    
+
     username = session.get('username', 'unknown')
-    
+
     for file in files:
         if file.filename == '':
             continue
-        
+
         if file and allowed_file(file.filename):
             ext = file.filename.rsplit('.', 1)[1].lower()
             unique_name = f"{uuid.uuid4().hex[:8]}_{secure_filename(file.filename)}"
@@ -789,7 +910,7 @@ def api_upload():
             )
         else:
             errors.append(f"Invalid file type: {file.filename}")
-    
+
     return jsonify({
         'uploaded': uploaded,
         'errors': errors,
@@ -878,7 +999,7 @@ def api_update_image(filename):
     filepath = UPLOAD_FOLDER / secure_filename(filename)
     if not filepath.exists():
         return jsonify({'error': 'Image not found'}), 404
-    
+
     data = request.json
     allowed_fields = ['enabled', 'title', 'mat_color']
     updates = {k: v for k, v in data.items() if k in allowed_fields}
@@ -892,7 +1013,7 @@ def api_update_image(filename):
 def api_delete_image(filename):
     """Delete an image"""
     filepath = UPLOAD_FOLDER / secure_filename(filename)
-    
+
     if filepath.exists():
         filepath.unlink()
         remove_image_metadata(filename)
@@ -909,20 +1030,20 @@ def api_bulk_action():
     data = request.json
     action = data.get('action')
     filenames = data.get('filenames', [])
-    
+
     if not filenames:
         return jsonify({'error': 'No images selected'}), 400
-    
+
     if action == 'enable':
         for f in filenames:
             update_image_metadata(f, enabled=True)
         return jsonify({'success': True, 'message': f'Enabled {len(filenames)} images'})
-    
+
     elif action == 'disable':
         for f in filenames:
             update_image_metadata(f, enabled=False)
         return jsonify({'success': True, 'message': f'Disabled {len(filenames)} images'})
-    
+
     elif action == 'delete':
         deleted = 0
         for f in filenames:
@@ -933,7 +1054,7 @@ def api_bulk_action():
                 remove_filename_from_groups(f)
                 deleted += 1
         return jsonify({'success': True, 'message': f'Deleted {deleted} images'})
-    
+
     return jsonify({'error': 'Invalid action'}), 400
 
 
@@ -1010,20 +1131,20 @@ def api_settings():
     """Get or update settings"""
     if request.method == 'GET':
         return jsonify(load_settings())
-    
+
     if not is_authenticated():
         return jsonify({'error': 'Authentication required'}), 401
-    
+
     settings = load_settings()
     data = request.json
-    
+
     allowed_fields = ['mat_color', 'slideshow_interval', 'transition_duration',
                       'fit_mode', 'shuffle', 'image_order',
                       'target_aspect_ratio']
     for field in allowed_fields:
         if field in data:
             settings[field] = data[field]
-    
+
     save_settings(settings)
     return jsonify(settings)
 
@@ -1035,17 +1156,20 @@ def api_reorder():
     data = request.json
     if 'images' not in data:
         return jsonify({'error': 'No image order provided'}), 400
-    
+
     settings = load_settings()
     settings['image_order'] = data['images']
     save_settings(settings)
-    
+
     return jsonify({'success': True})
 
 
 @app.route('/uploads/<filename>')
 def serve_upload(filename):
-    """Serve uploaded images"""
+    """Serve uploaded images (only files tracked in gallery metadata)"""
+    gallery = load_gallery()
+    if filename not in gallery.get('images', {}):
+        return jsonify({'error': 'Not found'}), 404
     return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
 
 
@@ -1084,6 +1208,7 @@ def api_backup_status():
     return jsonify({
         'configured': configured,
         'in_progress': backup_in_progress,
+        'restore_in_progress': restore_in_progress,
         'last_backup': log.get('last_backup'),
         'last_result': log.get('last_result'),
         'last_error': log.get('last_error'),
@@ -1103,6 +1228,18 @@ def api_backup_run():
         return jsonify({'error': 'Backup not configured'}), 400
     run_backup_async()
     return jsonify({'success': True, 'message': 'Backup started'})
+
+
+@app.route('/api/backup/restore', methods=['POST'])
+@api_admin_required
+def api_backup_restore():
+    """Restore photos and data from Dropbox backup"""
+    if backup_in_progress or restore_in_progress:
+        return jsonify({'error': 'A backup or restore is already in progress'}), 409
+    if not is_backup_configured():
+        return jsonify({'error': 'Backup not configured'}), 400
+    run_restore_async()
+    return jsonify({'success': True, 'message': 'Restore started'})
 
 
 @app.route('/api/backup/configure', methods=['POST'])
@@ -1201,7 +1338,7 @@ def too_large(e):
 if __name__ == '__main__':
     # Ensure default admin exists
     load_users()
-    
+
     print("\n" + "="*50)
     print("Pi Photo Frame Server")
     print("="*50)
@@ -1209,5 +1346,5 @@ if __name__ == '__main__':
     print(f"TV Display:       http://localhost:5000/display")
     print(f"\nDefault login:    admin / password")
     print("="*50 + "\n")
-    
-    app.run(host='0.0.0.0', port=5000, debug=True)
+
+    app.run(host='0.0.0.0', port=5000, debug=os.environ.get('FLASK_DEBUG', '').lower() in ('1', 'true'))
