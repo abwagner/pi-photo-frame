@@ -1,7 +1,7 @@
 # Pi Photo Frame - Docker Image
 # Supports both AMD64 and ARM64 (Raspberry Pi 4)
 
-FROM python:3.11-slim
+FROM python:3.14-slim
 
 # Set environment variables
 ENV PYTHONDONTWRITEBYTECODE=1
