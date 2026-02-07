@@ -1,6 +1,6 @@
 # 🖼️ Pi Photo Frame
 
-A beautiful, web-based digital photo frame for Raspberry Pi with user management, gallery controls, and Docker support.
+A beautiful, web-based digital photo frame with user management, gallery controls, and HTTPS support. Runs on any Linux system — commonly deployed on a Raspberry Pi connected to a TV.
 
 ## Features
 
@@ -11,199 +11,75 @@ A beautiful, web-based digital photo frame for Raspberry Pi with user management
 - **Customizable Mat Colors** - Choose from presets or any custom color
 - **Smooth Slideshow** - Configurable timing and transitions
 - **Drag & Drop Reordering** - Arrange photos in your preferred order
-- **Docker Support** - Easy containerized deployment
+- **HTTPS** - Self-signed TLS via Caddy reverse proxy
 - **Kiosk Mode** - Auto-starts on boot for dedicated displays
 
 ## Quick Start
 
-### Option 1: Docker (Recommended)
-
 ```bash
+git clone https://github.com/abwagner/pi-photo-frame.git
 cd pi-photo-frame
-docker compose up -d
+./scripts/install.sh
 ```
 
-Access at `http://localhost:5000`
+The install script handles everything: Docker installation, building and starting the app with HTTPS, optional Chromium kiosk mode, and a daily Chromium restart cron job to prevent memory leaks.
 
-See [DOCKER.md](DOCKER.md) for detailed Docker instructions.
+After setup, access at `https://<your-ip>/upload`. If your system runs Avahi/mDNS (default on Raspberry Pi OS and most desktop Linux distros), you can also use `https://<your-hostname>.local/upload`.
 
-### Option 2: Direct Python
-
-```bash
-cd pi-photo-frame
-pip install -r requirements.txt
-python app.py
-```
-
-### Option 3: Raspberry Pi Kiosk
-
-```bash
-cd pi-photo-frame
-chmod +x setup_kiosk.sh
-./setup_kiosk.sh
-sudo reboot
-```
-
-## Raspberry Pi Setup (End-to-End)
-
-This walks through everything from a fresh Raspberry Pi to a working photo frame on your TV.
+## Setup (End-to-End)
 
 ### What You Need
 
-- Raspberry Pi (3B+ or newer recommended) with Raspberry Pi OS (Desktop version)
-- microSD card (16GB+) with Raspberry Pi OS flashed via [Raspberry Pi Imager](https://www.raspberrypi.com/software/)
-- HDMI cable connecting the Pi to your TV
-- Network connection (Wi-Fi or Ethernet)
+- Any Linux machine (Raspberry Pi, Ubuntu server, etc.) with a desktop environment if using kiosk mode
+- Network connection
+- HDMI cable to a TV/monitor (if using as a dedicated display)
 
-### Step 1: Initial Pi Setup
-
-If you haven't already, flash Raspberry Pi OS with Desktop using [Raspberry Pi Imager](https://www.raspberrypi.com/software/). During setup in the imager, configure:
-- Hostname (e.g. `photoframe`)
-- Wi-Fi credentials
-- Enable SSH (so you can manage it headlessly later)
-- Set username/password
-
-Boot the Pi and ensure it's connected to your network.
-
-### Step 2: Get the Code onto the Pi
-
-**Option A: Clone from GitHub (on the Pi)**
+### Step 1: Install
 
 ```bash
-ssh pi@photoframe.local    # or whatever hostname/IP you set
-git clone https://github.com/YOUR_USER/pi-photo-frame.git
+ssh user@your-host
+git clone https://github.com/abwagner/pi-photo-frame.git
 cd pi-photo-frame
+./scripts/install.sh
 ```
 
-**Option B: Copy from your computer**
+The script will:
+1. Install Docker and enable it to start on boot
+2. Build and start the photo frame app with Caddy (HTTPS)
+3. Ask if you want Chromium kiosk mode for a connected display
+4. Add a daily cron job (4:00 AM) to restart Chromium and prevent memory leaks
 
-```bash
-# From your Mac/PC:
-scp -r pi-photo-frame pi@photoframe.local:~/
-```
-
-### Step 3: Install and Run
-
-Choose **one** of these approaches:
-
-#### Docker (Recommended)
-
-Docker handles all dependencies in an isolated container and auto-restarts on boot.
-
-```bash
-# Install Docker on the Pi
-curl -fsSL https://get.docker.com | sh
-sudo usermod -aG docker $USER
-# Log out and back in for group change to take effect
-exit
-ssh pi@photoframe.local
-
-# Start the photo frame
-cd ~/pi-photo-frame
-docker compose up -d
-```
-
-The app is now running at `http://photoframe.local:5001` (port 5001 as configured in docker-compose.yml).
-
-#### Native Python (Alternative)
-
-Runs directly without Docker. The `setup_kiosk.sh` script handles everything:
-
-```bash
-cd ~/pi-photo-frame
-chmod +x setup_kiosk.sh
-./setup_kiosk.sh
-```
-
-This installs dependencies, creates a systemd service (auto-starts on boot), and configures kiosk mode. The app runs at `http://photoframe.local:5000`.
-
-### Step 4: Set Up Kiosk Mode (Auto-Display on TV)
-
-This makes the Pi automatically open the slideshow fullscreen in Chromium when it boots.
-
-**If using Docker**, create the kiosk scripts manually:
-
-```bash
-# Install kiosk dependencies
-sudo apt-get install -y chromium-browser unclutter
-
-# Create autostart directory
-mkdir -p ~/.config/autostart
-
-# Create kiosk start script
-cat > ~/start-kiosk.sh << 'EOF'
-#!/bin/bash
-# Wait for Docker and the server to be ready
-echo "Waiting for photo frame server..."
-for i in {1..60}; do
-    if curl -s http://localhost:5001 > /dev/null 2>&1; then
-        echo "Server is ready!"
-        break
-    fi
-    sleep 2
-done
-
-# Disable screen blanking
-xset s off
-xset s noblank
-xset -dpms
-
-# Hide cursor
-unclutter -idle 0.5 -root &
-
-# Open Chromium in kiosk mode
-chromium-browser \
-    --kiosk \
-    --noerrdialogs \
-    --disable-infobars \
-    --disable-session-crashed-bubble \
-    --no-first-run \
-    --start-fullscreen \
-    http://localhost:5001/display
-EOF
-chmod +x ~/start-kiosk.sh
-
-# Create autostart entry
-cat > ~/.config/autostart/photo-frame-kiosk.desktop << 'EOF'
-[Desktop Entry]
-Type=Application
-Name=Photo Frame Kiosk
-Exec=/home/pi/start-kiosk.sh
-X-GNOME-Autostart-enabled=true
-EOF
-```
-
-**If using native Python**, the `setup_kiosk.sh` script already configured this.
-
-Reboot to start kiosk mode:
+If you chose kiosk mode, reboot to start it:
 
 ```bash
 sudo reboot
 ```
 
-### Step 5: Upload Photos
+### Step 2: Upload Photos
 
 From any device on your network (phone, laptop, etc.):
 
-1. Open `http://photoframe.local:5001/upload` in a browser
+1. Open `https://<your-ip>/upload` in a browser (accept the self-signed certificate warning)
 2. Log in with `admin` / `password`
 3. **Change the default password** (Admin > Users)
-4. Upload photos — they appear on the TV automatically
+4. Upload photos — they appear on the display automatically
 
 ### Managing the Frame
 
-| Task | Command (SSH into Pi) |
-|------|----------------------|
+These commands are run via SSH on the host machine:
+
+| Task | Command |
+|------|---------|
 | View logs | `docker compose logs -f` |
 | Restart | `docker compose restart` |
 | Stop | `docker compose down` |
-| Update code | `git pull && docker compose build && docker compose up -d` |
+| Update code | `git pull && docker compose up -d --build` |
 | Exit kiosk temporarily | Press `Ctrl+Alt+F1` to switch to terminal |
 | Return to kiosk | Press `Ctrl+Alt+F7` to switch back to desktop |
 
 ### Headless Operation
 
-Once kiosk mode is set up, you never need to touch the Pi again. Everything is managed through the web interface from your phone or laptop. The Pi just needs power and an HDMI connection to your TV.
+Once kiosk mode is set up, you never need to touch the machine again. Everything is managed through the web interface from your phone or laptop. It just needs power and an HDMI connection to your display.
 
 ## Default Login
 
@@ -260,9 +136,12 @@ pi-photo-frame/
 ├── app.py                  # Flask application
 ├── requirements.txt        # Python dependencies
 ├── Dockerfile              # Docker image definition
-├── docker-compose.yml      # Docker Compose config
-├── DOCKER.md               # Docker deployment guide
-├── setup_kiosk.sh          # Raspberry Pi kiosk setup
+├── docker-compose.yml      # Docker Compose config (app + Caddy)
+├── Caddyfile               # Caddy reverse proxy config (HTTPS)
+├── scripts/
+│   ├── install.sh          # One-command setup script
+│   └── restart-chromium.sh # Daily Chromium restart (cron)
+├── setup_kiosk.sh          # Legacy native (non-Docker) kiosk setup
 ├── uploads/                # Uploaded photos
 ├── data/                   # Settings, users, gallery data
 │   ├── settings.json
@@ -281,19 +160,21 @@ pi-photo-frame/
 
 ## Security
 
-- Passwords are salted and hashed (SHA-256)
+- Passwords are hashed with bcrypt
 - Session keys are randomly generated
+- HTTPS via Caddy with self-signed certificate
+- Secure cookies enabled behind the reverse proxy
 - Display page accessible via token or localhost
 - Non-root user in Docker container
 
 ### Display Access
 
-The TV display (`/display`) is accessible:
-- From localhost (the Pi itself)
+The display (`/display`) is accessible:
+- From localhost (the machine itself)
 - With a valid display token
 - When logged in
 
-This allows the TV to show photos without login while protecting upload/management.
+This allows the display to show photos without login while protecting upload/management.
 
 ## API Endpoints
 
@@ -317,13 +198,8 @@ This allows the TV to show photos without login while protecting upload/manageme
 Delete the users file to reset to default:
 
 ```bash
-# Docker
 docker compose exec photo-frame rm /app/data/users.json
 docker compose restart
-
-# Native
-rm data/users.json
-# Restart the app
 ```
 
 ### Photos not showing on display?
@@ -334,9 +210,30 @@ rm data/users.json
 
 ### Can't access from other devices?
 
-1. Check firewall allows port 5000
-2. Use the server's IP address, not `localhost`
-3. Ensure devices are on the same network
+1. Ensure devices are on the same network
+2. Use the server's IP address if `.local` hostname doesn't resolve
+3. Accept the self-signed certificate warning in your browser
+
+## Uninstall
+
+To completely remove Pi Photo Frame:
+
+```bash
+cd ~/pi-photo-frame
+
+# Stop and remove containers, images, and volumes (deletes all photos and data)
+docker compose down --rmi all --volumes
+
+# Remove the Chromium restart cron job
+crontab -l | grep -v restart-chromium.sh | crontab -
+
+# Remove kiosk autostart (if configured)
+rm -f ~/.config/autostart/photo-frame-kiosk.desktop
+
+# Remove the project directory
+cd ~
+rm -rf pi-photo-frame
+```
 
 ## License
 

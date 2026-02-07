@@ -5,8 +5,6 @@ services:
     # image: your-registry/pi-photo-frame:latest
     container_name: pi-photo-frame
     restart: unless-stopped
-    ports:
-      - "5001:5000"
     volumes:
       # Persist uploaded photos
       - photo_uploads:/app/uploads
@@ -15,6 +13,8 @@ services:
     environment:
       - TZ=America/New_York  # Change to your timezone
       - BACKUP_TIME=03:00    # Daily backup time (HH:MM, 24h format)
+      - BEHIND_PROXY=1
+      - SECURE_COOKIES=1
     # Healthcheck is defined in Dockerfile
 
     # Resource limits (optional, good for Pi)
@@ -23,8 +23,24 @@ services:
     #     limits:
     #       memory: 256M
 
+  caddy:
+    image: caddy:2-alpine
+    container_name: pi-photo-frame-caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - photo-frame
+
 volumes:
   photo_uploads:
     name: photoframe_uploads
   photo_data:
     name: photoframe_data
+  caddy_data:
+  caddy_config:
