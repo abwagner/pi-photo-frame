@@ -64,6 +64,22 @@ enable_docker_on_boot() {
     sudo systemctl start docker
 }
 
+# Allow Docker containers to bind to privileged ports (80, 443)
+allow_privileged_ports() {
+    local sysctl_key="net.ipv4.ip_unprivileged_port_start"
+    local current
+    current=$(sysctl -n "$sysctl_key" 2>/dev/null || echo "1024")
+
+    if [ "$current" -le 80 ]; then
+        info "Privileged port binding already allowed (start=$current)"
+        return 0
+    fi
+
+    info "Allowing containers to bind to ports 80/443..."
+    echo "$sysctl_key=80" | sudo tee /etc/sysctl.d/allow-privileged-ports.conf > /dev/null
+    sudo sysctl -p /etc/sysctl.d/allow-privileged-ports.conf > /dev/null
+}
+
 # ---------- Build & start ----------
 
 start_services() {
@@ -187,6 +203,7 @@ main() {
 
     install_docker
     enable_docker_on_boot
+    allow_privileged_ports
     start_services
     setup_kiosk
     setup_chromium_cron

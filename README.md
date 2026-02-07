@@ -140,6 +140,7 @@ pi-photo-frame/
 ├── Caddyfile               # Caddy reverse proxy config (HTTPS)
 ├── scripts/
 │   ├── install.sh          # One-command setup script
+│   ├── uninstall.sh        # Complete removal script
 │   └── restart-chromium.sh # Daily Chromium restart (cron)
 ├── uploads/                # Uploaded photos
 ├── data/                   # Settings, users, gallery data
@@ -215,23 +216,11 @@ docker compose restart
 
 ## Uninstall
 
-To completely remove Pi Photo Frame:
+To completely remove Pi Photo Frame (containers, images, volumes, cron jobs, and kiosk config):
 
 ```bash
 cd ~/pi-photo-frame
-
-# Stop and remove containers, images, and volumes (deletes all photos and data)
-docker compose down --rmi all --volumes
-
-# Remove the Chromium restart cron job
-crontab -l | grep -v restart-chromium.sh | crontab -
-
-# Remove kiosk autostart (if configured)
-rm -f ~/.config/autostart/photo-frame-kiosk.desktop
-
-# Remove the project directory
-cd ~
-rm -rf pi-photo-frame
+./scripts/uninstall.sh
 ```
 
 ## License
