@@ -24,6 +24,22 @@ NC='\033[0m'
 info() { echo -e "${GREEN}[INFO]${NC} $1"; }
 warn() { echo -e "${YELLOW}[WARN]${NC} $1"; }
 
+# Detect the correct Chromium binary/package name for this distro
+detect_chromium() {
+    if command -v chromium-browser &>/dev/null; then
+        echo "chromium-browser"
+    elif command -v chromium &>/dev/null; then
+        echo "chromium"
+    else
+        # Not installed yet — check which package is available
+        if apt-cache show chromium-browser &>/dev/null 2>&1; then
+            echo "chromium-browser"
+        else
+            echo "chromium"
+        fi
+    fi
+}
+
 # ---------- Docker ----------
 
 install_docker() {
@@ -67,14 +83,24 @@ setup_kiosk() {
         return 0
     fi
 
+    local chromium_pkg
+    chromium_pkg=$(detect_chromium)
+    info "Using Chromium package: $chromium_pkg"
+
     info "Installing kiosk packages..."
     sudo apt-get update -qq
-    sudo apt-get install -y -qq chromium-browser unclutter xdotool x11-xserver-utils
+    sudo apt-get install -y -qq "$chromium_pkg" unclutter xdotool x11-xserver-utils
+
+    # Re-detect after install to get the actual binary name
+    local chromium_bin
+    chromium_bin=$(detect_chromium)
 
     # Create kiosk start script
     info "Creating kiosk start script..."
-    cat > "$PROJECT_DIR/start_kiosk.sh" <<'KIOSKEOF'
+    cat > "$PROJECT_DIR/start_kiosk.sh" <<KIOSKEOF
 #!/bin/bash
+
+CHROMIUM="$chromium_bin"
 
 # Wait for the photo frame to be ready
 echo "Waiting for server to start..."
@@ -87,13 +113,13 @@ for i in {1..60}; do
 done
 
 # Get the display token (if it exists)
-DISPLAY_TOKEN_FILE="$(dirname "$0")/data/.display_token"
+DISPLAY_TOKEN_FILE="\$(dirname "\$0")/data/.display_token"
 DISPLAY_URL="https://localhost/display"
 
-if [ -f "$DISPLAY_TOKEN_FILE" ]; then
-    TOKEN=$(cat "$DISPLAY_TOKEN_FILE" 2>/dev/null)
-    if [ -n "$TOKEN" ]; then
-        DISPLAY_URL="https://localhost/display?token=$TOKEN"
+if [ -f "\$DISPLAY_TOKEN_FILE" ]; then
+    TOKEN=\$(cat "\$DISPLAY_TOKEN_FILE" 2>/dev/null)
+    if [ -n "\$TOKEN" ]; then
+        DISPLAY_URL="https://localhost/display?token=\$TOKEN"
     fi
 fi
 
@@ -106,18 +132,18 @@ xset -dpms
 unclutter -idle 0.5 -root &
 
 # Start Chromium in kiosk mode
-chromium-browser \
-    --kiosk \
-    --noerrdialogs \
-    --disable-infobars \
-    --disable-session-crashed-bubble \
-    --disable-translate \
-    --no-first-run \
-    --start-fullscreen \
-    --autoplay-policy=no-user-gesture-required \
-    --check-for-update-interval=31536000 \
-    --ignore-certificate-errors \
-    "$DISPLAY_URL"
+\$CHROMIUM \\
+    --kiosk \\
+    --noerrdialogs \\
+    --disable-infobars \\
+    --disable-session-crashed-bubble \\
+    --disable-translate \\
+    --no-first-run \\
+    --start-fullscreen \\
+    --autoplay-policy=no-user-gesture-required \\
+    --check-for-update-interval=31536000 \\
+    --ignore-certificate-errors \\
+    "\$DISPLAY_URL"
 KIOSKEOF
     chmod +x "$PROJECT_DIR/start_kiosk.sh"
 

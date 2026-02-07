@@ -11,7 +11,7 @@ log() {
 }
 
 log "Stopping Chromium processes..."
-pkill -f chromium-browser || true
+pkill -f chromium || true
 sleep 2
 
 # Relaunch kiosk if start_kiosk.sh exists
