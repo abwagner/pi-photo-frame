@@ -1,7 +1,13 @@
 #!/bin/bash
 # ============================================================
-# Pi Photo Frame - Kiosk Mode Setup Script
-# Run this script on your Raspberry Pi to configure auto-start
+# Pi Photo Frame - Kiosk Mode Setup Script (Legacy)
+# ============================================================
+#
+# NOTE: For new installations, use scripts/install.sh instead.
+# It uses Docker + Caddy (HTTPS) and is simpler to manage.
+#
+# This script sets up a native (non-Docker) deployment with
+# systemd + Chromium kiosk mode.
 # ============================================================
 
 set -e
@@ -10,8 +16,11 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SERVICE_NAME="pi-photo-frame"
 
 echo "=========================================="
-echo "Pi Photo Frame - Kiosk Setup"
+echo "Pi Photo Frame - Kiosk Setup (Legacy)"
 echo "=========================================="
+echo ""
+echo "NOTE: For new installations, consider using scripts/install.sh"
+echo "which uses Docker + HTTPS and is easier to manage."
 echo ""
 
 # Check if running on a Raspberry Pi

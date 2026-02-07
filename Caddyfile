@@ -1,0 +1,9 @@
+:443 {
+	tls internal
+
+	reverse_proxy photo-frame:5000
+}
+
+:80 {
+	redir https://{host}{uri} permanent
+}
