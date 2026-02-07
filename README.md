@@ -141,7 +141,6 @@ pi-photo-frame/
 ├── scripts/
 │   ├── install.sh          # One-command setup script
 │   └── restart-chromium.sh # Daily Chromium restart (cron)
-├── setup_kiosk.sh          # Legacy native (non-Docker) kiosk setup
 ├── uploads/                # Uploaded photos
 ├── data/                   # Settings, users, gallery data
 │   ├── settings.json
