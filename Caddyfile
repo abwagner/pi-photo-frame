@@ -1,12 +1,18 @@
 {
 	default_sni localhost
+	on_demand_tls {
+		interval 0
+		burst 0
+	}
 }
 
-:443 {
-	tls internal
+https:// {
+	tls internal {
+		on_demand
+	}
 	reverse_proxy photo-frame:5000
 }
 
-:80 {
+http:// {
 	redir https://{host}{uri} permanent
 }
