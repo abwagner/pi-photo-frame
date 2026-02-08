@@ -1,9 +1,5 @@
 {
 	default_sni localhost
-	on_demand_tls {
-		interval 0
-		burst 0
-	}
 }
 
 https:// {
