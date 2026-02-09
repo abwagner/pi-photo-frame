@@ -7,12 +7,17 @@ A beautiful, web-based digital photo frame with user management, gallery control
 - **Web Upload Interface** - Upload photos from any device on your network
 - **Multi-User Support** - Admin can create user accounts
 - **Gallery Management** - Show/hide photos, bulk actions, delete
-- **Password Protection** - Secure login for upload and management
+- **Password Protection** - Secure login with forced password change on first login
+- **Duplicate Detection** - Perceptual hashing warns before uploading duplicate images
+- **Individual Image Scale** - Adjust zoom per image or match heights across a group
 - **Customizable Mat Colors** - Choose from presets or any custom color
 - **Smooth Slideshow** - Configurable timing and transitions
 - **Drag & Drop Reordering** - Arrange photos in your preferred order
+- **TV Power Schedule (HDMI-CEC)** - Automatically turn your TV on/off on a schedule
 - **HTTPS** - Self-signed TLS via Caddy reverse proxy
 - **Kiosk Mode** - Auto-starts on boot for dedicated displays
+- **Remote Access (Tailscale)** - Securely manage your frame from anywhere
+- **CI/CD Deployment** - Automated updates via GitHub Actions with maintenance window
 
 ## Quick Start
 
@@ -47,7 +52,9 @@ The script will:
 1. Install Docker and enable it to start on boot
 2. Build and start the photo frame app with Caddy (HTTPS)
 3. Ask if you want Chromium kiosk mode for a connected display
-4. Add a daily cron job (4:00 AM) to restart Chromium and prevent memory leaks
+4. Ask if you want HDMI-CEC TV power control
+5. Ask if you want Tailscale for secure remote access
+6. Add a daily cron job (4:00 AM) to restart Chromium and prevent memory leaks
 
 If you chose kiosk mode, reboot to start it:
 
@@ -61,7 +68,7 @@ From any device on your network (phone, laptop, etc.):
 
 1. Open `https://<your-ip>/upload` in a browser (accept the self-signed certificate warning)
 2. Log in with `admin` / `password`
-3. **Change the default password** (Admin > Users)
+3. You'll be prompted to set a new password before continuing
 4. Upload photos — they appear on the display automatically
 
 ### Managing the Frame
@@ -88,7 +95,7 @@ Username: admin
 Password: password
 ```
 
-⚠️ **Change this password immediately after first login!**
+On first login, you'll be redirected to a password change page. You must set a new password before accessing any other features. This prevents the default credentials from being left active.
 
 ## Pages
 
@@ -126,8 +133,111 @@ Hidden photos remain on disk but won't appear in the slideshow.
 | **Slideshow Interval** | Seconds between transitions (3-300) |
 | **Transition Duration** | Fade animation length |
 | **Image Fit** | "Contain" (full image) or "Cover" (fill screen) |
+| **Image Scale** | Individual zoom per image (0.1x-2.0x) |
 | **Shuffle** | Randomize photo order |
 | **Show Filename** | Display photo name on screen |
+| **TV Power Schedule** | HDMI-CEC on/off times by day of week |
+
+## TV Power Schedule (HDMI-CEC)
+
+Control your TV's power automatically using HDMI-CEC. During install, choose "Enable HDMI-CEC TV power control" to set up the CEC device passthrough.
+
+### Configuring Schedules
+
+In the web UI settings panel:
+1. Click **+ Add Schedule** to create a new on/off time pair
+2. Set the on time, off time, and select which days of the week
+3. Add multiple schedules for different viewing patterns
+4. Use **Test On** / **Test Off** buttons to verify CEC control works
+
+### Requirements
+
+- TV must support HDMI-CEC (most modern TVs do)
+- Pi must be connected via HDMI
+- `cec-utils` is installed automatically during setup
+- The CEC device (`/dev/cec0`) must be passed through to the Docker container
+
+### Troubleshooting CEC
+
+- If CEC status shows "unavailable", ensure the device mapping is uncommented in `docker-compose.yml`
+- Some TVs use different CEC brand names (Anynet+, Bravia Sync, SimpLink, etc.) — the protocol is the same
+- Not all TVs respond to all CEC commands
+
+## Duplicate Detection
+
+When uploading photos, the app uses perceptual hashing (pHash) to detect potential duplicates:
+
+- Each image gets a structural fingerprint that's compared against existing gallery images
+- If a close match is found (Hamming distance < 10), you'll see a warning with a side-by-side comparison
+- You can still choose to upload the image if desired
+- Low-resolution images (below 1280x720) also trigger a warning
+
+### Backfill Hashes
+
+If you had photos uploaded before duplicate detection was added, run the backfill to compute hashes for existing images:
+
+```
+POST /api/gallery/backfill-hashes  (Admin only)
+```
+
+## Remote Access (Tailscale)
+
+[Tailscale](https://tailscale.com) creates a secure mesh VPN so you can access your photo frame from anywhere without opening ports on your router.
+
+### Setup
+
+During install, choose "Install Tailscale for secure remote access". The script will:
+1. Install Tailscale
+2. Run `tailscale up` to authenticate with your Tailscale account
+3. Display your Tailscale IP address
+
+### Finding Your Tailscale IP
+
+- During install, the IP is printed to the terminal
+- In the web UI, the admin settings panel shows both local and Tailscale IPs (after changing the default password)
+- On the Pi: `tailscale ip -4`
+
+### Using with CI/CD
+
+Set your `PI_HOST` secret to the Tailscale IP (e.g., `100.x.x.x`). The GitHub Actions runner needs Tailscale access to reach the Pi — either install Tailscale on the runner or use a Tailscale subnet router.
+
+## CI/CD Deployment
+
+Automated deployment via GitHub Actions. When you push to `main`, tests run and (if enabled) the update is deployed to your Pi.
+
+### Setup
+
+1. In your GitHub repository, go to **Settings > Secrets and variables > Actions**
+
+2. Add these **secrets**:
+   | Secret | Value |
+   |--------|-------|
+   | `PI_HOST` | Your Pi's IP (Tailscale IP recommended) |
+   | `PI_USER` | SSH username (e.g., `pi`) |
+   | `PI_SSH_KEY` | Private SSH key for the Pi |
+   | `PI_SSH_PORT` | SSH port (optional, defaults to 22) |
+
+3. Add this **variable**:
+   | Variable | Value |
+   |----------|-------|
+   | `DEPLOY_ENABLED` | `true` |
+
+### Maintenance Window
+
+Deploys automatically check if the TV is currently scheduled to be on. If it is, the deploy is skipped to avoid interrupting the slideshow. The deploy will proceed on the next push when the TV is off.
+
+This uses the `/api/maintenance-window` endpoint which checks TV schedules. If no schedules are configured, deploys always proceed.
+
+### Manual Deploy
+
+SSH into the Pi and run:
+
+```bash
+cd ~/pi-photo-frame
+./scripts/deploy.sh
+```
+
+This also checks the maintenance window before proceeding.
 
 ## File Structure
 
@@ -140,8 +250,12 @@ pi-photo-frame/
 ├── Caddyfile               # Caddy reverse proxy config (HTTPS)
 ├── scripts/
 │   ├── install.sh          # One-command setup script
+│   ├── deploy.sh           # Manual deploy script
 │   ├── uninstall.sh        # Complete removal script
 │   └── restart-chromium.sh # Daily Chromium restart (cron)
+├── .github/workflows/
+│   └── deploy.yml          # CI/CD pipeline (test + deploy)
+├── tests/                  # Test suite
 ├── uploads/                # Uploaded photos
 ├── data/                   # Settings, users, gallery data
 │   ├── settings.json
@@ -183,10 +297,17 @@ This allows the display to show photos without login while protecting upload/man
 | `/api/upload` | POST | User | Upload images |
 | `/api/images` | GET | None | Get enabled images (for display) |
 | `/api/gallery` | GET | User | Get all images with metadata |
-| `/api/gallery/<file>` | PATCH | User | Update image metadata |
+| `/api/gallery/<file>` | PATCH | User | Update image metadata (scale, etc.) |
 | `/api/gallery/<file>` | DELETE | User | Delete an image |
 | `/api/gallery/bulk` | POST | User | Bulk enable/disable/delete |
+| `/api/check-duplicates` | POST | User | Check files for duplicates before upload |
+| `/api/gallery/backfill-hashes` | POST | Admin | Compute perceptual hashes for existing images |
 | `/api/settings` | GET/POST | User (POST) | Get or update settings |
+| `/api/tv-schedules` | GET/POST | User/Admin | Get or save TV power schedules |
+| `/api/cec/status` | GET | User | Check if CEC is available |
+| `/api/cec/test` | POST | Admin | Send test CEC command (on/standby) |
+| `/api/network-info` | GET | Admin | Get local and Tailscale IP addresses |
+| `/api/maintenance-window` | GET | None | Check if deploy is safe (TV off) |
 | `/api/admin/users` | POST | Admin | Create user |
 | `/api/admin/users/<user>` | DELETE | Admin | Delete user |
 | `/api/admin/users/<user>/password` | POST | Admin | Reset password |

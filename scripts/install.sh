@@ -159,6 +159,7 @@ unclutter -idle 0.5 -root &
     --autoplay-policy=no-user-gesture-required \\
     --check-for-update-interval=31536000 \\
     --ignore-certificate-errors \\
+    --password-store=basic \\
     "\$DISPLAY_URL"
 KIOSKEOF
     chmod +x "$PROJECT_DIR/start_kiosk.sh"
@@ -174,6 +175,57 @@ X-GNOME-Autostart-enabled=true
 EOF
 
     info "Kiosk mode configured. It will launch automatically after reboot."
+}
+
+# ---------- HDMI-CEC TV control (optional) ----------
+
+setup_cec() {
+    echo ""
+    read -rp "Enable HDMI-CEC TV power control? [y/N]: " cec_answer
+    if [[ ! "$cec_answer" =~ ^[Yy]$ ]]; then
+        info "Skipping CEC setup."
+        return 0
+    fi
+
+    info "Installing cec-utils on host (for testing)..."
+    sudo apt-get update -qq
+    sudo apt-get install -y -qq cec-utils
+
+    # Enable CEC device passthrough in docker-compose.yml
+    if [ -f "$PROJECT_DIR/docker-compose.yml" ]; then
+        info "Enabling CEC device passthrough in docker-compose.yml..."
+        sed -i 's/# devices:/devices:/' "$PROJECT_DIR/docker-compose.yml"
+        sed -i 's/#   - "\/dev\/cec0:\/dev\/cec0"/  - "\/dev\/cec0:\/dev\/cec0"/' "$PROJECT_DIR/docker-compose.yml"
+    fi
+
+    # Rebuild with CEC device
+    info "Rebuilding container with CEC support..."
+    cd "$PROJECT_DIR"
+    docker compose up -d --build
+
+    info "CEC TV control enabled. Configure schedules in the web UI."
+}
+
+# ---------- Tailscale (optional) ----------
+
+setup_tailscale() {
+    echo ""
+    read -rp "Install Tailscale for secure remote access? [y/N]: " ts_answer
+    if [[ ! "$ts_answer" =~ ^[Yy]$ ]]; then
+        info "Skipping Tailscale setup."
+        return 0
+    fi
+
+    info "Installing Tailscale..."
+    curl -fsSL https://tailscale.com/install.sh | sh
+
+    info "Starting Tailscale..."
+    sudo tailscale up
+
+    local ts_ip
+    ts_ip=$(tailscale ip -4 2>/dev/null || echo "unknown")
+    info "Tailscale IP: $ts_ip"
+    info "Use this IP to access the photo frame remotely."
 }
 
 # ---------- Chromium restart cron ----------
@@ -206,6 +258,8 @@ main() {
     allow_privileged_ports
     start_services
     setup_kiosk
+    setup_cec
+    setup_tailscale
     setup_chromium_cron
 
     local ip
@@ -224,7 +278,7 @@ main() {
     echo "  (Self-signed certificate — browser will show a warning)"
     echo ""
     echo "  Default login:  admin / password"
-    echo "  CHANGE THIS immediately at https://${ip}/admin/users"
+    echo "  You will be prompted to change the password on first login."
     echo ""
     echo "  Useful commands:"
     echo "    View logs:  docker compose logs -f"

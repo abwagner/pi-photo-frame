@@ -10,6 +10,9 @@ services:
       - photo_uploads:/app/uploads
       # Persist settings, users, gallery data
       - photo_data:/app/data
+    # Uncomment to enable HDMI-CEC TV power control:
+    # devices:
+    #   - "/dev/cec0:/dev/cec0"
     environment:
       - TZ=America/New_York  # Change to your timezone
       - BACKUP_TIME=03:00    # Daily backup time (HH:MM, 24h format)

@@ -22,8 +22,11 @@ from flask import Flask, render_template, request, jsonify, send_from_directory,
 import bcrypt
 from flask_wtf.csrf import CSRFProtect
 from werkzeug.utils import secure_filename
+import tempfile
+
 from PIL import Image, ImageOps
 from apscheduler.schedulers.background import BackgroundScheduler
+import imagehash
 
 app = Flask(__name__)
 csrf = CSRFProtect(app)
@@ -154,6 +157,17 @@ def verify_user(username: str, password: str) -> bool:
     return True
 
 
+def has_default_password(username):
+    """Check if user still has the default password."""
+    users = load_users()
+    if username not in users:
+        return False
+    user = users[username]
+    if _is_bcrypt_hash(user['password_hash']):
+        return bcrypt.checkpw(b'password', user['password_hash'].encode())
+    return _verify_legacy_sha256('password', user['password_hash'], user.get('salt', ''))
+
+
 def get_user_role(username: str) -> str:
     """Get user's role"""
     users = load_users()
@@ -242,6 +256,8 @@ def login_required(f):
     def decorated_function(*args, **kwargs):
         if not is_authenticated():
             return redirect(url_for('login'))
+        if has_default_password(session.get('username')) and request.path != '/change-password':
+            return redirect(url_for('change_password', forced=1))
         return f(*args, **kwargs)
     return decorated_function
 
@@ -309,7 +325,9 @@ def get_image_metadata(filename):
         'uploaded_by': None,
         'width': None,
         'height': None,
-        'mat_color': None
+        'mat_color': None,
+        'phash': None,
+        'scale': 1.0
     })
 
 
@@ -324,7 +342,9 @@ def update_image_metadata(filename, **kwargs):
             'uploaded_by': None,
             'width': None,
             'height': None,
-            'mat_color': None
+            'mat_color': None,
+            'phash': None,
+            'scale': 1.0
         }
     gallery['images'][filename].update(kwargs)
     save_gallery(gallery)
@@ -367,6 +387,16 @@ def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
 
+def compute_phash(filepath):
+    """Compute perceptual hash of an image file. Returns hex string or None."""
+    try:
+        with Image.open(filepath) as img:
+            oriented = ImageOps.exif_transpose(img)
+            return str(imagehash.phash(oriented))
+    except Exception:
+        return None
+
+
 def get_uploaded_images():
     """Get list of all uploaded images with metadata"""
     if not UPLOAD_FOLDER.exists():
@@ -384,7 +414,9 @@ def get_uploaded_images():
                 'uploaded_by': None,
                 'width': None,
                 'height': None,
-                'mat_color': None
+                'mat_color': None,
+                'phash': None,
+                'scale': 1.0
             })
             images.append({
                 'filename': f.name,
@@ -410,7 +442,8 @@ DEFAULT_SETTINGS = {
     'fit_mode': 'contain',
     'shuffle': False,
     'image_order': [],
-    'target_aspect_ratio': '16:9'
+    'target_aspect_ratio': '16:9',
+    'tv_schedules': []
 }
 
 
@@ -709,6 +742,83 @@ def reschedule_backup(time_str):
 init_scheduler()
 
 
+# ============ CEC TV Control ============
+
+def is_cec_available():
+    """Check if cec-client is installed and a CEC device is accessible."""
+    try:
+        result = subprocess.run(
+            ['cec-client', '--list-devices'],
+            capture_output=True, text=True, timeout=5
+        )
+        return result.returncode == 0
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        return False
+
+
+def cec_send_command(command):
+    """Send a CEC command via cec-client. Returns dict with success and optional error."""
+    cec_map = {'on': 'on 0', 'standby': 'standby 0'}
+    cec_str = cec_map.get(command)
+    if not cec_str:
+        return {'success': False, 'error': f'Unknown command: {command}'}
+    try:
+        result = subprocess.run(
+            ['cec-client', '-s', '-d', '1'],
+            input=cec_str + '\n',
+            capture_output=True, text=True, timeout=10
+        )
+        return {'success': result.returncode == 0,
+                'error': result.stderr.strip()[:200] if result.returncode != 0 else None}
+    except FileNotFoundError:
+        return {'success': False, 'error': 'cec-client not installed'}
+    except subprocess.TimeoutExpired:
+        return {'success': False, 'error': 'CEC command timed out'}
+
+
+def schedule_cec_jobs():
+    """(Re-)schedule all CEC on/off jobs from settings."""
+    for job in scheduler.get_jobs():
+        if job.id.startswith('cec_'):
+            scheduler.remove_job(job.id)
+
+    settings = load_settings()
+    for sched in settings.get('tv_schedules', []):
+        if not sched.get('enabled', True):
+            continue
+
+        sched_id = sched.get('id', '')
+        days = sched.get('days', [])
+        if not days:
+            continue
+
+        day_of_week = ','.join(str(d) for d in sorted(days))
+
+        on_h, on_m = map(int, sched['on_time'].split(':'))
+        scheduler.add_job(
+            cec_send_command, 'cron',
+            args=['on'],
+            day_of_week=day_of_week,
+            hour=on_h, minute=on_m,
+            id=f'cec_{sched_id}_on',
+            replace_existing=True,
+            misfire_grace_time=300
+        )
+
+        off_h, off_m = map(int, sched['off_time'].split(':'))
+        scheduler.add_job(
+            cec_send_command, 'cron',
+            args=['standby'],
+            day_of_week=day_of_week,
+            hour=off_h, minute=off_m,
+            id=f'cec_{sched_id}_off',
+            replace_existing=True,
+            misfire_grace_time=300
+        )
+
+
+schedule_cec_jobs()
+
 
 # ============ Routes ============
 
@@ -728,6 +838,8 @@ def login():
             session['authenticated'] = True
             session['username'] = username
             session.permanent = True
+            if has_default_password(username):
+                return redirect(url_for('change_password', forced=1))
             return redirect(url_for('upload_page'))
 
         return render_template('login.html', error='Invalid username or password')
@@ -746,25 +858,35 @@ def logout():
 @login_required
 def change_password():
     """Change own password"""
+    forced = request.args.get('forced') == '1'
+    username = session.get('username')
+
     if request.method == 'POST':
-        current = request.form.get('current', '')
+        forced = request.form.get('forced') == '1'
         new_password = request.form.get('new_password', '')
         confirm = request.form.get('confirm', '')
 
-        username = session.get('username')
-
-        if not verify_user(username, current):
-            return render_template('change_password.html', error='Current password is incorrect', is_admin=is_admin(), username=username)
+        if not forced:
+            current = request.form.get('current', '')
+            if not verify_user(username, current):
+                return render_template('change_password.html', error='Current password is incorrect',
+                                       is_admin=is_admin(), username=username, forced=forced)
 
         if new_password != confirm:
-            return render_template('change_password.html', error='New passwords do not match', is_admin=is_admin(), username=username)
+            return render_template('change_password.html', error='New passwords do not match',
+                                   is_admin=is_admin(), username=username, forced=forced)
 
         success, message = change_user_password(username, new_password)
         if success:
-            return render_template('change_password.html', success=message, is_admin=is_admin(), username=username)
-        return render_template('change_password.html', error=message, is_admin=is_admin(), username=username)
+            if forced:
+                return redirect(url_for('upload_page'))
+            return render_template('change_password.html', success=message,
+                                   is_admin=is_admin(), username=username, forced=False)
+        return render_template('change_password.html', error=message,
+                               is_admin=is_admin(), username=username, forced=forced)
 
-    return render_template('change_password.html', is_admin=is_admin(), username=session.get('username'))
+    return render_template('change_password.html', is_admin=is_admin(),
+                           username=username, forced=forced)
 
 
 # --- Admin Routes ---
@@ -835,7 +957,8 @@ def upload_page():
     return render_template('upload.html',
                           settings=settings,
                           is_admin=is_admin(),
-                          username=session.get('username'))
+                          username=session.get('username'),
+                          password_changed=not has_default_password(session.get('username')))
 
 
 @app.route('/gallery')
@@ -899,6 +1022,9 @@ def api_upload():
             except Exception:
                 pass
 
+            # Compute perceptual hash for duplicate detection
+            phash = compute_phash(filepath)
+
             # Add metadata
             update_image_metadata(unique_name,
                 enabled=True,
@@ -906,7 +1032,8 @@ def api_upload():
                 uploaded_at=datetime.now().isoformat(),
                 uploaded_by=username,
                 width=width,
-                height=height
+                height=height,
+                phash=phash
             )
         else:
             errors.append(f"Invalid file type: {file.filename}")
@@ -916,6 +1043,94 @@ def api_upload():
         'errors': errors,
         'total_images': len(get_uploaded_images())
     })
+
+
+@app.route('/api/check-duplicates', methods=['POST'])
+@api_login_required
+def api_check_duplicates():
+    """Check uploaded files for perceptual duplicates against existing gallery.
+
+    Returns duplicate matches and dimension info per file so the client
+    can present warnings before the actual upload.
+    """
+    if 'files' not in request.files:
+        return jsonify({'error': 'No files provided'}), 400
+
+    threshold = int(request.args.get('threshold', 10))
+    files = request.files.getlist('files')
+    gallery = load_gallery()
+
+    results = {}
+
+    for file in files:
+        if file.filename == '' or not allowed_file(file.filename):
+            continue
+
+        # Save to temp file to compute hash and dimensions
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.tmp') as tmp:
+            file.save(tmp.name)
+            tmp_path = tmp.name
+
+        try:
+            new_hash_str = compute_phash(tmp_path)
+
+            # Extract dimensions
+            width, height = None, None
+            try:
+                with Image.open(tmp_path) as img:
+                    oriented = ImageOps.exif_transpose(img)
+                    width, height = oriented.size
+            except Exception:
+                pass
+
+            matches = []
+            if new_hash_str:
+                new_hash = imagehash.hex_to_hash(new_hash_str)
+                for existing_fname, meta in gallery.get('images', {}).items():
+                    existing_hash = meta.get('phash')
+                    if not existing_hash:
+                        continue
+                    distance = int(new_hash - imagehash.hex_to_hash(existing_hash))
+                    if distance <= threshold:
+                        matches.append({
+                            'filename': existing_fname,
+                            'distance': distance,
+                            'uploaded_by': meta.get('uploaded_by', '')
+                        })
+                matches.sort(key=lambda m: m['distance'])
+
+            results[file.filename] = {
+                'phash': new_hash_str,
+                'width': width,
+                'height': height,
+                'matches': matches
+            }
+        finally:
+            os.unlink(tmp_path)
+
+    return jsonify({'results': results})
+
+
+@app.route('/api/gallery/backfill-hashes', methods=['POST'])
+@api_admin_required
+def api_backfill_hashes():
+    """Compute and store perceptual hashes for images that don't have one."""
+    gallery = load_gallery()
+    updated = 0
+
+    for filename, meta in gallery['images'].items():
+        if meta.get('phash'):
+            continue
+        filepath = UPLOAD_FOLDER / filename
+        if not filepath.exists():
+            continue
+        phash = compute_phash(filepath)
+        if phash:
+            meta['phash'] = phash
+            updated += 1
+
+    save_gallery(gallery)
+    return jsonify({'success': True, 'updated': updated})
 
 
 @app.route('/api/images', methods=['GET'])
@@ -933,7 +1148,8 @@ def api_get_images():
             'filename': img['filename'],
             'width': img.get('width'),
             'height': img.get('height'),
-            'mat_color': img.get('mat_color')
+            'mat_color': img.get('mat_color'),
+            'scale': img.get('scale', 1.0)
         }
 
     # Find which filenames are in groups
@@ -1001,7 +1217,7 @@ def api_update_image(filename):
         return jsonify({'error': 'Image not found'}), 404
 
     data = request.json
-    allowed_fields = ['enabled', 'title', 'mat_color']
+    allowed_fields = ['enabled', 'title', 'mat_color', 'scale']
     updates = {k: v for k, v in data.items() if k in allowed_fields}
 
     update_image_metadata(filename, **updates)
@@ -1324,6 +1540,136 @@ def api_backup_settings():
 
     save_settings(settings)
     return jsonify({'success': True})
+
+
+# --- CEC TV Control Routes ---
+
+@app.route('/api/cec/status', methods=['GET'])
+@api_login_required
+def api_cec_status():
+    """Check if CEC control is available."""
+    return jsonify({'available': is_cec_available()})
+
+
+@app.route('/api/cec/test', methods=['POST'])
+@api_admin_required
+def api_cec_test():
+    """Test CEC by sending a command to the TV."""
+    data = request.json or {}
+    command = data.get('command', 'on')
+    if command not in ('on', 'standby'):
+        return jsonify({'error': 'Invalid command. Use "on" or "standby".'}), 400
+    result = cec_send_command(command)
+    if result['success']:
+        return jsonify({'success': True})
+    return jsonify({'error': result.get('error', 'Unknown error')}), 500
+
+
+@app.route('/api/tv-schedules', methods=['GET'])
+@api_login_required
+def api_get_tv_schedules():
+    """Get all TV schedules."""
+    settings = load_settings()
+    return jsonify({
+        'schedules': settings.get('tv_schedules', []),
+        'cec_available': is_cec_available()
+    })
+
+
+@app.route('/api/tv-schedules', methods=['POST'])
+@api_admin_required
+def api_save_tv_schedules():
+    """Save all TV schedules."""
+    data = request.json
+    schedules = data.get('schedules', [])
+
+    for sched in schedules:
+        if 'id' not in sched:
+            sched['id'] = f'sched_{uuid.uuid4().hex[:8]}'
+        for field in ('on_time', 'off_time'):
+            try:
+                h, m = map(int, sched[field].split(':'))
+                if not (0 <= h <= 23 and 0 <= m <= 59):
+                    raise ValueError
+            except (ValueError, KeyError, AttributeError):
+                return jsonify({'error': f'Invalid {field} format. Use HH:MM.'}), 400
+        days = sched.get('days', [])
+        if not isinstance(days, list) or not all(isinstance(d, int) and 0 <= d <= 6 for d in days):
+            return jsonify({'error': 'Invalid days. Must be array of integers 0-6.'}), 400
+        sched.setdefault('enabled', True)
+
+    settings = load_settings()
+    settings['tv_schedules'] = schedules
+    save_settings(settings)
+    schedule_cec_jobs()
+
+    return jsonify({'success': True, 'schedules': schedules})
+
+
+# ============ Network Info ============
+
+def get_network_info():
+    """Get network addresses for display."""
+    import socket
+    info = {'local_ip': None, 'tailscale_ip': None}
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(('8.8.8.8', 80))
+        info['local_ip'] = s.getsockname()[0]
+        s.close()
+    except Exception:
+        pass
+    try:
+        result = subprocess.run(['tailscale', 'ip', '-4'],
+                                capture_output=True, text=True, timeout=5)
+        if result.returncode == 0:
+            info['tailscale_ip'] = result.stdout.strip()
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        pass
+    return info
+
+
+@app.route('/api/network-info', methods=['GET'])
+@api_admin_required
+def api_network_info():
+    """Get network info (local IP, Tailscale IP) for admin display."""
+    return jsonify(get_network_info())
+
+
+# ============ Maintenance Window ============
+
+@app.route('/api/maintenance-window', methods=['GET'])
+def api_maintenance_window():
+    """Check if current time is within a maintenance window (TV is off)."""
+    settings = load_settings()
+    schedules = settings.get('tv_schedules', [])
+
+    if not schedules:
+        return jsonify({'can_deploy': True, 'reason': 'No TV schedules configured'})
+
+    now = datetime.now()
+    current_day = now.weekday()
+    current_minutes = now.hour * 60 + now.minute
+
+    for sched in schedules:
+        if not sched.get('enabled', True):
+            continue
+        days = sched.get('days', [])
+        if current_day not in days:
+            continue
+
+        on_h, on_m = map(int, sched['on_time'].split(':'))
+        off_h, off_m = map(int, sched['off_time'].split(':'))
+        on_minutes = on_h * 60 + on_m
+        off_minutes = off_h * 60 + off_m
+
+        if on_minutes <= current_minutes < off_minutes:
+            return jsonify({
+                'can_deploy': False,
+                'reason': f'TV is scheduled ON until {sched["off_time"]}'
+            })
+
+    return jsonify({'can_deploy': True, 'reason': 'Outside TV schedule'})
 
 
 # ============ Error Handlers ============

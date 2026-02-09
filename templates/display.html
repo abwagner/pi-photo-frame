@@ -301,7 +301,8 @@
             const container = document.querySelector('.frame-container');
             if (slide.type === 'single') {
                 const img = slide.images[0];
-                const padding = calculateMatPadding(img.width, img.height);
+                const scale = img.scale || 1.0;
+                const padding = calculateMatPadding(img.width * scale, img.height * scale);
                 container.style.setProperty('--mat-padding-vertical', padding.vertical);
                 container.style.setProperty('--mat-padding-horizontal', padding.horizontal);
             } else {
@@ -317,7 +318,15 @@
             if (slide.type === 'single') {
                 // Single image slide
                 const img = document.createElement('img');
-                if (settings.fit_mode === 'cover') img.className = 'cover';
+                const scale = slide.images[0].scale || 1.0;
+                if (settings.fit_mode === 'cover') {
+                    img.className = 'cover';
+                } else if (scale !== 1.0) {
+                    // In contain mode, scale adjusts the max dimensions
+                    const pct = Math.min(100, Math.round(100 * scale));
+                    img.style.maxWidth = pct + '%';
+                    img.style.maxHeight = pct + '%';
+                }
                 img.src = '/uploads/' + slide.images[0].filename;
                 img.alt = slide.images[0].filename;
                 slideEl.appendChild(img);
