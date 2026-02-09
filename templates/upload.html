@@ -1223,6 +1223,16 @@
                         </p>
                     </div>
                 </div>
+
+                {% if is_admin and password_changed %}
+                <!-- Network Info -->
+                <div class="panel" id="network-info-panel">
+                    <h2>Network</h2>
+                    <div id="network-info-content" style="font-size: 0.85rem; color: #aaa;">
+                        Loading...
+                    </div>
+                </div>
+                {% endif %}
             </div>
         </div>
     </div>
@@ -2264,6 +2274,33 @@
         }
 
         loadTvSchedules();
+
+        // ===== Network Info =====
+        {% if is_admin and password_changed %}
+        (async function loadNetworkInfo() {
+            try {
+                const resp = await fetch('/api/network-info');
+                if (!resp.ok) return;
+                const info = await resp.json();
+                const el = document.getElementById('network-info-content');
+                if (!el) return;
+                let html = '';
+                if (info.local_ip) {
+                    html += `<div style="margin-bottom: 6px;"><strong>Local IP:</strong> ${info.local_ip}</div>`;
+                }
+                if (info.tailscale_ip) {
+                    html += `<div style="margin-bottom: 6px;"><strong>Tailscale IP:</strong> ${info.tailscale_ip}</div>`;
+                }
+                if (!info.local_ip && !info.tailscale_ip) {
+                    html = 'No network info available.';
+                }
+                el.innerHTML = html;
+            } catch (err) {
+                const el = document.getElementById('network-info-content');
+                if (el) el.textContent = 'Could not load network info.';
+            }
+        })();
+        {% endif %}
     </script>
 
     <!-- Upload Warning Modal -->

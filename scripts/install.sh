@@ -206,6 +206,28 @@ setup_cec() {
     info "CEC TV control enabled. Configure schedules in the web UI."
 }
 
+# ---------- Tailscale (optional) ----------
+
+setup_tailscale() {
+    echo ""
+    read -rp "Install Tailscale for secure remote access? [y/N]: " ts_answer
+    if [[ ! "$ts_answer" =~ ^[Yy]$ ]]; then
+        info "Skipping Tailscale setup."
+        return 0
+    fi
+
+    info "Installing Tailscale..."
+    curl -fsSL https://tailscale.com/install.sh | sh
+
+    info "Starting Tailscale..."
+    sudo tailscale up
+
+    local ts_ip
+    ts_ip=$(tailscale ip -4 2>/dev/null || echo "unknown")
+    info "Tailscale IP: $ts_ip"
+    info "Use this IP to access the photo frame remotely."
+}
+
 # ---------- Chromium restart cron ----------
 
 setup_chromium_cron() {
@@ -237,6 +259,7 @@ main() {
     start_services
     setup_kiosk
     setup_cec
+    setup_tailscale
     setup_chromium_cron
 
     local ip
@@ -255,7 +278,7 @@ main() {
     echo "  (Self-signed certificate — browser will show a warning)"
     echo ""
     echo "  Default login:  admin / password"
-    echo "  CHANGE THIS immediately at https://${ip}/admin/users"
+    echo "  You will be prompted to change the password on first login."
     echo ""
     echo "  Useful commands:"
     echo "    View logs:  docker compose logs -f"

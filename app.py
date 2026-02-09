@@ -157,6 +157,17 @@ def verify_user(username: str, password: str) -> bool:
     return True
 
 
+def has_default_password(username):
+    """Check if user still has the default password."""
+    users = load_users()
+    if username not in users:
+        return False
+    user = users[username]
+    if _is_bcrypt_hash(user['password_hash']):
+        return bcrypt.checkpw(b'password', user['password_hash'].encode())
+    return _verify_legacy_sha256('password', user['password_hash'], user.get('salt', ''))
+
+
 def get_user_role(username: str) -> str:
     """Get user's role"""
     users = load_users()
@@ -245,6 +256,8 @@ def login_required(f):
     def decorated_function(*args, **kwargs):
         if not is_authenticated():
             return redirect(url_for('login'))
+        if has_default_password(session.get('username')) and request.path != '/change-password':
+            return redirect(url_for('change_password', forced=1))
         return f(*args, **kwargs)
     return decorated_function
 
@@ -825,6 +838,8 @@ def login():
             session['authenticated'] = True
             session['username'] = username
             session.permanent = True
+            if has_default_password(username):
+                return redirect(url_for('change_password', forced=1))
             return redirect(url_for('upload_page'))
 
         return render_template('login.html', error='Invalid username or password')
@@ -843,25 +858,35 @@ def logout():
 @login_required
 def change_password():
     """Change own password"""
+    forced = request.args.get('forced') == '1'
+    username = session.get('username')
+
     if request.method == 'POST':
-        current = request.form.get('current', '')
+        forced = request.form.get('forced') == '1'
         new_password = request.form.get('new_password', '')
         confirm = request.form.get('confirm', '')
 
-        username = session.get('username')
-
-        if not verify_user(username, current):
-            return render_template('change_password.html', error='Current password is incorrect', is_admin=is_admin(), username=username)
+        if not forced:
+            current = request.form.get('current', '')
+            if not verify_user(username, current):
+                return render_template('change_password.html', error='Current password is incorrect',
+                                       is_admin=is_admin(), username=username, forced=forced)
 
         if new_password != confirm:
-            return render_template('change_password.html', error='New passwords do not match', is_admin=is_admin(), username=username)
+            return render_template('change_password.html', error='New passwords do not match',
+                                   is_admin=is_admin(), username=username, forced=forced)
 
         success, message = change_user_password(username, new_password)
         if success:
-            return render_template('change_password.html', success=message, is_admin=is_admin(), username=username)
-        return render_template('change_password.html', error=message, is_admin=is_admin(), username=username)
+            if forced:
+                return redirect(url_for('upload_page'))
+            return render_template('change_password.html', success=message,
+                                   is_admin=is_admin(), username=username, forced=False)
+        return render_template('change_password.html', error=message,
+                               is_admin=is_admin(), username=username, forced=forced)
 
-    return render_template('change_password.html', is_admin=is_admin(), username=session.get('username'))
+    return render_template('change_password.html', is_admin=is_admin(),
+                           username=username, forced=forced)
 
 
 # --- Admin Routes ---
@@ -932,7 +957,8 @@ def upload_page():
     return render_template('upload.html',
                           settings=settings,
                           is_admin=is_admin(),
-                          username=session.get('username'))
+                          username=session.get('username'),
+                          password_changed=not has_default_password(session.get('username')))
 
 
 @app.route('/gallery')
@@ -1578,6 +1604,72 @@ def api_save_tv_schedules():
     schedule_cec_jobs()
 
     return jsonify({'success': True, 'schedules': schedules})
+
+
+# ============ Network Info ============
+
+def get_network_info():
+    """Get network addresses for display."""
+    import socket
+    info = {'local_ip': None, 'tailscale_ip': None}
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(('8.8.8.8', 80))
+        info['local_ip'] = s.getsockname()[0]
+        s.close()
+    except Exception:
+        pass
+    try:
+        result = subprocess.run(['tailscale', 'ip', '-4'],
+                                capture_output=True, text=True, timeout=5)
+        if result.returncode == 0:
+            info['tailscale_ip'] = result.stdout.strip()
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        pass
+    return info
+
+
+@app.route('/api/network-info', methods=['GET'])
+@api_admin_required
+def api_network_info():
+    """Get network info (local IP, Tailscale IP) for admin display."""
+    return jsonify(get_network_info())
+
+
+# ============ Maintenance Window ============
+
+@app.route('/api/maintenance-window', methods=['GET'])
+def api_maintenance_window():
+    """Check if current time is within a maintenance window (TV is off)."""
+    settings = load_settings()
+    schedules = settings.get('tv_schedules', [])
+
+    if not schedules:
+        return jsonify({'can_deploy': True, 'reason': 'No TV schedules configured'})
+
+    now = datetime.now()
+    current_day = now.weekday()
+    current_minutes = now.hour * 60 + now.minute
+
+    for sched in schedules:
+        if not sched.get('enabled', True):
+            continue
+        days = sched.get('days', [])
+        if current_day not in days:
+            continue
+
+        on_h, on_m = map(int, sched['on_time'].split(':'))
+        off_h, off_m = map(int, sched['off_time'].split(':'))
+        on_minutes = on_h * 60 + on_m
+        off_minutes = off_h * 60 + off_m
+
+        if on_minutes <= current_minutes < off_minutes:
+            return jsonify({
+                'can_deploy': False,
+                'reason': f'TV is scheduled ON until {sched["off_time"]}'
+            })
+
+    return jsonify({'can_deploy': True, 'reason': 'Outside TV schedule'})
 
 
 # ============ Error Handlers ============
