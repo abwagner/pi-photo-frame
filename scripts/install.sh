@@ -159,6 +159,7 @@ unclutter -idle 0.5 -root &
     --autoplay-policy=no-user-gesture-required \\
     --check-for-update-interval=31536000 \\
     --ignore-certificate-errors \\
+    --password-store=basic \\
     "\$DISPLAY_URL"
 KIOSKEOF
     chmod +x "$PROJECT_DIR/start_kiosk.sh"
@@ -174,6 +175,35 @@ X-GNOME-Autostart-enabled=true
 EOF
 
     info "Kiosk mode configured. It will launch automatically after reboot."
+}
+
+# ---------- HDMI-CEC TV control (optional) ----------
+
+setup_cec() {
+    echo ""
+    read -rp "Enable HDMI-CEC TV power control? [y/N]: " cec_answer
+    if [[ ! "$cec_answer" =~ ^[Yy]$ ]]; then
+        info "Skipping CEC setup."
+        return 0
+    fi
+
+    info "Installing cec-utils on host (for testing)..."
+    sudo apt-get update -qq
+    sudo apt-get install -y -qq cec-utils
+
+    # Enable CEC device passthrough in docker-compose.yml
+    if [ -f "$PROJECT_DIR/docker-compose.yml" ]; then
+        info "Enabling CEC device passthrough in docker-compose.yml..."
+        sed -i 's/# devices:/devices:/' "$PROJECT_DIR/docker-compose.yml"
+        sed -i 's/#   - "\/dev\/cec0:\/dev\/cec0"/  - "\/dev\/cec0:\/dev\/cec0"/' "$PROJECT_DIR/docker-compose.yml"
+    fi
+
+    # Rebuild with CEC device
+    info "Rebuilding container with CEC support..."
+    cd "$PROJECT_DIR"
+    docker compose up -d --build
+
+    info "CEC TV control enabled. Configure schedules in the web UI."
 }
 
 # ---------- Chromium restart cron ----------
@@ -206,6 +236,7 @@ main() {
     allow_privileged_ports
     start_services
     setup_kiosk
+    setup_cec
     setup_chromium_cron
 
     local ip

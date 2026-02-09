@@ -841,6 +841,191 @@
             margin-bottom: 12px;
             opacity: 0.3;
         }
+
+        /* ===== TV Schedule Styles ===== */
+        .tv-schedule-list {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+        .tv-schedule-item {
+            background: rgba(0, 0, 0, 0.2);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 10px;
+            padding: 12px;
+        }
+        .tv-schedule-times {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+        .tv-schedule-times input[type="time"] {
+            flex: 1;
+            padding: 8px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 6px;
+            background: rgba(0, 0, 0, 0.3);
+            color: #e0e0e0;
+            font-size: 0.9rem;
+        }
+        .tv-schedule-times input[type="time"]:focus {
+            outline: none;
+            border-color: #00d4ff;
+        }
+        .tv-schedule-times span {
+            color: #888;
+            font-size: 0.8rem;
+        }
+        .tv-schedule-days {
+            display: flex;
+            gap: 4px;
+            margin-bottom: 8px;
+        }
+        .day-checkbox {
+            width: 32px;
+            height: 32px;
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            border-radius: 6px;
+            background: rgba(0, 0, 0, 0.2);
+            color: #888;
+            font-size: 0.7rem;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s;
+            user-select: none;
+        }
+        .day-checkbox.active {
+            background: rgba(0, 212, 255, 0.2);
+            border-color: rgba(0, 212, 255, 0.4);
+            color: #00d4ff;
+        }
+        .tv-schedule-actions {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .cec-unavailable {
+            background: rgba(255, 193, 7, 0.1);
+            border: 1px solid rgba(255, 193, 7, 0.2);
+            border-radius: 8px;
+            padding: 12px;
+            font-size: 0.8rem;
+            color: #ffc107;
+            text-align: center;
+        }
+
+        /* ===== Upload Warning Modal ===== */
+        .upload-modal-overlay {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0, 0, 0, 0.75);
+            z-index: 2000;
+            justify-content: center;
+            align-items: center;
+        }
+        .upload-modal-overlay.active {
+            display: flex;
+        }
+        .upload-modal {
+            background: #1e2a3a;
+            border-radius: 16px;
+            padding: 24px;
+            max-width: 680px;
+            width: 90%;
+            max-height: 80vh;
+            overflow-y: auto;
+            box-shadow: 0 8px 40px rgba(0, 0, 0, 0.5);
+        }
+        .upload-modal h3 {
+            margin-bottom: 16px;
+            color: #e0e0e0;
+        }
+        .upload-modal-file {
+            display: flex;
+            align-items: flex-start;
+            gap: 12px;
+            padding: 12px;
+            margin-bottom: 8px;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 10px;
+        }
+        .upload-modal-file input[type="checkbox"] {
+            margin-top: 4px;
+            flex-shrink: 0;
+        }
+        .upload-modal-file-info {
+            flex: 1;
+            min-width: 0;
+        }
+        .upload-modal-file-name {
+            font-weight: 500;
+            word-break: break-all;
+        }
+        .upload-modal-badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 6px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            margin-top: 4px;
+            margin-right: 4px;
+        }
+        .badge-duplicate {
+            background: rgba(255, 165, 0, 0.25);
+            color: #ffb347;
+        }
+        .badge-small {
+            background: rgba(255, 80, 80, 0.25);
+            color: #ff7b7b;
+        }
+        .badge-ok {
+            background: rgba(0, 200, 100, 0.2);
+            color: #66d9a0;
+        }
+        .upload-modal-match {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-top: 6px;
+            font-size: 0.8rem;
+            color: #aaa;
+        }
+        .upload-modal-match img {
+            width: 40px;
+            height: 40px;
+            object-fit: cover;
+            border-radius: 4px;
+        }
+        .upload-modal-actions {
+            display: flex;
+            gap: 10px;
+            justify-content: flex-end;
+            margin-top: 16px;
+        }
+        .upload-modal-actions button {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            font-weight: 600;
+        }
+        .btn-upload-proceed {
+            background: #00d4ff;
+            color: #1a1a2e;
+        }
+        .btn-upload-proceed:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+        }
+        .btn-upload-cancel {
+            background: rgba(255, 255, 255, 0.1);
+            color: #e0e0e0;
+        }
     </style>
 </head>
 <body>
@@ -1014,6 +1199,30 @@
                         Settings are saved automatically.
                     </p>
                 </div>
+
+                <!-- TV Schedule Settings -->
+                <div class="panel" id="tv-schedule-panel">
+                    <h2>TV Power Schedule</h2>
+
+                    <div id="cec-unavailable-msg" class="cec-unavailable" style="display:none;">
+                        CEC control is not available. Install cec-utils and ensure the
+                        HDMI-CEC device is accessible in Docker.
+                    </div>
+
+                    <div id="cec-controls" style="display:none;">
+                        <div class="tv-schedule-list" id="tv-schedule-list"></div>
+
+                        <div style="margin-top: 12px; display: flex; gap: 8px;">
+                            <button class="btn btn-refresh" onclick="addTvSchedule()" style="flex:1;">+ Add Schedule</button>
+                            <button class="btn btn-refresh" onclick="testCec('on')" title="Turn TV on now">Test On</button>
+                            <button class="btn btn-refresh" onclick="testCec('standby')" title="Turn TV off now">Test Off</button>
+                        </div>
+
+                        <p style="font-size: 0.75rem; color: #666; text-align: center; margin-top: 10px;">
+                            Schedules are saved automatically.
+                        </p>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
@@ -1091,7 +1300,125 @@
             handleFiles(e.target.files);
         });
 
+        // Pending files for the two-phase upload flow
+        let pendingUploadFiles = [];
+
         async function handleFiles(files) {
+            pendingUploadFiles = Array.from(files);
+
+            // Phase 1: Check for duplicates and dimensions
+            showStatus('Checking for duplicates...', 'success');
+            const formData = new FormData();
+            for (const file of pendingUploadFiles) {
+                formData.append('files', file);
+            }
+
+            let checkResults = null;
+            try {
+                const resp = await fetch('/api/check-duplicates', {
+                    method: 'POST',
+                    body: formData
+                });
+                checkResults = await resp.json();
+            } catch (err) {
+                // If check fails, fall through to direct upload
+            }
+
+            // Determine if any warnings exist
+            const MIN_WIDTH = 1280, MIN_HEIGHT = 720;
+            let hasWarnings = false;
+
+            if (checkResults && checkResults.results) {
+                for (const fname of Object.keys(checkResults.results)) {
+                    const r = checkResults.results[fname];
+                    if (r.matches && r.matches.length > 0) hasWarnings = true;
+                    if (r.width < MIN_WIDTH || r.height < MIN_HEIGHT) hasWarnings = true;
+                }
+            }
+
+            if (!hasWarnings || !checkResults) {
+                // No warnings — upload directly
+                await doUpload(pendingUploadFiles);
+                return;
+            }
+
+            // Phase 2: Show warning modal
+            showUploadModal(checkResults.results);
+        }
+
+        function showUploadModal(results) {
+            const MIN_WIDTH = 1280, MIN_HEIGHT = 720;
+            const body = document.getElementById('upload-modal-body');
+            let html = '';
+
+            for (const file of pendingUploadFiles) {
+                const r = results[file.name] || {};
+                const matches = r.matches || [];
+                const isSmall = (r.width && r.height) && (r.width < MIN_WIDTH || r.height < MIN_HEIGHT);
+                const hasDupes = matches.length > 0;
+                const hasIssue = isSmall || hasDupes;
+
+                html += `<div class="upload-modal-file">
+                    <input type="checkbox" data-filename="${escAttr(file.name)}" ${hasIssue ? '' : 'checked'}>
+                    <div class="upload-modal-file-info">
+                        <div class="upload-modal-file-name">${escAttr(file.name)}</div>`;
+
+                if (isSmall) {
+                    html += `<span class="upload-modal-badge badge-small">Low res: ${r.width}&times;${r.height}</span>`;
+                }
+                if (hasDupes) {
+                    for (const m of matches) {
+                        const similarity = Math.max(0, 100 - Math.round(m.distance * 100 / 64));
+                        html += `<div class="upload-modal-match">
+                            <img src="/uploads/${escAttr(m.filename)}" alt="match">
+                            <span>Similar to <strong>${cleanFilename(m.filename)}</strong> (${similarity}% match)</span>
+                        </div>`;
+                    }
+                    html += `<span class="upload-modal-badge badge-duplicate">Possible duplicate</span>`;
+                }
+                if (!hasIssue) {
+                    html += `<span class="upload-modal-badge badge-ok">OK</span>`;
+                }
+
+                if (r.width && r.height) {
+                    html += `<div style="font-size:0.75rem;color:#888;margin-top:4px;">${r.width}&times;${r.height}px</div>`;
+                }
+
+                html += `</div></div>`;
+            }
+
+            body.innerHTML = html;
+            document.getElementById('upload-modal-overlay').classList.add('active');
+            statusEl.className = 'status';
+        }
+
+        function cancelUploadModal() {
+            document.getElementById('upload-modal-overlay').classList.remove('active');
+            pendingUploadFiles = [];
+            fileInput.value = '';
+        }
+
+        async function proceedUpload() {
+            const checkboxes = document.querySelectorAll('#upload-modal-body input[type="checkbox"]');
+            const selectedNames = new Set();
+            checkboxes.forEach(cb => {
+                if (cb.checked) selectedNames.add(cb.dataset.filename);
+            });
+
+            const filesToUpload = pendingUploadFiles.filter(f => selectedNames.has(f.name));
+            document.getElementById('upload-modal-overlay').classList.remove('active');
+
+            if (filesToUpload.length === 0) {
+                showStatus('No files selected', 'error');
+                pendingUploadFiles = [];
+                fileInput.value = '';
+                return;
+            }
+
+            await doUpload(filesToUpload);
+        }
+
+        async function doUpload(files) {
             const formData = new FormData();
             for (const file of files) {
                 formData.append('files', file);
@@ -1117,6 +1444,7 @@
                 showStatus('Upload failed: ' + err.message, 'error');
             }
 
+            pendingUploadFiles = [];
             fileInput.value = '';
         }
 
@@ -1251,14 +1579,46 @@
 
             const matColor = img.mat_color || matColorInput.value;
             matPreview.style.backgroundColor = matColor;
-            previewContent.innerHTML = `<img src="/uploads/${filename}" alt="${filename}" style="max-width:90%;max-height:90%;object-fit:contain;box-shadow:0 4px 20px rgba(0,0,0,0.3);">`;
 
-            // No controls for single images
-            previewControls.classList.remove('active');
-            previewSection.classList.remove('has-controls');
-            previewSection.classList.add('active');
             previewFilename = filename;
             previewGroupId = null;
+
+            // Show controls panel with scale slider
+            previewControls.classList.add('active');
+            previewSection.classList.add('has-controls');
+            previewSection.classList.add('active');
+
+            renderSinglePreviewImage(filename);
+            renderSingleControls(filename);
+        }
+
+        function renderSinglePreviewImage(filename) {
+            const img = images.find(i => i.filename === filename);
+            if (!img) return;
+            const scale = img.scale || 1.0;
+            const pct = Math.round(90 * scale);
+            previewContent.innerHTML = `<img src="/uploads/${filename}" alt="${filename}" style="max-width:${pct}%;max-height:${pct}%;object-fit:contain;box-shadow:0 4px 20px rgba(0,0,0,0.3);">`;
+        }
+
+        function renderSingleControls(filename) {
+            const img = images.find(i => i.filename === filename);
+            if (!img) return;
+            const scale = img.scale || 1.0;
+
+            previewControlsTitle.textContent = 'Image Scale';
+            document.querySelector('.preview-controls-actions').style.display = 'none';
+            previewControlsBody.innerHTML = `
+                <div class="group-edit-item">
+                    <img class="group-edit-thumb" src="/uploads/${filename}" alt="${filename}">
+                    <div class="group-edit-controls">
+                        <input type="range" min="0.25" max="3" step="0.05"
+                               value="${scale}"
+                               oninput="updateSingleScalePreview('${filename}', this.value); this.nextElementSibling.textContent = parseFloat(this.value).toFixed(2) + 'x'"
+                               onchange="updateSingleScale('${filename}', this.value)">
+                        <span class="scale-value">${parseFloat(scale).toFixed(2)}x</span>
+                    </div>
+                </div>
+            `;
         }
 
         function openGroupPreview(groupId) {
@@ -1272,6 +1632,7 @@
             previewControls.classList.add('active');
             previewSection.classList.add('has-controls');
             previewSection.classList.add('active');
+            document.querySelector('.preview-controls-actions').style.display = '';
 
             // Now render (container clientWidth/clientHeight are non-zero)
             renderGroupPreviewImage(groupId);
@@ -1390,6 +1751,7 @@
             previewSection.classList.remove('active');
             previewSection.classList.remove('has-controls');
             previewControls.classList.remove('active');
+            document.querySelector('.preview-controls-actions').style.display = '';
             previewFilename = null;
             previewGroupId = null;
         }
@@ -1659,6 +2021,29 @@
             }
         }
 
+        function updateSingleScalePreview(filename, scaleValue) {
+            const img = images.find(i => i.filename === filename);
+            if (!img) return;
+            img.scale = parseFloat(scaleValue);
+            renderSinglePreviewImage(filename);
+        }
+
+        async function updateSingleScale(filename, scaleValue) {
+            const img = images.find(i => i.filename === filename);
+            if (!img) return;
+            img.scale = parseFloat(scaleValue);
+            try {
+                await fetch(`/api/gallery/${filename}`, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ scale: img.scale })
+                });
+                renderSinglePreviewImage(filename);
+            } catch (err) {
+                showStatus('Failed to update scale', 'error');
+            }
+        }
+
         async function moveGroupImage(groupId, currentIdx, direction) {
             const group = groups[groupId];
             if (!group) return;
@@ -1757,6 +2142,140 @@
                 statusEl.className = 'status';
             }, 3000);
         }
+
+        // ===== TV Schedules =====
+        const DAY_LABELS = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
+        const DAY_NAMES = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+        let tvSchedules = [];
+
+        async function loadTvSchedules() {
+            try {
+                const resp = await fetch('/api/tv-schedules');
+                const data = await resp.json();
+                tvSchedules = data.schedules || [];
+                const cecAvailable = data.cec_available;
+
+                document.getElementById('cec-unavailable-msg').style.display =
+                    cecAvailable ? 'none' : 'block';
+                document.getElementById('cec-controls').style.display =
+                    cecAvailable ? 'block' : 'none';
+
+                renderTvSchedules();
+            } catch (err) {
+                console.error('Failed to load TV schedules:', err);
+            }
+        }
+
+        function renderTvSchedules() {
+            const list = document.getElementById('tv-schedule-list');
+            list.innerHTML = tvSchedules.map((sched, idx) => `
+                <div class="tv-schedule-item">
+                    <div class="tv-schedule-times">
+                        <input type="time" value="${sched.on_time}"
+                               onchange="updateScheduleField(${idx}, 'on_time', this.value)">
+                        <span>to</span>
+                        <input type="time" value="${sched.off_time}"
+                               onchange="updateScheduleField(${idx}, 'off_time', this.value)">
+                    </div>
+                    <div class="tv-schedule-days">
+                        ${DAY_LABELS.map((label, d) => `
+                            <div class="day-checkbox${sched.days.includes(d) ? ' active' : ''}"
+                                 title="${DAY_NAMES[d]}"
+                                 onclick="toggleScheduleDay(${idx}, ${d})">${label}</div>
+                        `).join('')}
+                    </div>
+                    <div class="tv-schedule-actions">
+                        <label class="toggle" style="transform: scale(0.8);">
+                            <input type="checkbox" ${sched.enabled ? 'checked' : ''}
+                                   onchange="updateScheduleField(${idx}, 'enabled', this.checked)">
+                            <span class="toggle-slider"></span>
+                        </label>
+                        <button class="btn btn-refresh" onclick="removeTvSchedule(${idx})"
+                                style="padding: 4px 10px; font-size: 0.75rem;">Remove</button>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function addTvSchedule() {
+            tvSchedules.push({
+                id: 'sched_' + Math.random().toString(36).substr(2, 8),
+                on_time: '07:00',
+                off_time: '23:00',
+                days: [0, 1, 2, 3, 4, 5, 6],
+                enabled: true
+            });
+            renderTvSchedules();
+            saveTvSchedules();
+        }
+
+        function removeTvSchedule(idx) {
+            tvSchedules.splice(idx, 1);
+            renderTvSchedules();
+            saveTvSchedules();
+        }
+
+        function updateScheduleField(idx, field, value) {
+            tvSchedules[idx][field] = value;
+            saveTvSchedules();
+        }
+
+        function toggleScheduleDay(idx, day) {
+            const days = tvSchedules[idx].days;
+            const pos = days.indexOf(day);
+            if (pos >= 0) {
+                days.splice(pos, 1);
+            } else {
+                days.push(day);
+                days.sort();
+            }
+            renderTvSchedules();
+            saveTvSchedules();
+        }
+
+        async function saveTvSchedules() {
+            try {
+                await fetch('/api/tv-schedules', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ schedules: tvSchedules })
+                });
+            } catch (err) {
+                showStatus('Failed to save TV schedules', 'error');
+            }
+        }
+
+        async function testCec(command) {
+            try {
+                const resp = await fetch('/api/cec/test', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ command })
+                });
+                const data = await resp.json();
+                if (data.success) {
+                    showStatus(`TV ${command === 'on' ? 'on' : 'off'} command sent`, 'success');
+                } else {
+                    showStatus('CEC failed: ' + (data.error || 'Unknown error'), 'error');
+                }
+            } catch (err) {
+                showStatus('CEC test failed', 'error');
+            }
+        }
+
+        loadTvSchedules();
     </script>
+
+    <!-- Upload Warning Modal -->
+    <div class="upload-modal-overlay" id="upload-modal-overlay">
+        <div class="upload-modal">
+            <h3>Review Uploads</h3>
+            <div id="upload-modal-body"></div>
+            <div class="upload-modal-actions">
+                <button class="btn-upload-cancel" onclick="cancelUploadModal()">Cancel</button>
+                <button class="btn-upload-proceed" id="btn-upload-proceed" onclick="proceedUpload()">Upload Selected</button>
+            </div>
+        </div>
+    </div>
 </body>
 </html>

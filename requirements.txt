@@ -5,3 +5,5 @@ APScheduler==3.11.2
 bcrypt==5.0.0
 Flask-WTF==1.2.2
 gunicorn==24.1.1
+imagehash==4.3.1
+pytest==8.3.4
