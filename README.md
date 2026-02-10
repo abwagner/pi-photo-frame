@@ -10,11 +10,13 @@ A beautiful, web-based digital photo frame with user management, gallery control
 - **Password Protection** - Secure login with forced password change on first login
 - **Duplicate Detection** - Perceptual hashing warns before uploading duplicate images
 - **Individual Image Scale** - Adjust zoom per image or match heights across a group
-- **Customizable Mat Colors** - Choose from presets or any custom color
+- **Customizable Mat Colors** - 16 presets or any custom color, per-image overrides
+- **Mat Finishes** - Flat, Linen, Suede, or Silk texture overlays
+- **Inner Bevel** - Adjustable 45-degree V-groove cut effect around images (0-16px)
 - **Smooth Slideshow** - Configurable timing and transitions
 - **Drag & Drop Reordering** - Arrange photos in your preferred order
 - **TV Power Schedule (HDMI-CEC)** - Automatically turn your TV on/off on a schedule
-- **HTTPS** - Self-signed TLS via Caddy reverse proxy
+- **HTTPS** - Self-signed, Let's Encrypt via Cloudflare, or Let's Encrypt via DuckDNS
 - **Kiosk Mode** - Auto-starts on boot for dedicated displays
 - **Remote Access (Tailscale)** - Securely manage your frame from anywhere
 - **CI/CD Deployment** - Automated updates via GitHub Actions with maintenance window
@@ -50,11 +52,12 @@ cd pi-photo-frame
 
 The script will:
 1. Install Docker and enable it to start on boot
-2. Build and start the photo frame app with Caddy (HTTPS)
-3. Ask if you want Chromium kiosk mode for a connected display
-4. Ask if you want HDMI-CEC TV power control
-5. Ask if you want Tailscale for secure remote access
-6. Add a daily cron job (4:00 AM) to restart Chromium and prevent memory leaks
+2. Ask which HTTPS mode you want (self-signed, Cloudflare, or DuckDNS)
+3. Build and start the photo frame app with Caddy (HTTPS)
+4. Ask if you want Chromium kiosk mode for a connected display
+5. Ask if you want HDMI-CEC TV power control
+6. Ask if you want Tailscale for secure remote access
+7. Add a daily cron job (4:00 AM) to restart Chromium and prevent memory leaks
 
 If you chose kiosk mode, reboot to start it:
 
@@ -66,7 +69,7 @@ sudo reboot
 
 From any device on your network (phone, laptop, etc.):
 
-1. Open `https://<your-ip>/upload` in a browser (accept the self-signed certificate warning)
+1. Open `https://<your-ip>/upload` (or `https://<your-domain>/upload` if using Let's Encrypt)
 2. Log in with `admin` / `password`
 3. You'll be prompted to set a new password before continuing
 4. Upload photos — they appear on the display automatically
@@ -129,7 +132,9 @@ Hidden photos remain on disk but won't appear in the slideshow.
 
 | Setting | Description |
 |---------|-------------|
-| **Mat Color** | Background color around photos |
+| **Mat Color** | Background color around photos (16 presets or custom) |
+| **Mat Finish** | Texture overlay: Flat (default), Linen, Suede, or Silk |
+| **Inner Bevel** | 45-degree V-groove cut width around images (0-16px) |
 | **Slideshow Interval** | Seconds between transitions (3-300) |
 | **Transition Duration** | Fade animation length |
 | **Image Fit** | "Contain" (full image) or "Cover" (fill screen) |
@@ -137,6 +142,8 @@ Hidden photos remain on disk but won't appear in the slideshow.
 | **Shuffle** | Randomize photo order |
 | **Show Filename** | Display photo name on screen |
 | **TV Power Schedule** | HDMI-CEC on/off times by day of week |
+
+Mat color, mat finish, inner bevel, and image scale can be overridden per image or per group from the upload page preview.
 
 ## TV Power Schedule (HDMI-CEC)
 
@@ -179,6 +186,56 @@ If you had photos uploaded before duplicate detection was added, run the backfil
 ```
 POST /api/gallery/backfill-hashes  (Admin only)
 ```
+
+## Trusted HTTPS (Let's Encrypt)
+
+By default, the app uses a self-signed certificate (works immediately but shows a browser warning). For a trusted certificate with no warnings, the install script offers two DNS challenge options:
+
+### Option 1: Cloudflare DNS
+
+Best if you already own a domain managed by Cloudflare.
+
+1. During install, choose **Let's Encrypt via Cloudflare**
+2. Enter your domain (e.g., `photos.example.com`)
+3. Enter your Cloudflare API token
+4. Enter your Cloudflare Zone ID (enables automatic DDNS updates)
+
+**Getting a Cloudflare API token:**
+1. Go to [Cloudflare API Tokens](https://dash.cloudflare.com/profile/api-tokens)
+2. Click **Create Token** → use the **Edit zone DNS** template
+3. Configure the token:
+   - **Permissions**: Zone / DNS / Edit (pre-filled by the template)
+   - **Zone Resources**: Include → Specific zone → select your domain
+   - **Client IP Address Filtering**: Leave blank (optional — restrict which IPs can use the token)
+   - **TTL**: Leave blank for no expiration, or set an end date if you prefer rotating tokens
+
+**Zone ID** is on your domain's Cloudflare overview page (right sidebar, under "API").
+
+If you provide the Zone ID, the install script sets up a DDNS cron job that runs every 6 hours. It checks your public IP and automatically creates or updates the A record in Cloudflare — no need to manually manage DNS when your IP changes. Caddy will automatically obtain and renew the certificate.
+
+### Option 2: DuckDNS (Free)
+
+Best if you don't own a domain. DuckDNS provides a free `yourname.duckdns.org` subdomain.
+
+1. During install, choose **Let's Encrypt via DuckDNS**
+2. Enter your DuckDNS subdomain (e.g., `myframe`)
+3. Enter your DuckDNS token
+
+**Getting a DuckDNS token:**
+1. Go to [duckdns.org](https://www.duckdns.org) and sign in
+2. Create a subdomain
+3. Copy your token from the top of the page
+
+### Switching Later
+
+You can re-run `./scripts/install.sh` at any time to switch HTTPS modes. The script will update the Caddyfile and `.env` file, then rebuild the containers.
+
+### Manual Configuration
+
+If you prefer to configure manually instead of using the install script:
+1. Copy `.env.example` to `.env` and fill in your values
+2. The install script generates the appropriate `Caddyfile`, or you can edit it directly
+3. Run `docker compose up -d --build` to apply changes
 
 ## Remote Access (Tailscale)
 
@@ -248,10 +305,14 @@ pi-photo-frame/
 ├── Dockerfile              # Docker image definition
 ├── docker-compose.yml      # Docker Compose config (app + Caddy)
 ├── Caddyfile               # Caddy reverse proxy config (HTTPS)
+├── .env.example            # HTTPS configuration template
+├── caddy/
+│   └── Dockerfile          # Custom Caddy build (DNS plugins)
 ├── scripts/
 │   ├── install.sh          # One-command setup script
 │   ├── deploy.sh           # Manual deploy script
 │   ├── uninstall.sh        # Complete removal script
+│   ├── cloudflare-ddns.sh  # DDNS updater (cron, every 6h)
 │   └── restart-chromium.sh # Daily Chromium restart (cron)
 ├── .github/workflows/
 │   └── deploy.yml          # CI/CD pipeline (test + deploy)
@@ -276,7 +337,7 @@ pi-photo-frame/
 
 - Passwords are hashed with bcrypt
 - Session keys are randomly generated
-- HTTPS via Caddy with self-signed certificate
+- HTTPS via Caddy (self-signed, Cloudflare, or DuckDNS Let's Encrypt)
 - Secure cookies enabled behind the reverse proxy
 - Display page accessible via token or localhost
 - Non-root user in Docker container
@@ -333,7 +394,8 @@ docker compose restart
 
 1. Ensure devices are on the same network
 2. Use the server's IP address if `.local` hostname doesn't resolve
-3. Accept the self-signed certificate warning in your browser
+3. If using self-signed certificates, accept the browser warning
+4. If using Let's Encrypt, ensure your DNS points to the Pi's IP
 
 ## Uninstall
 

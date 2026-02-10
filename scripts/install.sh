@@ -114,10 +114,18 @@ setup_letsencrypt_cloudflare() {
         return 0
     fi
 
+    echo ""
+    echo "  Zone ID is on your domain's Cloudflare overview page (right sidebar, under API)."
+    read -rp "  Cloudflare Zone ID: " cf_zone_id
+    if [[ -z "$cf_zone_id" ]]; then
+        warn "No Zone ID entered. DDNS auto-update will not be available."
+    fi
+
     # Write .env
     cat > "$PROJECT_DIR/.env" <<EOF
 DOMAIN=$domain
 CLOUDFLARE_API_TOKEN=$cf_token
+${cf_zone_id:+CLOUDFLARE_ZONE_ID=$cf_zone_id}
 EOF
     info "Saved Cloudflare credentials to .env"
 
@@ -352,6 +360,31 @@ setup_chromium_cron() {
     info "Cron job added."
 }
 
+# ---------- Cloudflare DDNS cron ----------
+
+setup_ddns_cron() {
+    # Only set up if Cloudflare Zone ID is configured
+    if [[ ! -f "$PROJECT_DIR/.env" ]] || ! grep -q "CLOUDFLARE_ZONE_ID" "$PROJECT_DIR/.env"; then
+        return 0
+    fi
+
+    local ddns_script="$PROJECT_DIR/scripts/cloudflare-ddns.sh"
+    local cron_entry="0 */6 * * * $ddns_script"
+
+    if crontab -l 2>/dev/null | grep -qF "$ddns_script"; then
+        info "Cloudflare DDNS cron job already exists."
+        return 0
+    fi
+
+    info "Adding Cloudflare DDNS cron job (every 6 hours)..."
+    (crontab -l 2>/dev/null || true; echo "$cron_entry") | crontab -
+    info "DDNS cron job added."
+
+    # Run once now to create/update the record immediately
+    info "Running initial DDNS update..."
+    bash "$ddns_script" || warn "DDNS update failed — check .env credentials."
+}
+
 # ---------- Main ----------
 
 main() {
@@ -370,6 +403,7 @@ main() {
     setup_cec
     setup_tailscale
     setup_chromium_cron
+    setup_ddns_cron
 
     local ip
     ip=$(hostname -I 2>/dev/null | awk '{print $1}')
@@ -386,7 +420,11 @@ main() {
         echo "    https://${CONFIGURED_DOMAIN}/display"
         echo ""
         echo "  Trusted Let's Encrypt certificate — no browser warnings!"
-        echo "  (Make sure your DNS points ${CONFIGURED_DOMAIN} to ${ip})"
+        if grep -q "CLOUDFLARE_ZONE_ID" "$PROJECT_DIR/.env" 2>/dev/null; then
+            echo "  DDNS auto-updates the A record every 6 hours."
+        else
+            echo "  (Make sure your DNS points ${CONFIGURED_DOMAIN} to ${ip})"
+        fi
     else
         echo "  Upload photos at:"
         echo "    https://${ip}/upload"
