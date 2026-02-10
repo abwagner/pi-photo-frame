@@ -84,6 +84,53 @@
             object-fit: cover;
         }
 
+        /* Mat bevel - 45-degree V-groove effect */
+        .mat-bevel {
+            position: relative;
+            display: inline-flex;
+            line-height: 0;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+        }
+        .mat-bevel::after {
+            content: '';
+            position: absolute;
+            inset: 0;
+            box-shadow:
+                inset var(--bevel-w, 4px) var(--bevel-w, 4px) 0 var(--bevel-light, rgba(255,255,255,0.15)),
+                inset calc(-1 * var(--bevel-w, 4px)) calc(-1 * var(--bevel-w, 4px)) 0 var(--bevel-dark, rgba(0,0,0,0.25));
+            pointer-events: none;
+            z-index: 1;
+        }
+        .mat-bevel img {
+            box-shadow: none;
+            display: block;
+        }
+
+        /* Texture overlays on body */
+        body::before {
+            content: '';
+            position: fixed;
+            inset: 0;
+            pointer-events: none;
+            z-index: 0;
+            opacity: 0;
+        }
+        body.mat-linen::before {
+            background-image: url("data:image/svg+xml,%3Csvg width='8' height='8' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M0 0h8M0 4h8M0 0v8M4 0v8' stroke='%23888' stroke-width='0.3' fill='none'/%3E%3C/svg%3E");
+            background-size: 8px 8px;
+            opacity: 0.08;
+        }
+        body.mat-suede::before {
+            background-image: url("data:image/svg+xml,%3Csvg width='6' height='6' xmlns='http://www.w3.org/2000/svg'%3E%3Ccircle cx='1' cy='1' r='0.6' fill='%23888'/%3E%3Ccircle cx='4' cy='3' r='0.4' fill='%23888'/%3E%3Ccircle cx='2' cy='5' r='0.5' fill='%23888'/%3E%3Ccircle cx='5' cy='1' r='0.3' fill='%23888'/%3E%3C/svg%3E");
+            background-size: 6px 6px;
+            opacity: 0.06;
+        }
+        body.mat-silk::before {
+            background-image: url("data:image/svg+xml,%3Csvg width='10' height='10' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M0 10L10 0' stroke='%23888' stroke-width='0.4' fill='none'/%3E%3Cpath d='M-2 2L2 -2M8 12L12 8' stroke='%23888' stroke-width='0.3' fill='none'/%3E%3C/svg%3E");
+            background-size: 10px 10px;
+            opacity: 0.06;
+        }
+
         /* Grid layout for group slides */
         .slide-grid {
             display: flex;
@@ -103,6 +150,9 @@
 
         .slide-grid img {
             box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+        }
+        .slide-grid .mat-bevel img {
+            box-shadow: none;
         }
 
         /* Loading state */
@@ -288,6 +338,43 @@
         function applySettings() {
             document.body.style.setProperty('--mat-color', settings.mat_color);
             document.body.style.setProperty('--transition-duration', settings.transition_duration + 's');
+
+            // Apply mat texture class
+            document.body.classList.remove('mat-linen', 'mat-suede', 'mat-silk');
+            const finish = settings.mat_finish || 'flat';
+            if (finish !== 'flat') {
+                document.body.classList.add('mat-' + finish);
+            }
+        }
+
+        function getBevelColors(matHex) {
+            // Parse hex color to RGB, return light (top-left) and dark (bottom-right) rgba
+            let hex = matHex.replace('#', '');
+            if (hex.length === 3) hex = hex[0]+hex[0]+hex[1]+hex[1]+hex[2]+hex[2];
+            const r = parseInt(hex.substring(0, 2), 16);
+            const g = parseInt(hex.substring(2, 4), 16);
+            const b = parseInt(hex.substring(4, 6), 16);
+            const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+
+            // For dark mats, bevel highlight is more visible; for light mats, shadow is more visible
+            const lightAlpha = luminance < 0.5 ? 0.20 : 0.12;
+            const darkAlpha = luminance < 0.5 ? 0.30 : 0.35;
+
+            return {
+                light: `rgba(255,255,255,${lightAlpha})`,
+                dark: `rgba(0,0,0,${darkAlpha})`
+            };
+        }
+
+        function wrapInBevel(imgEl, bevelWidth, matColor) {
+            const wrapper = document.createElement('div');
+            wrapper.className = 'mat-bevel';
+            wrapper.style.setProperty('--bevel-w', bevelWidth + 'px');
+            const colors = getBevelColors(matColor);
+            wrapper.style.setProperty('--bevel-light', colors.light);
+            wrapper.style.setProperty('--bevel-dark', colors.dark);
+            wrapper.appendChild(imgEl);
+            return wrapper;
         }
 
         function showSlide(index) {
@@ -314,13 +401,28 @@
             const slideEl = document.createElement('div');
             slideEl.className = 'slide';
 
+            // Determine bevel and finish for this slide
+            const slideBevelWidth = slide.images[0].bevel_width ?? settings.bevel_width ?? 4;
+            const slideFinish = slide.images[0].mat_finish ?? settings.mat_finish ?? 'flat';
+
+            // Apply per-slide texture override
+            document.body.classList.remove('mat-linen', 'mat-suede', 'mat-silk');
+            if (slideFinish !== 'flat') {
+                document.body.classList.add('mat-' + slideFinish);
+            }
+
             if (slide.type === 'single') {
                 // Single image slide
                 const img = document.createElement('img');
                 if (settings.fit_mode === 'cover') img.className = 'cover';
                 img.src = '/uploads/' + slide.images[0].filename;
                 img.alt = slide.images[0].filename;
-                slideEl.appendChild(img);
+
+                if (slideBevelWidth > 0) {
+                    slideEl.appendChild(wrapInBevel(img, slideBevelWidth, matColor));
+                } else {
+                    slideEl.appendChild(img);
+                }
             } else {
                 // Group slide - create grid layout
                 const count = slide.images.length;
@@ -350,7 +452,7 @@
                     // Base height: largest h such that total width fits and tallest image fits
                     const baseHeight = Math.min(usableH / maxScale, usableW / totalWidthAtUnitHeight);
 
-                    imgInfos.forEach(info => {
+                    imgInfos.forEach((info, i) => {
                         const img = document.createElement('img');
                         img.src = '/uploads/' + info.filename;
                         img.alt = info.filename;
@@ -361,7 +463,13 @@
                         img.style.maxWidth = 'none';
                         img.style.maxHeight = 'none';
                         img.style.flexShrink = '0';
-                        gridEl.appendChild(img);
+
+                        const imgBevel = slide.images[i].bevel_width ?? settings.bevel_width ?? 4;
+                        if (imgBevel > 0) {
+                            gridEl.appendChild(wrapInBevel(img, imgBevel, matColor));
+                        } else {
+                            gridEl.appendChild(img);
+                        }
                     });
                 } else {
                     // Grid layout
@@ -372,7 +480,12 @@
                         const img = document.createElement('img');
                         img.src = '/uploads/' + imgData.filename;
                         img.alt = imgData.filename;
-                        gridEl.appendChild(img);
+                        const imgBevel = imgData.bevel_width ?? settings.bevel_width ?? 4;
+                        if (imgBevel > 0) {
+                            gridEl.appendChild(wrapInBevel(img, imgBevel, matColor));
+                        } else {
+                            gridEl.appendChild(img);
+                        }
                     });
                 }
                 slideEl.appendChild(gridEl);

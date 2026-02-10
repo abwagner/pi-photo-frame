@@ -309,7 +309,9 @@ def get_image_metadata(filename):
         'uploaded_by': None,
         'width': None,
         'height': None,
-        'mat_color': None
+        'mat_color': None,
+        'mat_finish': None,
+        'bevel_width': None
     })
 
 
@@ -324,7 +326,9 @@ def update_image_metadata(filename, **kwargs):
             'uploaded_by': None,
             'width': None,
             'height': None,
-            'mat_color': None
+            'mat_color': None,
+            'mat_finish': None,
+            'bevel_width': None
         }
     gallery['images'][filename].update(kwargs)
     save_gallery(gallery)
@@ -384,7 +388,9 @@ def get_uploaded_images():
                 'uploaded_by': None,
                 'width': None,
                 'height': None,
-                'mat_color': None
+                'mat_color': None,
+                'mat_finish': None,
+                'bevel_width': None
             })
             images.append({
                 'filename': f.name,
@@ -405,6 +411,8 @@ def get_enabled_images():
 
 DEFAULT_SETTINGS = {
     'mat_color': '#2c2c2c',
+    'mat_finish': 'flat',
+    'bevel_width': 4,
     'slideshow_interval': 10,
     'transition_duration': 1,
     'fit_mode': 'contain',
@@ -933,7 +941,10 @@ def api_get_images():
             'filename': img['filename'],
             'width': img.get('width'),
             'height': img.get('height'),
-            'mat_color': img.get('mat_color')
+            'mat_color': img.get('mat_color'),
+            'mat_finish': img.get('mat_finish'),
+            'bevel_width': img.get('bevel_width'),
+            'scale': img.get('scale', 1.0)
         }
 
     # Find which filenames are in groups
@@ -1001,7 +1012,7 @@ def api_update_image(filename):
         return jsonify({'error': 'Image not found'}), 404
 
     data = request.json
-    allowed_fields = ['enabled', 'title', 'mat_color']
+    allowed_fields = ['enabled', 'title', 'mat_color', 'mat_finish', 'bevel_width']
     updates = {k: v for k, v in data.items() if k in allowed_fields}
 
     update_image_metadata(filename, **updates)
@@ -1102,6 +1113,10 @@ def api_update_group(group_id):
     data = request.json
     if 'mat_color' in data:
         gallery['groups'][group_id]['mat_color'] = data['mat_color']
+    if 'mat_finish' in data:
+        gallery['groups'][group_id]['mat_finish'] = data['mat_finish']
+    if 'bevel_width' in data:
+        gallery['groups'][group_id]['bevel_width'] = data['bevel_width']
     if 'images' in data:
         if len(data['images']) < 2:
             return jsonify({'error': 'A group needs at least 2 images'}), 400
@@ -1138,7 +1153,8 @@ def api_settings():
     settings = load_settings()
     data = request.json
 
-    allowed_fields = ['mat_color', 'slideshow_interval', 'transition_duration',
+    allowed_fields = ['mat_color', 'mat_finish', 'bevel_width',
+                      'slideshow_interval', 'transition_duration',
                       'fit_mode', 'shuffle', 'image_order',
                       'target_aspect_ratio']
     for field in allowed_fields:

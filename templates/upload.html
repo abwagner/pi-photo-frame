@@ -119,6 +119,54 @@
             box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
         }
 
+        /* Bevel wrapper in preview */
+        .mat-preview .mat-bevel {
+            position: relative;
+            display: inline-flex;
+            line-height: 0;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+        }
+        .mat-preview .mat-bevel::after {
+            content: '';
+            position: absolute;
+            inset: 0;
+            box-shadow:
+                inset var(--bevel-w, 4px) var(--bevel-w, 4px) 0 var(--bevel-light, rgba(255,255,255,0.15)),
+                inset calc(-1 * var(--bevel-w, 4px)) calc(-1 * var(--bevel-w, 4px)) 0 var(--bevel-dark, rgba(0,0,0,0.25));
+            pointer-events: none;
+            z-index: 1;
+        }
+        .mat-preview .mat-bevel img {
+            box-shadow: none;
+            display: block;
+        }
+
+        /* Texture overlays on preview */
+        .mat-preview::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+            z-index: 0;
+            opacity: 0;
+            border-radius: inherit;
+        }
+        .mat-preview.mat-linen::before {
+            background-image: url("data:image/svg+xml,%3Csvg width='8' height='8' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M0 0h8M0 4h8M0 0v8M4 0v8' stroke='%23888' stroke-width='0.3' fill='none'/%3E%3C/svg%3E");
+            background-size: 8px 8px;
+            opacity: 0.08;
+        }
+        .mat-preview.mat-suede::before {
+            background-image: url("data:image/svg+xml,%3Csvg width='6' height='6' xmlns='http://www.w3.org/2000/svg'%3E%3Ccircle cx='1' cy='1' r='0.6' fill='%23888'/%3E%3Ccircle cx='4' cy='3' r='0.4' fill='%23888'/%3E%3Ccircle cx='2' cy='5' r='0.5' fill='%23888'/%3E%3Ccircle cx='5' cy='1' r='0.3' fill='%23888'/%3E%3C/svg%3E");
+            background-size: 6px 6px;
+            opacity: 0.06;
+        }
+        .mat-preview.mat-silk::before {
+            background-image: url("data:image/svg+xml,%3Csvg width='10' height='10' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M0 10L10 0' stroke='%23888' stroke-width='0.4' fill='none'/%3E%3Cpath d='M-2 2L2 -2M8 12L12 8' stroke='%23888' stroke-width='0.3' fill='none'/%3E%3C/svg%3E");
+            background-size: 10px 10px;
+            opacity: 0.06;
+        }
+
         .preview-close-btn {
             position: absolute;
             top: 12px;
@@ -730,6 +778,11 @@
             border-color: #00d4ff;
         }
 
+        .setting-group input[type="range"] {
+            width: 100%;
+            accent-color: #00d4ff;
+        }
+
         .color-presets {
             display: flex;
             gap: 7px;
@@ -956,17 +1009,38 @@
                             <div class="color-preset" style="background: #1a1a1a;" data-color="#1a1a1a" title="Near Black"></div>
                             <div class="color-preset" style="background: #2c2c2c;" data-color="#2c2c2c" title="Dark Gray"></div>
                             <div class="color-preset" style="background: #4a4a4a;" data-color="#4a4a4a" title="Gray"></div>
+                            <div class="color-preset" style="background: #6b5b4e;" data-color="#6b5b4e" title="Warm Gray"></div>
                             <div class="color-preset" style="background: #f5f5f5;" data-color="#f5f5f5" title="Off White"></div>
-                            <div class="color-preset" style="background: #ffffff;" data-color="#ffffff" title="White"></div>
+                            <div class="color-preset" style="background: #ffffff; border: 1px solid rgba(255,255,255,0.2);" data-color="#ffffff" title="White"></div>
                             <div class="color-preset" style="background: #f5f0e6;" data-color="#f5f0e6" title="Cream"></div>
+                            <div class="color-preset" style="background: #fffff0;" data-color="#fffff0" title="Ivory"></div>
                             <div class="color-preset" style="background: #2d3436;" data-color="#2d3436" title="Charcoal"></div>
                             <div class="color-preset" style="background: #1e3a5f;" data-color="#1e3a5f" title="Navy"></div>
                             <div class="color-preset" style="background: #4a0e0e;" data-color="#4a0e0e" title="Burgundy"></div>
+                            <div class="color-preset" style="background: #2d4a2d;" data-color="#2d4a2d" title="Forest"></div>
+                            <div class="color-preset" style="background: #8b9a6b;" data-color="#8b9a6b" title="Sage"></div>
+                            <div class="color-preset" style="background: #3c2415;" data-color="#3c2415" title="Espresso"></div>
+                            <div class="color-preset" style="background: #4a5568;" data-color="#4a5568" title="Slate Blue"></div>
                         </div>
                     </div>
 
+                    <div class="setting-group">
+                        <label>Mat Finish</label>
+                        <select id="mat-finish">
+                            <option value="flat" {% if settings.mat_finish == 'flat' %}selected{% endif %}>Flat</option>
+                            <option value="linen" {% if settings.mat_finish == 'linen' %}selected{% endif %}>Linen</option>
+                            <option value="suede" {% if settings.mat_finish == 'suede' %}selected{% endif %}>Suede</option>
+                            <option value="silk" {% if settings.mat_finish == 'silk' %}selected{% endif %}>Silk</option>
+                        </select>
+                    </div>
+
+                    <div class="setting-group">
+                        <label>Inner Bevel <span id="bevel-value">{{ settings.bevel_width }}px</span></label>
+                        <input type="range" id="bevel-width" min="0" max="16" value="{{ settings.bevel_width }}" step="1">
+                    </div>
+
                     <p style="font-size: 0.75rem; color: #666;">
-                        Set per-image mat colors in the gallery below.
+                        Override per-image in the preview controls.
                     </p>
                 </div>
 
@@ -1051,6 +1125,9 @@
 
         // Settings elements
         const matColorInput = document.getElementById('mat-color');
+        const matFinishSelect = document.getElementById('mat-finish');
+        const bevelWidthInput = document.getElementById('bevel-width');
+        const bevelValueLabel = document.getElementById('bevel-value');
         const slideshowIntervalInput = document.getElementById('slideshow-interval');
         const transitionDurationInput = document.getElementById('transition-duration');
         const fitModeSelect = document.getElementById('fit-mode');
@@ -1249,16 +1326,63 @@
             const img = images.find(i => i.filename === filename);
             if (!img) return;
 
-            const matColor = img.mat_color || matColorInput.value;
-            matPreview.style.backgroundColor = matColor;
-            previewContent.innerHTML = `<img src="/uploads/${filename}" alt="${filename}" style="max-width:90%;max-height:90%;object-fit:contain;box-shadow:0 4px 20px rgba(0,0,0,0.3);">`;
-
-            // No controls for single images
-            previewControls.classList.remove('active');
-            previewSection.classList.remove('has-controls');
-            previewSection.classList.add('active');
             previewFilename = filename;
             previewGroupId = null;
+
+            previewControls.classList.add('active');
+            previewSection.classList.add('has-controls');
+            previewSection.classList.add('active');
+
+            renderSinglePreviewImage(filename);
+            renderSingleControls(filename);
+        }
+
+        function renderSinglePreviewImage(filename) {
+            const img = images.find(i => i.filename === filename);
+            if (!img) return;
+
+            const matColor = img.mat_color || matColorInput.value;
+            const bevelWidth = img.bevel_width ?? parseInt(bevelWidthInput.value);
+            const finish = img.mat_finish || matFinishSelect.value;
+
+            matPreview.style.backgroundColor = matColor;
+            matPreview.classList.remove('mat-linen', 'mat-suede', 'mat-silk');
+            if (finish !== 'flat') matPreview.classList.add('mat-' + finish);
+
+            const imgHtml = `<img src="/uploads/${filename}" alt="${filename}" style="max-width:90%;max-height:90%;object-fit:contain;">`;
+            previewContent.innerHTML = makeBevelHtml(imgHtml, bevelWidth, matColor);
+        }
+
+        function renderSingleControls(filename) {
+            const img = images.find(i => i.filename === filename);
+            if (!img) return;
+
+            previewControlsTitle.textContent = cleanFilename(filename);
+            const currentFinish = img.mat_finish || '';
+            const currentBevel = img.bevel_width ?? '';
+
+            previewControlsBody.innerHTML = `
+                <div class="group-edit-item" style="flex-wrap:wrap;gap:12px;">
+                    <div style="display:flex;align-items:center;gap:8px;flex:1;min-width:150px;">
+                        <label style="font-size:0.8rem;color:#aaa;white-space:nowrap;">Finish:</label>
+                        <select style="flex:1;padding:6px;border:1px solid rgba(255,255,255,0.1);border-radius:6px;background:rgba(0,0,0,0.3);color:#e0e0e0;font-size:0.8rem;"
+                                onchange="updateImageField('${escAttr(filename)}','mat_finish',this.value||null)">
+                            <option value="" ${!currentFinish ? 'selected' : ''}>Default</option>
+                            <option value="flat" ${currentFinish==='flat' ? 'selected' : ''}>Flat</option>
+                            <option value="linen" ${currentFinish==='linen' ? 'selected' : ''}>Linen</option>
+                            <option value="suede" ${currentFinish==='suede' ? 'selected' : ''}>Suede</option>
+                            <option value="silk" ${currentFinish==='silk' ? 'selected' : ''}>Silk</option>
+                        </select>
+                    </div>
+                    <div style="display:flex;align-items:center;gap:8px;flex:1;min-width:150px;">
+                        <label style="font-size:0.8rem;color:#aaa;white-space:nowrap;">Bevel: <span id="single-bevel-val">${currentBevel !== '' ? currentBevel + 'px' : 'Default'}</span></label>
+                        <input type="range" min="-1" max="16" step="1" value="${currentBevel !== '' ? currentBevel : -1}"
+                               style="flex:1;accent-color:#00d4ff;"
+                               oninput="this.previousElementSibling.querySelector('span').textContent = this.value == -1 ? 'Default' : this.value + 'px'; previewSingleBevel('${escAttr(filename)}', this.value)"
+                               onchange="updateImageField('${escAttr(filename)}','bevel_width',this.value == -1 ? null : parseInt(this.value))">
+                    </div>
+                </div>
+            `;
         }
 
         function openGroupPreview(groupId) {
@@ -1283,7 +1407,12 @@
             if (!group) return;
 
             const matColor = group.mat_color || matColorInput.value;
+            const finish = group.mat_finish || matFinishSelect.value;
+            const groupBevel = group.bevel_width ?? parseInt(bevelWidthInput.value);
+
             matPreview.style.backgroundColor = matColor;
+            matPreview.classList.remove('mat-linen', 'mat-suede', 'mat-silk');
+            if (finish !== 'flat') matPreview.classList.add('mat-' + finish);
 
             const groupImages = (group.images || []).map(f => images.find(i => i.filename === f)).filter(Boolean);
             const scales = group.scales || {};
@@ -1314,12 +1443,14 @@
                 previewContent.innerHTML = `<div class="group-preview-images">${imgInfos.map(info => {
                     const h = baseHeight * info.scale;
                     const w = h * info.ar;
-                    return `<img src="/uploads/${info.filename}" alt="${info.filename}" style="width:${w}px;height:${h}px;max-width:none;max-height:none;flex-shrink:0;box-shadow:0 4px 20px rgba(0,0,0,0.3);">`;
+                    const imgHtml = `<img src="/uploads/${info.filename}" alt="${info.filename}" style="width:${w}px;height:${h}px;max-width:none;max-height:none;flex-shrink:0;">`;
+                    return makeBevelHtml(imgHtml, groupBevel, matColor);
                 }).join('')}</div>`;
             } else {
                 const cols = Math.ceil(Math.sqrt(count));
                 previewContent.innerHTML = `<div class="group-preview-grid" style="grid-template-columns:repeat(${cols},1fr);">${groupImages.map(img => {
-                    return `<img src="/uploads/${img.filename}" alt="${img.filename}">`;
+                    const imgHtml = `<img src="/uploads/${img.filename}" alt="${img.filename}">`;
+                    return makeBevelHtml(imgHtml, groupBevel, matColor);
                 }).join('')}</div>`;
             }
         }
@@ -1331,9 +1462,35 @@
             const groupImages = (group.images || []).map(f => images.find(i => i.filename === f)).filter(Boolean);
             const scales = group.scales || {};
             const count = groupImages.length;
+            const currentFinish = group.mat_finish || '';
+            const currentBevel = group.bevel_width ?? '';
 
             previewControlsTitle.textContent = `Group (${count} images)`;
-            previewControlsBody.innerHTML = groupImages.map((img, idx) => `
+
+            const groupSettingsHtml = `
+                <div class="group-edit-item" style="flex-wrap:wrap;gap:12px;padding-bottom:12px;margin-bottom:8px;border-bottom:1px solid rgba(255,255,255,0.1);">
+                    <div style="display:flex;align-items:center;gap:8px;flex:1;min-width:150px;">
+                        <label style="font-size:0.8rem;color:#aaa;white-space:nowrap;">Finish:</label>
+                        <select style="flex:1;padding:6px;border:1px solid rgba(255,255,255,0.1);border-radius:6px;background:rgba(0,0,0,0.3);color:#e0e0e0;font-size:0.8rem;"
+                                onchange="updateGroupField('${groupId}','mat_finish',this.value||null)">
+                            <option value="" ${!currentFinish ? 'selected' : ''}>Default</option>
+                            <option value="flat" ${currentFinish==='flat' ? 'selected' : ''}>Flat</option>
+                            <option value="linen" ${currentFinish==='linen' ? 'selected' : ''}>Linen</option>
+                            <option value="suede" ${currentFinish==='suede' ? 'selected' : ''}>Suede</option>
+                            <option value="silk" ${currentFinish==='silk' ? 'selected' : ''}>Silk</option>
+                        </select>
+                    </div>
+                    <div style="display:flex;align-items:center;gap:8px;flex:1;min-width:150px;">
+                        <label style="font-size:0.8rem;color:#aaa;white-space:nowrap;">Bevel: <span id="group-bevel-val">${currentBevel !== '' ? currentBevel + 'px' : 'Default'}</span></label>
+                        <input type="range" min="-1" max="16" step="1" value="${currentBevel !== '' ? currentBevel : -1}"
+                               style="flex:1;accent-color:#00d4ff;"
+                               oninput="this.previousElementSibling.querySelector('span').textContent = this.value == -1 ? 'Default' : this.value + 'px'; previewGroupBevel('${groupId}', this.value)"
+                               onchange="updateGroupField('${groupId}','bevel_width',this.value == -1 ? null : parseInt(this.value))">
+                    </div>
+                </div>
+            `;
+
+            const imageControlsHtml = groupImages.map((img, idx) => `
                 <div class="group-edit-item">
                     <img class="group-edit-thumb" src="/uploads/${img.filename}" alt="${img.filename}">
                     <div class="group-edit-controls">
@@ -1347,6 +1504,8 @@
                     </div>
                 </div>
             `).join('');
+
+            previewControlsBody.innerHTML = groupSettingsHtml + imageControlsHtml;
         }
 
         function refreshPreview() {
@@ -1489,7 +1648,7 @@
                     if (img) img.mat_color = color;
                     // Update preview if this image is being previewed
                     if (previewFilename === filename) {
-                        matPreview.style.backgroundColor = color;
+                        renderSinglePreviewImage(filename);
                     }
                     showStatus('Mat color updated', 'success');
                 }
@@ -1707,10 +1866,40 @@
             }
         }
 
+        async function updateGroupField(groupId, field, value) {
+            const group = groups[groupId];
+            if (!group) return;
+            group[field] = value;
+
+            try {
+                await fetch(`/api/groups/${groupId}`, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ [field]: value })
+                });
+                renderGroupPreviewImage(groupId);
+                showStatus(`Group ${field.replace('_', ' ')} updated`, 'success');
+            } catch (err) {
+                showStatus(`Failed to update group ${field}`, 'error');
+            }
+        }
+
+        function previewGroupBevel(groupId, val) {
+            const group = groups[groupId];
+            if (!group) return;
+            // Temporarily set for preview
+            const origBevel = group.bevel_width;
+            group.bevel_width = val == -1 ? undefined : parseInt(val);
+            renderGroupPreviewImage(groupId);
+            group.bevel_width = origBevel;
+        }
+
         // ===== Settings =====
         function saveSettings() {
             const settings = {
                 mat_color: matColorInput.value,
+                mat_finish: matFinishSelect.value,
+                bevel_width: parseInt(bevelWidthInput.value),
                 slideshow_interval: parseInt(slideshowIntervalInput.value),
                 transition_duration: parseFloat(transitionDurationInput.value),
                 fit_mode: fitModeSelect.value,
@@ -1725,9 +1914,15 @@
             });
 
             updateColorPresets();
+            updatePreviewTexture();
         }
 
         matColorInput.addEventListener('input', saveSettings);
+        matFinishSelect.addEventListener('change', saveSettings);
+        bevelWidthInput.addEventListener('input', () => {
+            bevelValueLabel.textContent = bevelWidthInput.value + 'px';
+            saveSettings();
+        });
         slideshowIntervalInput.addEventListener('change', saveSettings);
         transitionDurationInput.addEventListener('change', saveSettings);
         fitModeSelect.addEventListener('change', saveSettings);
@@ -1748,6 +1943,64 @@
             });
         }
         updateColorPresets();
+
+        // ===== Per-image Field Updates =====
+        async function updateImageField(filename, field, value) {
+            const img = images.find(i => i.filename === filename);
+            if (img) img[field] = value;
+
+            try {
+                await fetch(`/api/gallery/${filename}`, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ [field]: value })
+                });
+                // Re-render preview
+                if (previewFilename === filename) renderSinglePreviewImage(filename);
+                showStatus(`${field.replace('_', ' ')} updated`, 'success');
+            } catch (err) {
+                showStatus(`Failed to update ${field}`, 'error');
+            }
+        }
+
+        function previewSingleBevel(filename, val) {
+            const img = images.find(i => i.filename === filename);
+            if (!img) return;
+            const bw = val == -1 ? parseInt(bevelWidthInput.value) : parseInt(val);
+            const matColor = img.mat_color || matColorInput.value;
+            const imgHtml = `<img src="/uploads/${filename}" alt="${filename}" style="max-width:90%;max-height:90%;object-fit:contain;">`;
+            previewContent.innerHTML = makeBevelHtml(imgHtml, bw, matColor);
+        }
+
+        // ===== Bevel + Texture Helpers =====
+        function getBevelColors(matHex) {
+            let hex = matHex.replace('#', '');
+            if (hex.length === 3) hex = hex[0]+hex[0]+hex[1]+hex[1]+hex[2]+hex[2];
+            const r = parseInt(hex.substring(0, 2), 16);
+            const g = parseInt(hex.substring(2, 4), 16);
+            const b = parseInt(hex.substring(4, 6), 16);
+            const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+            const lightAlpha = luminance < 0.5 ? 0.20 : 0.12;
+            const darkAlpha = luminance < 0.5 ? 0.30 : 0.35;
+            return {
+                light: `rgba(255,255,255,${lightAlpha})`,
+                dark: `rgba(0,0,0,${darkAlpha})`
+            };
+        }
+
+        function makeBevelHtml(innerHtml, bevelWidth, matColor) {
+            if (!bevelWidth || bevelWidth <= 0) return innerHtml;
+            const colors = getBevelColors(matColor);
+            return `<div class="mat-bevel" style="--bevel-w:${bevelWidth}px;--bevel-light:${colors.light};--bevel-dark:${colors.dark}">${innerHtml}</div>`;
+        }
+
+        function updatePreviewTexture() {
+            const finish = matFinishSelect.value;
+            matPreview.classList.remove('mat-linen', 'mat-suede', 'mat-silk');
+            if (finish !== 'flat') {
+                matPreview.classList.add('mat-' + finish);
+            }
+        }
 
         // ===== Status Messages =====
         function showStatus(message, type) {
