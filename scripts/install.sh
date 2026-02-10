@@ -266,6 +266,7 @@ unclutter -idle 0.5 -root &
     --start-fullscreen \\
     --autoplay-policy=no-user-gesture-required \\
     --check-for-update-interval=31536000 \\
+    --password-store=basic \\
     --ignore-certificate-errors \\
     "\$DISPLAY_URL"
 KIOSKEOF
