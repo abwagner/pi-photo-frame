@@ -24,7 +24,7 @@ services:
     #       memory: 256M
 
   caddy:
-    image: caddy:2-alpine
+    build: ./caddy
     container_name: pi-photo-frame-caddy
     restart: unless-stopped
     ports:
@@ -34,6 +34,9 @@ services:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
       - caddy_config:/config
+    env_file:
+      - path: .env
+        required: false
     depends_on:
       - photo-frame
 
