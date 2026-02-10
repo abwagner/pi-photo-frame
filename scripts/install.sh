@@ -80,6 +80,114 @@ allow_privileged_ports() {
     sudo sysctl -p /etc/sysctl.d/allow-privileged-ports.conf > /dev/null
 }
 
+# ---------- HTTPS / TLS ----------
+
+CONFIGURED_DOMAIN=""
+
+setup_https() {
+    echo ""
+    echo "  HTTPS mode:"
+    echo "    1) Self-signed certificate (default — works immediately, browser warning)"
+    echo "    2) Let's Encrypt via Cloudflare (trusted cert, requires domain + API token)"
+    echo "    3) Let's Encrypt via DuckDNS   (trusted cert, free subdomain)"
+    echo ""
+    read -rp "Choose HTTPS mode [1/2/3]: " https_mode
+
+    case "$https_mode" in
+        2) setup_letsencrypt_cloudflare ;;
+        3) setup_letsencrypt_duckdns ;;
+        *) info "Using self-signed certificates (default)." ;;
+    esac
+}
+
+setup_letsencrypt_cloudflare() {
+    echo ""
+    read -rp "  Domain name (e.g. photos.example.com): " domain
+    if [[ -z "$domain" ]]; then
+        warn "No domain entered. Falling back to self-signed."
+        return 0
+    fi
+
+    read -rp "  Cloudflare API token: " cf_token
+    if [[ -z "$cf_token" ]]; then
+        warn "No token entered. Falling back to self-signed."
+        return 0
+    fi
+
+    # Write .env
+    cat > "$PROJECT_DIR/.env" <<EOF
+DOMAIN=$domain
+CLOUDFLARE_API_TOKEN=$cf_token
+EOF
+    info "Saved Cloudflare credentials to .env"
+
+    # Write Caddyfile for Let's Encrypt + localhost fallback
+    cat > "$PROJECT_DIR/Caddyfile" <<EOF
+$domain {
+    tls {
+        dns cloudflare {env.CLOUDFLARE_API_TOKEN}
+    }
+    reverse_proxy photo-frame:5000
+}
+
+localhost {
+    tls internal
+    reverse_proxy photo-frame:5000
+}
+
+http:// {
+    redir https://{host}{uri} permanent
+}
+EOF
+    info "Caddyfile configured for Let's Encrypt (Cloudflare DNS)."
+    CONFIGURED_DOMAIN="$domain"
+}
+
+setup_letsencrypt_duckdns() {
+    echo ""
+    read -rp "  DuckDNS subdomain (e.g. myframe — becomes myframe.duckdns.org): " subdomain
+    if [[ -z "$subdomain" ]]; then
+        warn "No subdomain entered. Falling back to self-signed."
+        return 0
+    fi
+
+    local domain="${subdomain}.duckdns.org"
+
+    read -rp "  DuckDNS token: " duck_token
+    if [[ -z "$duck_token" ]]; then
+        warn "No token entered. Falling back to self-signed."
+        return 0
+    fi
+
+    # Write .env
+    cat > "$PROJECT_DIR/.env" <<EOF
+DOMAIN=$domain
+DUCKDNS_TOKEN=$duck_token
+EOF
+    info "Saved DuckDNS credentials to .env"
+
+    # Write Caddyfile for Let's Encrypt + localhost fallback
+    cat > "$PROJECT_DIR/Caddyfile" <<EOF
+$domain {
+    tls {
+        dns duckdns {env.DUCKDNS_TOKEN}
+    }
+    reverse_proxy photo-frame:5000
+}
+
+localhost {
+    tls internal
+    reverse_proxy photo-frame:5000
+}
+
+http:// {
+    redir https://{host}{uri} permanent
+}
+EOF
+    info "Caddyfile configured for Let's Encrypt (DuckDNS)."
+    CONFIGURED_DOMAIN="$domain"
+}
+
 # ---------- Build & start ----------
 
 start_services() {
@@ -256,6 +364,7 @@ main() {
     install_docker
     enable_docker_on_boot
     allow_privileged_ports
+    setup_https
     start_services
     setup_kiosk
     setup_cec
@@ -269,13 +378,25 @@ main() {
     echo "======================================"
     info "Setup complete!"
     echo ""
-    echo "  Upload photos at:"
-    echo "    https://${ip}/upload"
-    echo ""
-    echo "  Display URL (for other screens):"
-    echo "    https://${ip}/display"
-    echo ""
-    echo "  (Self-signed certificate — browser will show a warning)"
+    if [[ -n "$CONFIGURED_DOMAIN" ]]; then
+        echo "  Upload photos at:"
+        echo "    https://${CONFIGURED_DOMAIN}/upload"
+        echo ""
+        echo "  Display URL (for other screens):"
+        echo "    https://${CONFIGURED_DOMAIN}/display"
+        echo ""
+        echo "  Trusted Let's Encrypt certificate — no browser warnings!"
+        echo "  (Make sure your DNS points ${CONFIGURED_DOMAIN} to ${ip})"
+    else
+        echo "  Upload photos at:"
+        echo "    https://${ip}/upload"
+        echo ""
+        echo "  Display URL (for other screens):"
+        echo "    https://${ip}/display"
+        echo ""
+        echo "  (Self-signed certificate — browser will show a warning)"
+        echo "  To switch to trusted certs later, run: ./scripts/install.sh"
+    fi
     echo ""
     echo "  Default login:  admin / password"
     echo "  You will be prompted to change the password on first login."
