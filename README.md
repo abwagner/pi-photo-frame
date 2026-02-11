@@ -237,6 +237,44 @@ If you prefer to configure manually instead of using the install script:
 2. The install script generates the appropriate `Caddyfile`, or you can edit it directly
 3. Run `docker compose up -d --build` to apply changes
 
+## Port Forwarding & LAN Access
+
+If you're using Let's Encrypt with a domain (Cloudflare or DuckDNS), you'll need to configure your router so external traffic reaches the Pi.
+
+### Port Forwarding
+
+Forward these ports on your router to the Pi's local IP:
+
+| Protocol | External Port | Internal Port | Destination |
+|----------|--------------|---------------|-------------|
+| TCP | 80 | 80 | Pi's local IP (e.g., `192.168.1.68`) |
+| TCP | 443 | 443 | Pi's local IP |
+
+The exact steps vary by router. Generally: log into your router's admin page, find **Port Forwarding** (sometimes under Firewall or NAT), and create rules for ports 80 and 443 pointing to the Pi.
+
+### DHCP Reservation
+
+Port forwarding rules target a specific local IP. If the Pi's IP changes (DHCP lease renewal), the rules break. Set up a **DHCP reservation** (also called a static lease) in your router to permanently assign the Pi's current IP to its MAC address. This is usually found near the DHCP settings in your router's admin page.
+
+### Accessing from Inside Your LAN
+
+The Pi itself accesses the frame via `localhost` (the kiosk uses this automatically). For other devices on your local network, some routers support **hairpin NAT** and the domain will work from inside the LAN too. If your router doesn't, you have a few options:
+
+1. **By hostname** — If your system runs Avahi/mDNS (default on Raspberry Pi OS), use `https://<hostname>.local` (e.g., `https://raspberrypi.local`) from other devices on the LAN.
+
+2. **Via Tailscale** — If Tailscale is installed, use the Tailscale IP (e.g., `https://100.x.x.x`) from any device on your Tailnet, regardless of network.
+
+3. **By local IP** — Access `https://192.168.1.68` (your Pi's IP). This requires adding the IP to the Caddyfile's localhost block:
+
+   ```
+   localhost, 192.168.1.68 {
+       tls internal
+       reverse_proxy photo-frame:5000
+   }
+   ```
+
+   Then restart Caddy: `docker compose restart caddy`. This uses a self-signed certificate (accept the browser warning once).
+
 ## Remote Access (Tailscale)
 
 [Tailscale](https://tailscale.com) creates a secure mesh VPN so you can access your photo frame from anywhere without opening ports on your router.
