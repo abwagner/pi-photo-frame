@@ -263,20 +263,24 @@ xset -dpms
 # Hide mouse cursor
 unclutter -idle 0.5 -root &
 
-# Start Chromium in kiosk mode
-\$CHROMIUM \\
-    --kiosk \\
-    --noerrdialogs \\
-    --disable-infobars \\
-    --disable-session-crashed-bubble \\
-    --disable-translate \\
-    --no-first-run \\
-    --start-fullscreen \\
-    --autoplay-policy=no-user-gesture-required \\
-    --check-for-update-interval=31536000 \\
-    --ignore-certificate-errors \\
-    --password-store=basic \\
-    "\$DISPLAY_URL"
+# Start Chromium in kiosk mode (restart automatically if it crashes)
+while true; do
+    \$CHROMIUM \\
+        --kiosk \\
+        --noerrdialogs \\
+        --disable-infobars \\
+        --disable-session-crashed-bubble \\
+        --disable-translate \\
+        --no-first-run \\
+        --start-fullscreen \\
+        --autoplay-policy=no-user-gesture-required \\
+        --check-for-update-interval=31536000 \\
+        --ignore-certificate-errors \\
+        --password-store=basic \\
+        "\$DISPLAY_URL"
+    echo "Chromium exited, restarting in 3 seconds..."
+    sleep 3
+done
 KIOSKEOF
     chmod +x "$PROJECT_DIR/start_kiosk.sh"
 

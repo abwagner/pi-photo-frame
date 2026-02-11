@@ -1731,7 +1731,7 @@
                         <input type="range" min="-1" max="16" step="1" value="${currentBevel !== '' ? currentBevel : -1}"
                                style="flex:1;accent-color:#00d4ff;"
                                oninput="this.previousElementSibling.querySelector('span').textContent = this.value == -1 ? 'Default' : this.value + 'px'; previewSingleBevel('${escAttr(filename)}', this.value)"
-                               onchange="updateImageField('${escAttr(filename)}','bevel_width',this.value == -1 ? null : parseInt(this.value))">`
+                               onchange="updateImageField('${escAttr(filename)}','bevel_width',this.value == -1 ? null : parseInt(this.value))">
                     </div>
                 </div>
             `;
