@@ -205,14 +205,12 @@
             opacity: 0;
             transition: opacity 0.3s;
             z-index: 200;
+            pointer-events: none;
         }
 
-        body:hover .controls {
+        .controls.visible {
             opacity: 1;
-        }
-
-        body:hover {
-            cursor: default;
+            pointer-events: auto;
         }
 
         .control-btn {
@@ -649,6 +647,23 @@
 
             return { vertical: vPadding, horizontal: hPadding };
         }
+
+        // Show controls on mouse move, auto-hide after 3 seconds
+        (function() {
+            const controls = document.querySelector('.controls');
+            let hideTimer = null;
+            document.addEventListener('mousemove', () => {
+                controls.classList.add('visible');
+                document.body.style.cursor = 'default';
+                clearTimeout(hideTimer);
+                hideTimer = setTimeout(() => {
+                    controls.classList.remove('visible');
+                    document.body.style.cursor = 'none';
+                }, 3000);
+            });
+            // Hide cursor initially
+            document.body.style.cursor = 'none';
+        })();
 
         // Keyboard controls
         document.addEventListener('keydown', (e) => {

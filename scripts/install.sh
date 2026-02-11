@@ -306,15 +306,30 @@ setup_cec() {
         return 0
     fi
 
+    # Check if CEC device exists
+    if [ ! -e /dev/cec0 ]; then
+        warn "No CEC device found at /dev/cec0."
+        warn "Ensure your Pi is connected via HDMI and CEC is enabled."
+        warn "You may need to add 'hdmi_force_hotplug=1' to /boot/config.txt and reboot."
+        return 0
+    fi
+
     info "Installing cec-utils on host (for testing)..."
     sudo apt-get update -qq
     sudo apt-get install -y -qq cec-utils
 
-    # Enable CEC device passthrough in docker-compose.yml
+    # Get the GID of the CEC device (usually 'video' group, GID 44)
+    local cec_gid
+    cec_gid=$(stat -c %g /dev/cec0 2>/dev/null || echo "44")
+    info "CEC device group GID: $cec_gid"
+
+    # Enable CEC device passthrough + group access in docker-compose.yml
     if [ -f "$PROJECT_DIR/docker-compose.yml" ]; then
         info "Enabling CEC device passthrough in docker-compose.yml..."
         sed -i 's/# devices:/devices:/' "$PROJECT_DIR/docker-compose.yml"
         sed -i 's/#   - "\/dev\/cec0:\/dev\/cec0"/  - "\/dev\/cec0:\/dev\/cec0"/' "$PROJECT_DIR/docker-compose.yml"
+        sed -i "s/# group_add:/group_add:/" "$PROJECT_DIR/docker-compose.yml"
+        sed -i "s/#   - \"44\"/  - \"$cec_gid\"/" "$PROJECT_DIR/docker-compose.yml"
     fi
 
     # Rebuild with CEC device
