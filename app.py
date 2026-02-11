@@ -11,6 +11,7 @@ import secrets
 import hashlib
 import fcntl
 import re
+import random
 import subprocess
 import threading
 import logging
@@ -1201,6 +1202,11 @@ def api_get_images():
                 'images': [img_lookup[img['filename']]],
                 'mat_color': img.get('mat_color')
             })
+
+    # Server-side shuffle with daily seed so all display clients see the same order
+    if settings.get('shuffle'):
+        daily_seed = datetime.now().strftime('%Y-%m-%d')
+        random.Random(daily_seed).shuffle(slides)
 
     # Backwards compatible: also return flat image list
     filenames = [img['filename'] for img in all_images]

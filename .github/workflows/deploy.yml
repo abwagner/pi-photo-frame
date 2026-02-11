@@ -46,7 +46,12 @@ jobs:
               echo "Deploy deferred: $REASON"
               exit 0
             fi
+            # Preserve local config files that install.sh generates
+            cp Caddyfile /tmp/Caddyfile.deploy.bak 2>/dev/null || true
             git fetch origin main
             git reset --hard origin/main
+            cp /tmp/Caddyfile.deploy.bak Caddyfile 2>/dev/null || true
             docker compose up -d --build
+            # Restart kiosk Chromium to pick up display changes
+            pkill -f 'chromium.*--kiosk' 2>/dev/null || true
             echo "Deploy complete at $(date)"
