@@ -29,11 +29,17 @@ if [ "$CAN_DEPLOY" = "False" ]; then
 fi
 
 info "Pulling latest changes..."
+# Preserve local config files that install.sh generates
+cp Caddyfile /tmp/Caddyfile.deploy.bak 2>/dev/null || true
 git fetch origin main
 git reset --hard origin/main
+cp /tmp/Caddyfile.deploy.bak Caddyfile 2>/dev/null || true
 
 info "Rebuilding and restarting containers..."
 docker compose up -d --build
+
+# Restart kiosk Chromium to pick up display changes
+pkill -f 'chromium.*--kiosk' 2>/dev/null || true
 
 info "Deploy complete."
 docker compose ps

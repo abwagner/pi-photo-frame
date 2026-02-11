@@ -273,14 +273,13 @@
                 applySettings();
 
                 const newSlides = data.slides || [];
-                const shuffled = settings.shuffle ? shuffleArray([...newSlides]) : newSlides;
 
-                // Check if slides changed
-                const newKey = JSON.stringify(shuffled.map(s => s.type === 'group' ? s.group_id : s.images[0]?.filename));
+                // Check if slides changed (server handles shuffle)
+                const newKey = JSON.stringify(newSlides.map(s => s.type === 'group' ? s.group_id : s.images[0]?.filename));
                 const oldKey = JSON.stringify(slides.map(s => s.type === 'group' ? s.group_id : s.images[0]?.filename));
 
                 if (newKey !== oldKey) {
-                    slides = shuffled;
+                    slides = newSlides;
                     currentIndex = 0;
 
                     if (slides.length > 0) {
@@ -316,7 +315,7 @@
                 const newSlides = imgData.slides || [];
 
                 if (newSlides.length !== slides.length) {
-                    slides = settings.shuffle ? shuffleArray([...newSlides]) : newSlides;
+                    slides = newSlides;
                     if (currentIndex >= slides.length) {
                         currentIndex = 0;
                     }
@@ -603,14 +602,6 @@
 
         function togglePause() {
             isPaused = !isPaused;
-        }
-
-        function shuffleArray(array) {
-            for (let i = array.length - 1; i > 0; i--) {
-                const j = Math.floor(Math.random() * (i + 1));
-                [array[i], array[j]] = [array[j], array[i]];
-            }
-            return array;
         }
 
         function calculateMatPadding(imgWidth, imgHeight) {

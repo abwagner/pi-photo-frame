@@ -1,11 +1,5 @@
-{
-	default_sni localhost
-}
-
-https:// {
-	tls internal {
-		on_demand
-	}
+localhost {
+	tls internal
 	reverse_proxy photo-frame:5000
 }
 
