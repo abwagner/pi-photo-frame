@@ -984,7 +984,10 @@ def display_page():
     # 2. Valid token is provided
     # 3. User is authenticated via session
 
-    is_localhost = request.remote_addr in ['127.0.0.1', '::1']
+    # Check remote_addr (direct) and request.host (works behind Docker/Caddy proxy
+    # where remote_addr becomes the Docker bridge IP instead of 127.0.0.1)
+    is_localhost = (request.remote_addr in ['127.0.0.1', '::1']
+                    or request.host.split(':')[0] == 'localhost')
     token = request.args.get('token', '')
     valid_token = token == DISPLAY_TOKEN
 

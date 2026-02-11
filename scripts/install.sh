@@ -244,15 +244,14 @@ for i in {1..60}; do
     sleep 1
 done
 
-# Get the display token (if it exists)
-DISPLAY_TOKEN_FILE="\$(dirname "\$0")/data/.display_token"
+# Get the display token from the Docker container
 DISPLAY_URL="https://localhost/display"
-
-if [ -f "\$DISPLAY_TOKEN_FILE" ]; then
-    TOKEN=\$(cat "\$DISPLAY_TOKEN_FILE" 2>/dev/null)
-    if [ -n "\$TOKEN" ]; then
-        DISPLAY_URL="https://localhost/display?token=\$TOKEN"
-    fi
+TOKEN=\$(docker exec pi-photo-frame cat /app/data/.display_token 2>/dev/null)
+if [ -n "\$TOKEN" ]; then
+    DISPLAY_URL="https://localhost/display?token=\$TOKEN"
+    echo "Display token loaded."
+else
+    echo "Warning: Could not read display token. Display may require login."
 fi
 
 # Disable screen blanking/power management
