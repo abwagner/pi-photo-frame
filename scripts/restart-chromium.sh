@@ -11,18 +11,10 @@ log() {
 }
 
 log "Stopping Chromium processes..."
-pkill -f chromium || true
+# Kill Chromium only (not the start_kiosk.sh loop).
+# The loop in start_kiosk.sh will automatically restart Chromium
+# with a fresh process after a brief pause.
+pkill -f 'chromium.*--kiosk' || true
 sleep 2
 
-# Relaunch kiosk if start_kiosk.sh exists
-KIOSK_SCRIPT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/start_kiosk.sh"
-
-if [ -x "$KIOSK_SCRIPT" ]; then
-    log "Relaunching kiosk via $KIOSK_SCRIPT"
-    export DISPLAY=:0
-    nohup "$KIOSK_SCRIPT" > /dev/null 2>&1 &
-else
-    log "No start_kiosk.sh found, Chromium will not be relaunched"
-fi
-
-log "Done"
+log "Done (kiosk loop will auto-restart Chromium)"
