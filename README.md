@@ -108,13 +108,14 @@ On first login, you'll be redirected to a password change page. You must set a n
 | Upload | `/upload` | Upload photos, adjust settings |
 | Gallery | `/gallery` | Manage photos (show/hide/delete) |
 | Display | `/display` | Fullscreen slideshow for TV |
+| Backup | `/backup` | Dropbox backup management (admin only) |
 | Users | `/admin/users` | User management (admin only) |
 
 ## User Roles
 
 | Role | Permissions |
 |------|-------------|
-| **Admin** | Upload, manage gallery, manage users, change settings |
+| **Admin** | Upload, manage gallery, manage users, change settings, manage backup |
 | **User** | Upload, manage gallery, change own password |
 
 ## Gallery Management
@@ -186,6 +187,29 @@ If you had photos uploaded before duplicate detection was added, run the backfil
 ```
 POST /api/gallery/backfill-hashes  (Admin only)
 ```
+
+## Backup (Dropbox)
+
+The app supports cloud backup of your photos and settings to Dropbox via [rclone](https://rclone.org/).
+
+### Setup
+
+1. Navigate to `/backup` (admin only)
+2. Generate a Dropbox OAuth token and paste it into the configuration form
+3. The app writes an rclone config and verifies the connection
+
+### Features
+
+- **Manual backup/restore** — Run a backup or restore from the `/backup` page
+- **Scheduled backups** — Set a daily backup time (default: 3:00 AM)
+- **Custom path** — Choose the Dropbox folder path for backups
+- **History** — View past backup results on the `/backup` page
+- **Disconnect** — Remove the Dropbox connection at any time
+
+### Requirements
+
+- `rclone` must be installed in the Docker container (included in the Dockerfile)
+- A Dropbox account with an OAuth token
 
 ## Trusted HTTPS (Let's Encrypt)
 
@@ -367,6 +391,7 @@ pi-photo-frame/
     ├── gallery.html
     ├── display.html
     ├── admin_users.html
+    ├── backup.html
     ├── change_password.html
     └── error.html
 ```
@@ -407,6 +432,16 @@ This allows the display to show photos without login while protecting upload/man
 | `/api/cec/test` | POST | Admin | Send test CEC command (on/standby) |
 | `/api/network-info` | GET | Admin | Get local and Tailscale IP addresses |
 | `/api/maintenance-window` | GET | None | Check if deploy is safe (TV off) |
+| `/api/reorder` | POST | User | Reorder images |
+| `/api/display-token` | GET | Admin | Get display access token |
+| `/api/groups` | GET/POST | User | List or create image groups |
+| `/api/groups/<id>` | PATCH/DELETE | User | Update or delete an image group |
+| `/api/backup/status` | GET | Admin | Get backup configuration status |
+| `/api/backup/configure` | POST/DELETE | Admin | Connect or disconnect Dropbox |
+| `/api/backup/run` | POST | Admin | Run a backup now |
+| `/api/backup/restore` | POST | Admin | Restore from backup |
+| `/api/backup/history` | GET | Admin | Get backup history |
+| `/api/backup/settings` | POST | Admin | Update backup schedule/path |
 | `/api/admin/users` | POST | Admin | Create user |
 | `/api/admin/users/<user>` | DELETE | Admin | Delete user |
 | `/api/admin/users/<user>/password` | POST | Admin | Reset password |

@@ -193,6 +193,10 @@ docker compose up -d
 
 ### Backup Data
 
+The app has built-in **Dropbox backup** via the `/backup` page (admin only). See the [Backup section in the README](README.md#backup-dropbox) for setup instructions.
+
+For a manual local backup of Docker volumes:
+
 ```bash
 # Backup uploads and settings
 docker run --rm \

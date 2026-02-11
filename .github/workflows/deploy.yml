@@ -39,7 +39,7 @@ jobs:
           script: |
             cd ~/pi-photo-frame
             # Check maintenance window (skip deploy if TV is on)
-            MW=$(curl -sf http://localhost:5000/api/maintenance-window 2>/dev/null || echo '{}')
+            MW=$(curl -skf https://localhost/api/maintenance-window 2>/dev/null || echo '{}')
             CAN_DEPLOY=$(echo "$MW" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('can_deploy',True))" 2>/dev/null || echo "True")
             if [ "$CAN_DEPLOY" = "False" ]; then
               REASON=$(echo "$MW" | python3 -c "import sys,json; print(json.load(sys.stdin).get('reason',''))" 2>/dev/null)
