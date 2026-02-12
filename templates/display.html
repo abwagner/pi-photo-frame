@@ -3,6 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, height=device-height, initial-scale=1.0">
+    <meta name="csrf-token" content="{{ csrf_token() }}">
     <title>Photo Frame Display</title>
     <style>
         * {
@@ -88,11 +89,12 @@
             position: relative;
             display: inline-flex;
             line-height: 0;
+            overflow: hidden;
             padding: var(--bevel-w, 4px);
-            /* Light from above: top bevel face is in shadow (underside of overhang), bottom is lit */
-            background: linear-gradient(to bottom, var(--bevel-dark, rgba(0,0,0,0.12)), var(--bevel-light, rgba(255,255,255,0.08)));
+            /* Light from above: top face shadowed, bottom face lit */
+            background: linear-gradient(to bottom, var(--bevel-dark, rgba(0,0,0,0.10)), var(--bevel-light, rgba(255,255,255,0.04)));
         }
-        /* Shadow cast by top bevel onto the image */
+        /* Subtle shadow cast by top bevel onto the image */
         .mat-bevel::after {
             content: '';
             position: absolute;
@@ -102,7 +104,7 @@
             bottom: var(--bevel-w, 4px);
             pointer-events: none;
             z-index: 3;
-            box-shadow: inset 0 1px calc(var(--bevel-w, 4px) * 0.75) rgba(0,0,0,0.15);
+            box-shadow: inset 0 1px 2px rgba(0,0,0,0.10);
         }
         .mat-bevel img {
             box-shadow: none;
@@ -617,11 +619,16 @@
             loadingEl.style.display = 'block';
         }
 
+        const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+
         async function sendControl(action) {
             try {
                 const resp = await fetch('/api/display/control', {
                     method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': csrfToken
+                    },
                     body: JSON.stringify({action})
                 });
                 if (resp.ok) {
@@ -630,9 +637,11 @@
                     currentIndex = state.index;
                     isPaused = state.paused;
                     showSlide(currentIndex);
+                } else {
+                    console.error('Control API returned', resp.status, await resp.text());
                 }
             } catch (err) {
-                console.error('Control failed:', err);
+                console.error('Control fetch failed:', err);
             }
         }
 
