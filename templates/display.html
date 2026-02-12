@@ -84,22 +84,16 @@
             object-fit: cover;
         }
 
-        /* Mat bevel - 45-degree V-groove effect */
+        /* Mat bevel - 45-degree V-groove cut on the mat's inner edge */
         .mat-bevel {
             position: relative;
             display: inline-flex;
             line-height: 0;
             box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
-        }
-        .mat-bevel::after {
-            content: '';
-            position: absolute;
-            inset: 0;
-            box-shadow:
-                inset var(--bevel-w, 4px) var(--bevel-w, 4px) 0 var(--bevel-light, rgba(255,255,255,0.15)),
-                inset calc(-1 * var(--bevel-w, 4px)) calc(-1 * var(--bevel-w, 4px)) 0 var(--bevel-dark, rgba(0,0,0,0.25));
-            pointer-events: none;
-            z-index: 1;
+            /* Padding creates the bevel zone between mat and image */
+            padding: var(--bevel-w, 4px);
+            /* Gradient simulates the 45-degree angled cut catching light */
+            background: linear-gradient(135deg, var(--bevel-light, rgba(255,255,255,0.15)), var(--bevel-dark, rgba(0,0,0,0.25)));
         }
         .mat-bevel img {
             box-shadow: none;
@@ -251,7 +245,7 @@
         let settings = {};
         let currentIndex = 0;
         let isPaused = false;
-        let slideshowTimer = null;
+        let lastServerIndex = -1;
         let currentSlideEl = null;
         let previousSlideEl = null;
 
@@ -261,7 +255,10 @@
         // Initial load
         loadData();
 
-        // Poll for updates every 5 seconds
+        // Poll server for slideshow state every 1 second
+        setInterval(pollDisplayState, 1000);
+
+        // Poll for slide list / settings changes every 5 seconds
         setInterval(checkForUpdates, 5000);
 
         async function loadData() {
@@ -272,27 +269,38 @@
                 settings = data.settings;
                 applySettings();
 
-                const newSlides = data.slides || [];
+                slides = data.slides || [];
 
-                // Check if slides changed (server handles shuffle)
-                const newKey = JSON.stringify(newSlides.map(s => s.type === 'group' ? s.group_id : s.images[0]?.filename));
-                const oldKey = JSON.stringify(slides.map(s => s.type === 'group' ? s.group_id : s.images[0]?.filename));
-
-                if (newKey !== oldKey) {
-                    slides = newSlides;
-                    currentIndex = 0;
-
-                    if (slides.length > 0) {
-                        loadingEl.style.display = 'none';
-                        showSlide(currentIndex);
-                        startSlideshow();
-                    } else {
-                        showNoImages();
-                    }
+                if (slides.length > 0) {
+                    loadingEl.style.display = 'none';
+                    // Get initial index from server state
+                    const stateResp = await fetch('/api/display/state');
+                    const state = await stateResp.json();
+                    currentIndex = state.index;
+                    lastServerIndex = state.index;
+                    isPaused = state.paused;
+                    showSlide(currentIndex);
+                } else {
+                    showNoImages();
                 }
             } catch (err) {
                 console.error('Failed to load data:', err);
                 loadingEl.innerHTML = '<div class="no-images"><h2>Connection Error</h2><p>Unable to connect to server</p></div>';
+            }
+        }
+
+        async function pollDisplayState() {
+            try {
+                const resp = await fetch('/api/display/state');
+                const state = await resp.json();
+                isPaused = state.paused;
+                if (state.index !== lastServerIndex && state.total > 0) {
+                    lastServerIndex = state.index;
+                    currentIndex = state.index;
+                    showSlide(currentIndex);
+                }
+            } catch (err) {
+                // Silent — will retry on next poll
             }
         }
 
@@ -304,25 +312,21 @@
                 if (JSON.stringify(newSettings) !== JSON.stringify(settings)) {
                     settings = newSettings;
                     applySettings();
-                    if (!isPaused) {
-                        startSlideshow();
-                    }
                 }
 
-                // Check for slide changes
+                // Check for slide list changes (new uploads, deletes, reorder)
                 const imgResponse = await fetch('/api/images');
                 const imgData = await imgResponse.json();
                 const newSlides = imgData.slides || [];
 
-                if (newSlides.length !== slides.length) {
+                const newKey = JSON.stringify(newSlides.map(s => s.type === 'group' ? s.group_id : s.images[0]?.filename));
+                const oldKey = JSON.stringify(slides.map(s => s.type === 'group' ? s.group_id : s.images[0]?.filename));
+
+                if (newKey !== oldKey) {
                     slides = newSlides;
-                    if (currentIndex >= slides.length) {
-                        currentIndex = 0;
-                    }
                     if (slides.length > 0 && loadingEl.style.display !== 'none') {
                         loadingEl.style.display = 'none';
                         showSlide(currentIndex);
-                        startSlideshow();
                     } else if (slides.length === 0) {
                         showNoImages();
                     }
@@ -576,33 +580,21 @@
             loadingEl.style.display = 'block';
         }
 
-        function startSlideshow() {
-            if (slideshowTimer) {
-                clearInterval(slideshowTimer);
+        async function sendControl(action) {
+            try {
+                await fetch('/api/display/control', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({action})
+                });
+            } catch (err) {
+                console.error('Control failed:', err);
             }
-
-            if (slides.length <= 1) return;
-
-            slideshowTimer = setInterval(() => {
-                if (!isPaused) {
-                    nextSlide();
-                }
-            }, settings.slideshow_interval * 1000);
         }
 
-        function nextSlide() {
-            currentIndex = (currentIndex + 1) % slides.length;
-            showSlide(currentIndex);
-        }
-
-        function previousSlide() {
-            currentIndex = (currentIndex - 1 + slides.length) % slides.length;
-            showSlide(currentIndex);
-        }
-
-        function togglePause() {
-            isPaused = !isPaused;
-        }
+        function nextSlide() { sendControl('next'); }
+        function previousSlide() { sendControl('prev'); }
+        function togglePause() { sendControl(isPaused ? 'play' : 'pause'); }
 
         function calculateMatPadding(imgWidth, imgHeight) {
             if (!imgWidth || !imgHeight) {

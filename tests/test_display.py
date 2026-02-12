@@ -1,7 +1,8 @@
-"""Tests for display page, display token, uploads serving, reorder, settings edge cases, 413, and auth edge cases."""
+"""Tests for display page, display token, display control, uploads serving, reorder, settings edge cases, 413, and auth edge cases."""
 
 import json
 import hashlib
+import time
 from unittest.mock import patch
 
 import sys
@@ -223,3 +224,108 @@ class TestAuthEdgeCases:
         """verify_user returns False for nonexistent user."""
         photo_app.load_users()
         assert photo_app.verify_user('nobody', 'pass') is False
+
+
+# ===== Display Control API =====
+
+class TestDisplayControl:
+    """Tests for /api/display/state and /api/display/control."""
+
+    def _upload_images(self, auth_client, count=3):
+        """Upload test images so slides exist."""
+        for i in range(count):
+            buf = make_test_image(100, 100, ['red', 'blue', 'green'][i % 3])
+            auth_client.post('/api/upload',
+                             data={'files': (buf, f'img{i}.png')},
+                             content_type='multipart/form-data')
+
+    def test_get_state_returns_structure(self, client, app):
+        """GET /api/display/state returns index, paused, and total."""
+        resp = client.get('/api/display/state')
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert 'index' in data
+        assert 'paused' in data
+        assert 'total' in data
+
+    def test_get_state_no_auth_required(self, client, app):
+        """GET /api/display/state works without auth."""
+        resp = client.get('/api/display/state')
+        assert resp.status_code == 200
+
+    def test_control_requires_auth(self, client, app):
+        """POST /api/display/control without auth returns 401."""
+        resp = client.post('/api/display/control',
+                           json={'action': 'next'},
+                           content_type='application/json')
+        assert resp.status_code == 401
+
+    def test_control_invalid_action(self, auth_client):
+        """POST /api/display/control with bad action returns 400."""
+        resp = auth_client.post('/api/display/control',
+                                json={'action': 'invalid'},
+                                content_type='application/json')
+        assert resp.status_code == 400
+
+    def test_control_next(self, auth_client):
+        """POST next advances the index."""
+        self._upload_images(auth_client)
+        # Reset state
+        photo_app._display_state['index'] = 0
+        photo_app._display_state['paused'] = True
+        photo_app._display_state['last_advanced_at'] = time.time()
+
+        resp = auth_client.post('/api/display/control',
+                                json={'action': 'next'},
+                                content_type='application/json')
+        assert resp.status_code == 200
+        assert resp.get_json()['index'] == 1
+
+    def test_control_prev(self, auth_client):
+        """POST prev decrements the index."""
+        self._upload_images(auth_client)
+        photo_app._display_state['index'] = 2
+        photo_app._display_state['paused'] = True
+        photo_app._display_state['last_advanced_at'] = time.time()
+
+        resp = auth_client.post('/api/display/control',
+                                json={'action': 'prev'},
+                                content_type='application/json')
+        assert resp.status_code == 200
+        assert resp.get_json()['index'] == 1
+
+    def test_control_pause_play(self, auth_client):
+        """POST pause/play toggles paused state."""
+        self._upload_images(auth_client)
+        photo_app._display_state['index'] = 0
+        photo_app._display_state['paused'] = False
+        photo_app._display_state['last_advanced_at'] = time.time()
+
+        resp = auth_client.post('/api/display/control',
+                                json={'action': 'pause'},
+                                content_type='application/json')
+        assert resp.get_json()['paused'] is True
+
+        resp = auth_client.post('/api/display/control',
+                                json={'action': 'play'},
+                                content_type='application/json')
+        assert resp.get_json()['paused'] is False
+
+    def test_auto_advance(self, auth_client):
+        """After slideshow_interval seconds, index auto-advances."""
+        self._upload_images(auth_client)
+        photo_app._display_state['index'] = 0
+        photo_app._display_state['paused'] = False
+        # Set last_advanced_at to 15 seconds ago (interval is 10s default)
+        photo_app._display_state['last_advanced_at'] = time.time() - 15
+
+        resp = auth_client.get('/api/display/state')
+        data = resp.get_json()
+        assert data['index'] == 1  # Should have auto-advanced by 1
+
+    def test_state_with_no_slides(self, client, app):
+        """State returns index 0 when no slides exist."""
+        resp = client.get('/api/display/state')
+        data = resp.get_json()
+        assert data['index'] == 0
+        assert data['total'] == 0

@@ -119,22 +119,14 @@
             box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
         }
 
-        /* Bevel wrapper in preview */
+        /* Bevel wrapper in preview - 45-degree V-groove on mat inner edge */
         .mat-preview .mat-bevel {
             position: relative;
             display: inline-flex;
             line-height: 0;
             box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
-        }
-        .mat-preview .mat-bevel::after {
-            content: '';
-            position: absolute;
-            inset: 0;
-            box-shadow:
-                inset var(--bevel-w, 4px) var(--bevel-w, 4px) 0 var(--bevel-light, rgba(255,255,255,0.15)),
-                inset calc(-1 * var(--bevel-w, 4px)) calc(-1 * var(--bevel-w, 4px)) 0 var(--bevel-dark, rgba(0,0,0,0.25));
-            pointer-events: none;
-            z-index: 1;
+            padding: var(--bevel-w, 4px);
+            background: linear-gradient(135deg, var(--bevel-light, rgba(255,255,255,0.15)), var(--bevel-dark, rgba(0,0,0,0.25)));
         }
         .mat-preview .mat-bevel img {
             box-shadow: none;

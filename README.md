@@ -434,6 +434,8 @@ This allows the display to show photos without login while protecting upload/man
 | `/api/maintenance-window` | GET | None | Check if deploy is safe (TV off) |
 | `/api/reorder` | POST | User | Reorder images |
 | `/api/display-token` | GET | Admin | Get display access token |
+| `/api/display/state` | GET | None | Get current slideshow state (index, paused) |
+| `/api/display/control` | POST | User | Control slideshow (next, prev, pause, play) |
 | `/api/groups` | GET/POST | User | List or create image groups |
 | `/api/groups/<id>` | PATCH/DELETE | User | Update or delete an image group |
 | `/api/backup/status` | GET | Admin | Get backup configuration status |
