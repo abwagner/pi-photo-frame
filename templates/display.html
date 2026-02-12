@@ -84,16 +84,39 @@
             object-fit: cover;
         }
 
-        /* Mat bevel - 45-degree V-groove cut on the mat's inner edge */
+        /* Mat bevel - V-groove cut, lit from above */
         .mat-bevel {
             position: relative;
             display: inline-flex;
             line-height: 0;
-            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
-            /* Padding creates the bevel zone between mat and image */
             padding: var(--bevel-w, 4px);
-            /* Gradient simulates the 45-degree angled cut catching light */
-            background: linear-gradient(135deg, var(--bevel-light, rgba(255,255,255,0.15)), var(--bevel-dark, rgba(0,0,0,0.25)));
+            /* Top-lit gradient: light on top edge, shadow on bottom edge */
+            background: linear-gradient(to bottom, var(--bevel-light, rgba(255,255,255,0.15)), var(--bevel-dark, rgba(0,0,0,0.25)));
+        }
+        /* Mitered corner lines where bevel cuts meet */
+        .mat-bevel::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+            z-index: 2;
+            background:
+                linear-gradient(45deg, rgba(0,0,0,0.15) 0%, rgba(0,0,0,0.15) 50%, transparent 50%) no-repeat top left / var(--bevel-w, 4px) var(--bevel-w, 4px),
+                linear-gradient(-45deg, rgba(0,0,0,0.15) 0%, rgba(0,0,0,0.15) 50%, transparent 50%) no-repeat top right / var(--bevel-w, 4px) var(--bevel-w, 4px),
+                linear-gradient(135deg, rgba(0,0,0,0.15) 0%, rgba(0,0,0,0.15) 50%, transparent 50%) no-repeat bottom left / var(--bevel-w, 4px) var(--bevel-w, 4px),
+                linear-gradient(-135deg, rgba(0,0,0,0.15) 0%, rgba(0,0,0,0.15) 50%, transparent 50%) no-repeat bottom right / var(--bevel-w, 4px) var(--bevel-w, 4px);
+        }
+        /* Shadow cast by bevel onto the image (top edge) */
+        .mat-bevel::after {
+            content: '';
+            position: absolute;
+            top: var(--bevel-w, 4px);
+            left: var(--bevel-w, 4px);
+            right: var(--bevel-w, 4px);
+            bottom: var(--bevel-w, 4px);
+            pointer-events: none;
+            z-index: 3;
+            box-shadow: inset 0 2px calc(var(--bevel-w, 4px) * 1) rgba(0,0,0,0.25);
         }
         .mat-bevel img {
             box-shadow: none;
@@ -582,19 +605,42 @@
 
         async function sendControl(action) {
             try {
-                await fetch('/api/display/control', {
+                const resp = await fetch('/api/display/control', {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({action})
                 });
+                if (resp.ok) {
+                    const state = await resp.json();
+                    lastServerIndex = state.index;
+                    currentIndex = state.index;
+                    isPaused = state.paused;
+                    showSlide(currentIndex);
+                }
             } catch (err) {
                 console.error('Control failed:', err);
             }
         }
 
-        function nextSlide() { sendControl('next'); }
-        function previousSlide() { sendControl('prev'); }
-        function togglePause() { sendControl(isPaused ? 'play' : 'pause'); }
+        function nextSlide() {
+            // Optimistic local update + server call
+            if (slides.length > 0) {
+                currentIndex = (currentIndex + 1) % slides.length;
+                showSlide(currentIndex);
+            }
+            sendControl('next');
+        }
+        function previousSlide() {
+            if (slides.length > 0) {
+                currentIndex = (currentIndex - 1 + slides.length) % slides.length;
+                showSlide(currentIndex);
+            }
+            sendControl('prev');
+        }
+        function togglePause() {
+            isPaused = !isPaused;
+            sendControl(isPaused ? 'pause' : 'play');
+        }
 
         function calculateMatPadding(imgWidth, imgHeight) {
             if (!imgWidth || !imgHeight) {
