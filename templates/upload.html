@@ -1705,19 +1705,29 @@
             matPreview.classList.remove('mat-linen', 'mat-suede', 'mat-silk');
             if (finish !== 'flat') matPreview.classList.add('mat-' + finish);
 
-            // Compute pixel dimensions so bevel wrapper sizes correctly
+            // Compute pixel dimensions — photo+bevel must fit in frame
             const containerW = previewContent.clientWidth;
             const containerH = previewContent.clientHeight;
-            const maxW = containerW * 0.9 * scale;
-            const maxH = containerH * 0.9 * scale;
+            const bevel2 = (bevelWidth > 0 ? bevelWidth : 0) * 2;
+
+            // Photo ≤ 95% of container; photo+bevel ≤ container
+            const maxPhotoW = Math.min(containerW * 0.95, containerW - bevel2);
+            const maxPhotoH = Math.min(containerH * 0.95, containerH - bevel2);
+
+            // At scale=1 use 90%-bevel as base, scale adjusts, hard-capped at max
+            const baseW = Math.min(containerW * 0.90 - bevel2, maxPhotoW);
+            const baseH = Math.min(containerH * 0.90 - bevel2, maxPhotoH);
+            const scaledW = Math.max(1, Math.min(baseW * scale, maxPhotoW));
+            const scaledH = Math.max(1, Math.min(baseH * scale, maxPhotoH));
+
             const imgRatio = (img.width && img.height) ? img.width / img.height : 4 / 3;
             let displayW, displayH;
-            if (imgRatio > maxW / maxH) {
-                displayW = Math.min(maxW, containerW * 0.95);
-                displayH = displayW / imgRatio;
+            if (imgRatio > scaledW / scaledH) {
+                displayW = scaledW;
+                displayH = scaledW / imgRatio;
             } else {
-                displayH = Math.min(maxH, containerH * 0.95);
-                displayW = displayH * imgRatio;
+                displayH = scaledH;
+                displayW = scaledH * imgRatio;
             }
 
             const imgHtml = `<img src="/uploads/${filename}" alt="${filename}" style="width:${Math.round(displayW)}px;height:${Math.round(displayH)}px;object-fit:contain;">`;
@@ -1821,6 +1831,7 @@
                 // Compute explicit pixel sizes so all images render at the same height (when scale=1)
                 const containerW = matPreview.clientWidth;
                 const containerH = matPreview.clientHeight;
+                const bevel2 = (groupBevel > 0 ? groupBevel : 0) * 2;
 
                 const imgInfos = groupImages.map(img => ({
                     filename: img.filename,
@@ -1834,8 +1845,10 @@
                 // Reserve space for N+1 equal gaps (space-evenly) — each gap ~5% of container
                 const gapFraction = 0.05;
                 const totalGapFraction = gapFraction * (count + 1);
-                const usableW = containerW * (1 - totalGapFraction);
-                const usableH = containerH * 0.85;
+                // Subtract bevel from usable space so photo+bevel fits
+                const totalBevelW = bevel2 * count;
+                const usableW = containerW * (1 - totalGapFraction) - totalBevelW;
+                const usableH = containerH * 0.85 - bevel2;
                 // Base height: largest h such that total width fits and tallest image fits
                 const baseHeight = Math.min(usableH / maxScale, usableW / totalWidthAtUnitHeight);
 
@@ -2412,8 +2425,8 @@
             const g = parseInt(hex.substring(2, 4), 16);
             const b = parseInt(hex.substring(4, 6), 16);
             const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
-            const lightAlpha = luminance < 0.5 ? 0.10 : 0.06;
-            const darkAlpha = luminance < 0.5 ? 0.15 : 0.18;
+            const lightAlpha = luminance < 0.5 ? 0.14 : 0.12;
+            const darkAlpha = luminance < 0.5 ? 0.10 : 0.08;
             return {
                 light: `rgba(255,255,255,${lightAlpha})`,
                 dark: `rgba(0,0,0,${darkAlpha})`
