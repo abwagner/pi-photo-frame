@@ -90,7 +90,7 @@
 
         .mat-preview {
             width: 100%;
-            aspect-ratio: 16/9;
+            aspect-ratio: var(--preview-aspect-ratio, 16/9);
             border-radius: 16px 16px 0 0;
             position: relative;
             overflow: hidden;
@@ -119,14 +119,36 @@
             box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
         }
 
-        /* Bevel wrapper in preview - 45-degree V-groove on mat inner edge */
+        /* Bevel wrapper in preview - V-groove cut, lit from above */
         .mat-preview .mat-bevel {
             position: relative;
             display: inline-flex;
             line-height: 0;
-            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
             padding: var(--bevel-w, 4px);
-            background: linear-gradient(135deg, var(--bevel-light, rgba(255,255,255,0.15)), var(--bevel-dark, rgba(0,0,0,0.25)));
+            background: linear-gradient(to bottom, var(--bevel-light, rgba(255,255,255,0.15)), var(--bevel-dark, rgba(0,0,0,0.25)));
+        }
+        .mat-preview .mat-bevel::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+            z-index: 2;
+            background:
+                linear-gradient(45deg, rgba(0,0,0,0.15) 0%, rgba(0,0,0,0.15) 50%, transparent 50%) no-repeat top left / var(--bevel-w, 4px) var(--bevel-w, 4px),
+                linear-gradient(-45deg, rgba(0,0,0,0.15) 0%, rgba(0,0,0,0.15) 50%, transparent 50%) no-repeat top right / var(--bevel-w, 4px) var(--bevel-w, 4px),
+                linear-gradient(135deg, rgba(0,0,0,0.15) 0%, rgba(0,0,0,0.15) 50%, transparent 50%) no-repeat bottom left / var(--bevel-w, 4px) var(--bevel-w, 4px),
+                linear-gradient(-135deg, rgba(0,0,0,0.15) 0%, rgba(0,0,0,0.15) 50%, transparent 50%) no-repeat bottom right / var(--bevel-w, 4px) var(--bevel-w, 4px);
+        }
+        .mat-preview .mat-bevel::after {
+            content: '';
+            position: absolute;
+            top: var(--bevel-w, 4px);
+            left: var(--bevel-w, 4px);
+            right: var(--bevel-w, 4px);
+            bottom: var(--bevel-w, 4px);
+            pointer-events: none;
+            z-index: 3;
+            box-shadow: inset 0 2px calc(var(--bevel-w, 4px) * 1) rgba(0,0,0,0.25);
         }
         .mat-preview .mat-bevel img {
             box-shadow: none;
@@ -1217,7 +1239,7 @@
                     </div>
 
                     <p style="font-size: 0.75rem; color: #666;">
-                        Override per-image in the preview controls.
+                        Select an image to customize individually.
                     </p>
                 </div>
 
@@ -1355,6 +1377,7 @@
         let previewGroupId = null;
 
         // ===== Initialize =====
+        updatePreviewAspectRatio();
         loadGallery();
 
         // ===== Upload Handling =====
@@ -1675,13 +1698,27 @@
             const bevelWidth = img.bevel_width ?? parseInt(bevelWidthInput.value);
             const finish = img.mat_finish || matFinishSelect.value;
             const scale = img.scale || 1.0;
-            const pct = Math.round(90 * scale);
 
             matPreview.style.backgroundColor = matColor;
             matPreview.classList.remove('mat-linen', 'mat-suede', 'mat-silk');
             if (finish !== 'flat') matPreview.classList.add('mat-' + finish);
 
-            const imgHtml = `<img src="/uploads/${filename}" alt="${filename}" style="max-width:${pct}%;max-height:${pct}%;object-fit:contain;">`;
+            // Compute pixel dimensions so bevel wrapper sizes correctly
+            const containerW = previewContent.clientWidth;
+            const containerH = previewContent.clientHeight;
+            const maxW = containerW * 0.9 * scale;
+            const maxH = containerH * 0.9 * scale;
+            const imgRatio = (img.width && img.height) ? img.width / img.height : 4 / 3;
+            let displayW, displayH;
+            if (imgRatio > maxW / maxH) {
+                displayW = Math.min(maxW, containerW * 0.95);
+                displayH = displayW / imgRatio;
+            } else {
+                displayH = Math.min(maxH, containerH * 0.95);
+                displayW = displayH * imgRatio;
+            }
+
+            const imgHtml = `<img src="/uploads/${filename}" alt="${filename}" style="width:${Math.round(displayW)}px;height:${Math.round(displayH)}px;object-fit:contain;">`;
             previewContent.innerHTML = makeBevelHtml(imgHtml, bevelWidth, matColor);
         }
 
@@ -1695,6 +1732,8 @@
             const currentFinish = img.mat_finish || '';
             const currentBevel = img.bevel_width ?? '';
 
+            const currentMatColor = img.mat_color || matColorInput.value;
+
             previewControlsBody.innerHTML = `
                 <div class="group-edit-item">
                     <img class="group-edit-thumb" src="/uploads/${filename}" alt="${filename}">
@@ -1707,6 +1746,14 @@
                     </div>
                 </div>
                 <div class="group-edit-item" style="flex-wrap:wrap;gap:12px;">
+                    <div style="display:flex;align-items:center;gap:8px;flex:1;min-width:150px;">
+                        <label style="font-size:0.8rem;color:#aaa;white-space:nowrap;">Mat Color:</label>
+                        <input type="color" value="${currentMatColor}"
+                               style="width:32px;height:24px;padding:0;border:1px solid rgba(255,255,255,0.2);border-radius:4px;background:transparent;cursor:pointer;"
+                               onchange="updateMatColor('${escAttr(filename)}', this.value)">
+                        <button style="font-size:0.7rem;padding:2px 6px;border:1px solid rgba(255,255,255,0.1);border-radius:4px;background:rgba(0,0,0,0.3);color:#aaa;cursor:pointer;"
+                                onclick="updateMatColor('${escAttr(filename)}', null); this.previousElementSibling.value=matColorInput.value; renderSinglePreviewImage('${escAttr(filename)}')">Reset</button>
+                    </div>
                     <div style="display:flex;align-items:center;gap:8px;flex:1;min-width:150px;">
                         <label style="font-size:0.8rem;color:#aaa;white-space:nowrap;">Finish:</label>
                         <select style="flex:1;padding:6px;border:1px solid rgba(255,255,255,0.1);border-radius:6px;background:rgba(0,0,0,0.3);color:#e0e0e0;font-size:0.8rem;"
@@ -2264,6 +2311,11 @@
         }
 
         // ===== Settings =====
+        function updatePreviewAspectRatio() {
+            const ratio = targetAspectRatioSelect.value || '16:9';
+            matPreview.style.setProperty('--preview-aspect-ratio', ratio.replace(':', '/'));
+        }
+
         function saveSettings() {
             const settings = {
                 mat_color: matColorInput.value,
@@ -2296,7 +2348,10 @@
         transitionDurationInput.addEventListener('change', saveSettings);
         fitModeSelect.addEventListener('change', saveSettings);
         shuffleCheckbox.addEventListener('change', saveSettings);
-        targetAspectRatioSelect.addEventListener('change', saveSettings);
+        targetAspectRatioSelect.addEventListener('change', () => {
+            saveSettings();
+            updatePreviewAspectRatio();
+        });
 
         // Color presets
         colorPresets.forEach(preset => {
