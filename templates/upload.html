@@ -1716,9 +1716,9 @@
             const maxPhotoW = Math.min(containerW * 0.95, containerW - bevel2);
             const maxPhotoH = Math.min(containerH * 0.95, containerH - bevel2);
 
-            // At scale=1 use 90%-bevel as base, scale adjusts, hard-capped at max
-            const baseW = Math.min(containerW * 0.90 - bevel2, maxPhotoW);
-            const baseH = Math.min(containerH * 0.90 - bevel2, maxPhotoH);
+            // At scale=1 use 80%-bevel as base, scale adjusts, hard-capped at max
+            const baseW = Math.min(containerW * 0.80 - bevel2, maxPhotoW);
+            const baseH = Math.min(containerH * 0.80 - bevel2, maxPhotoH);
             const scaledW = Math.max(1, Math.min(baseW * scale, maxPhotoW));
             const scaledH = Math.max(1, Math.min(baseH * scale, maxPhotoH));
 
