@@ -582,19 +582,42 @@
 
         async function sendControl(action) {
             try {
-                await fetch('/api/display/control', {
+                const resp = await fetch('/api/display/control', {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({action})
                 });
+                if (resp.ok) {
+                    const state = await resp.json();
+                    lastServerIndex = state.index;
+                    currentIndex = state.index;
+                    isPaused = state.paused;
+                    showSlide(currentIndex);
+                }
             } catch (err) {
                 console.error('Control failed:', err);
             }
         }
 
-        function nextSlide() { sendControl('next'); }
-        function previousSlide() { sendControl('prev'); }
-        function togglePause() { sendControl(isPaused ? 'play' : 'pause'); }
+        function nextSlide() {
+            // Optimistic local update + server call
+            if (slides.length > 0) {
+                currentIndex = (currentIndex + 1) % slides.length;
+                showSlide(currentIndex);
+            }
+            sendControl('next');
+        }
+        function previousSlide() {
+            if (slides.length > 0) {
+                currentIndex = (currentIndex - 1 + slides.length) % slides.length;
+                showSlide(currentIndex);
+            }
+            sendControl('prev');
+        }
+        function togglePause() {
+            isPaused = !isPaused;
+            sendControl(isPaused ? 'pause' : 'play');
+        }
 
         function calculateMatPadding(imgWidth, imgHeight) {
             if (!imgWidth || !imgHeight) {
