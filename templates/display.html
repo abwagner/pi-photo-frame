@@ -369,8 +369,8 @@
             const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
 
             // Subtle bevel shading - light from above
-            const lightAlpha = luminance < 0.5 ? 0.14 : 0.12;
-            const darkAlpha = luminance < 0.5 ? 0.10 : 0.08;
+            const lightAlpha = luminance < 0.5 ? 0.04 : 0.03;
+            const darkAlpha = luminance < 0.5 ? 0.14 : 0.12;
 
             return {
                 light: `rgba(255,255,255,${lightAlpha})`,
@@ -382,7 +382,7 @@
             // Creates a small div rotated 45deg to form a diagonal line in a bevel corner
             const diag = Math.sqrt(2) * b;
             const d = document.createElement('div');
-            d.style.cssText = `position:absolute;width:${diag.toFixed(1)}px;height:0;border-top:0.5px solid rgba(0,0,0,0.15);transform-origin:0 0;transform:rotate(45deg);pointer-events:none;z-index:2;`;
+            d.style.cssText = `position:absolute;width:${diag.toFixed(1)}px;height:0;border-top:0.5px solid rgba(0,0,0,0.08);transform-origin:0 0;transform:rotate(45deg);pointer-events:none;z-index:2;`;
             return d;
         }
 
@@ -411,7 +411,7 @@
                 if (c.left !== undefined) pos.push(`left:${c.left}`);
                 if (c.right !== undefined) pos.push(`right:${c.right}`);
                 const origin = `${c.left !== undefined ? '0' : '100%'} ${c.top !== undefined ? '0' : '100%'}`;
-                line.style.cssText = `position:absolute;${pos.join(';')};width:${diag.toFixed(1)}px;height:0;border-top:0.5px solid rgba(0,0,0,0.15);transform-origin:${origin};transform:rotate(${c.rot}deg);pointer-events:none;z-index:2;`;
+                line.style.cssText = `position:absolute;${pos.join(';')};width:${diag.toFixed(1)}px;height:0;border-top:0.5px solid rgba(0,0,0,0.08);transform-origin:${origin};transform:rotate(${c.rot}deg);pointer-events:none;z-index:2;`;
                 wrapper.appendChild(line);
             });
             return wrapper;
