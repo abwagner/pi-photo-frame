@@ -254,11 +254,20 @@ class TestDisplayControl:
         assert resp.status_code == 200
 
     def test_control_requires_auth(self, client, app):
-        """POST /api/display/control without auth returns 401."""
+        """POST /api/display/control without auth from non-localhost returns 401."""
         resp = client.post('/api/display/control',
                            json={'action': 'next'},
-                           content_type='application/json')
+                           content_type='application/json',
+                           headers={'Host': 'example.com'},
+                           environ_base={'REMOTE_ADDR': '192.168.1.100'})
         assert resp.status_code == 401
+
+    def test_control_allowed_from_localhost(self, client, app):
+        """POST /api/display/control from localhost works without session auth."""
+        resp = client.post('/api/display/control',
+                           json={'action': 'pause'},
+                           content_type='application/json')
+        assert resp.status_code == 200
 
     def test_control_invalid_action(self, auth_client):
         """POST /api/display/control with bad action returns 400."""
