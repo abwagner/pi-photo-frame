@@ -12,6 +12,7 @@ import hashlib
 import fcntl
 import re
 import random
+import time
 import subprocess
 import threading
 import logging
@@ -469,6 +470,29 @@ def save_settings(settings):
     """Save settings to JSON file"""
     with open(SETTINGS_FILE, 'w') as f:
         json.dump(settings, f, indent=2)
+
+
+# ============ Display State (server-controlled slideshow) ============
+
+_display_state = {
+    'index': 0,
+    'paused': False,
+    'last_advanced_at': time.time(),
+}
+
+
+def _get_effective_index(total_slides):
+    """Compute current slide index with lazy auto-advance."""
+    if total_slides == 0:
+        return 0
+    state = _display_state
+    if state['paused'] or total_slides <= 1:
+        return state['index'] % total_slides
+    settings = load_settings()
+    interval = settings.get('slideshow_interval', 10)
+    elapsed = time.time() - state['last_advanced_at']
+    advances = int(elapsed / interval)
+    return (state['index'] + advances) % total_slides
 
 
 # ============ Backup Management ============
@@ -1145,9 +1169,8 @@ def api_backfill_hashes():
     return jsonify({'success': True, 'updated': updated})
 
 
-@app.route('/api/images', methods=['GET'])
-def api_get_images():
-    """Get slides for display (singles + groups)"""
+def _build_slides():
+    """Build the ordered slides list from gallery data and settings."""
     settings = load_settings()
     gallery = load_gallery()
     all_images = get_enabled_images()
@@ -1208,7 +1231,13 @@ def api_get_images():
         daily_seed = datetime.now().strftime('%Y-%m-%d')
         random.Random(daily_seed).shuffle(slides)
 
-    # Backwards compatible: also return flat image list
+    return slides, all_images, settings
+
+
+@app.route('/api/images', methods=['GET'])
+def api_get_images():
+    """Get slides for display (singles + groups)"""
+    slides, all_images, settings = _build_slides()
     filenames = [img['filename'] for img in all_images]
 
     return jsonify({
@@ -1418,6 +1447,54 @@ def serve_upload(filename):
 def api_display_token():
     """Get the display token (admin only)"""
     return jsonify({'token': DISPLAY_TOKEN})
+
+
+@app.route('/api/display/state')
+def api_display_state():
+    """Get current slideshow state (index, paused, total slides)."""
+    slides, _, _ = _build_slides()
+    total = len(slides)
+    return jsonify({
+        'index': _get_effective_index(total),
+        'paused': _display_state['paused'],
+        'total': total,
+    })
+
+
+@app.route('/api/display/control', methods=['POST'])
+@api_login_required
+def api_display_control():
+    """Control the slideshow: next, prev, pause, play."""
+    data = request.json or {}
+    action = data.get('action')
+    if action not in ('next', 'prev', 'pause', 'play'):
+        return jsonify({'error': 'Invalid action. Use next, prev, pause, or play.'}), 400
+
+    slides, _, _ = _build_slides()
+    total = len(slides)
+    if total == 0:
+        return jsonify({'index': 0, 'paused': _display_state['paused']})
+
+    now = time.time()
+    current = _get_effective_index(total)
+
+    if action == 'next':
+        _display_state['index'] = (current + 1) % total
+        _display_state['last_advanced_at'] = now
+    elif action == 'prev':
+        _display_state['index'] = (current - 1) % total
+        _display_state['last_advanced_at'] = now
+    elif action == 'pause':
+        _display_state['index'] = current
+        _display_state['paused'] = True
+    elif action == 'play':
+        _display_state['paused'] = False
+        _display_state['last_advanced_at'] = now
+
+    return jsonify({
+        'index': _get_effective_index(total),
+        'paused': _display_state['paused'],
+    })
 
 
 # --- Backup Routes ---
