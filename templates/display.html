@@ -440,7 +440,7 @@
             if (slide.type === 'single') {
                 const imgData = slide.images[0];
                 const scale = imgData.scale || 1.0;
-                const result = calculateMatPadding(imgData.width * scale, imgData.height * scale, slideBevelWidth);
+                const result = calculateMatPadding(imgData.width, imgData.height, slideBevelWidth, scale);
                 container.style.setProperty('--mat-padding-vertical', result.vertical);
                 container.style.setProperty('--mat-padding-horizontal', result.horizontal);
                 photoW = result.photoW;
@@ -669,7 +669,7 @@
             sendControl(isPaused ? 'pause' : 'play');
         }
 
-        function calculateMatPadding(imgWidth, imgHeight, bevelWidth) {
+        function calculateMatPadding(imgWidth, imgHeight, bevelWidth, scale) {
             if (!imgWidth || !imgHeight) {
                 return { vertical: '5%', horizontal: '5%', photoW: 0, photoH: 0 };
             }
@@ -678,10 +678,17 @@
             const screenHeight = window.innerHeight;
             const imgRatio = imgWidth / imgHeight;
             const bevel2 = (bevelWidth || 0) * 2;
+            scale = scale || 1.0;
 
-            // Photo can't exceed 95% of screen; photo+bevel can't exceed screen
-            const maxPhotoW = Math.min(screenWidth * 0.95, screenWidth - bevel2);
-            const maxPhotoH = Math.min(screenHeight * 0.95, screenHeight - bevel2);
+            // Hard cap: photo+bevel can't exceed 95% of screen
+            const hardMaxW = Math.min(screenWidth * 0.95, screenWidth - bevel2);
+            const hardMaxH = Math.min(screenHeight * 0.95, screenHeight - bevel2);
+            // Default (scale=1): photo fills up to 80% of screen
+            const baseMaxW = Math.min(screenWidth * 0.80 - bevel2, hardMaxW);
+            const baseMaxH = Math.min(screenHeight * 0.80 - bevel2, hardMaxH);
+            // Scale adjusts from base, capped at hard max
+            const maxPhotoW = Math.max(1, Math.min(baseMaxW * scale, hardMaxW));
+            const maxPhotoH = Math.max(1, Math.min(baseMaxH * scale, hardMaxH));
 
             if (maxPhotoW <= 0 || maxPhotoH <= 0) {
                 return { vertical: '5%', horizontal: '5%', photoW: 0, photoH: 0 };
