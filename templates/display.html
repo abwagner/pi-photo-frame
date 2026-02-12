@@ -369,8 +369,8 @@
             const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
 
             // Subtle bevel shading - light from above
-            const lightAlpha = luminance < 0.5 ? 0.10 : 0.06;
-            const darkAlpha = luminance < 0.5 ? 0.15 : 0.18;
+            const lightAlpha = luminance < 0.5 ? 0.14 : 0.12;
+            const darkAlpha = luminance < 0.5 ? 0.10 : 0.08;
 
             return {
                 light: `rgba(255,255,255,${lightAlpha})`,
@@ -398,9 +398,9 @@
             const b = bevelWidth;
             const corners = [
                 {top:'0',left:'0',rot:45},
-                {top:'0',right:'0',rot:135},
+                {top:'0',right:'0',rot:-45},
                 {bottom:'0',left:'0',rot:-45},
-                {bottom:'0',right:'0',rot:-135},
+                {bottom:'0',right:'0',rot:45},
             ];
             corners.forEach(c => {
                 const diag = Math.sqrt(2) * b;
@@ -424,14 +424,27 @@
             const matColor = slide.mat_color || settings.mat_color;
             document.body.style.setProperty('--mat-color', matColor);
 
-            // Calculate mat padding based on slide content
+            // Determine bevel and finish for this slide (needed before mat padding calc)
+            const slideBevelWidth = slide.images[0].bevel_width ?? settings.bevel_width ?? 4;
+            const slideFinish = slide.images[0].mat_finish ?? settings.mat_finish ?? 'flat';
+
+            // Apply per-slide texture override
+            document.body.classList.remove('mat-linen', 'mat-suede', 'mat-silk');
+            if (slideFinish !== 'flat') {
+                document.body.classList.add('mat-' + slideFinish);
+            }
+
+            // Calculate mat padding based on slide content (bevel-aware)
             const container = document.querySelector('.frame-container');
+            let photoW = 0, photoH = 0;
             if (slide.type === 'single') {
-                const img = slide.images[0];
-                const scale = img.scale || 1.0;
-                const padding = calculateMatPadding(img.width * scale, img.height * scale);
-                container.style.setProperty('--mat-padding-vertical', padding.vertical);
-                container.style.setProperty('--mat-padding-horizontal', padding.horizontal);
+                const imgData = slide.images[0];
+                const scale = imgData.scale || 1.0;
+                const result = calculateMatPadding(imgData.width * scale, imgData.height * scale, slideBevelWidth);
+                container.style.setProperty('--mat-padding-vertical', result.vertical);
+                container.style.setProperty('--mat-padding-horizontal', result.horizontal);
+                photoW = result.photoW;
+                photoH = result.photoH;
             } else {
                 // For groups, no mat padding - space-evenly handles all spacing
                 container.style.setProperty('--mat-padding-vertical', '0');
@@ -442,30 +455,18 @@
             const slideEl = document.createElement('div');
             slideEl.className = 'slide';
 
-            // Determine bevel and finish for this slide
-            const slideBevelWidth = slide.images[0].bevel_width ?? settings.bevel_width ?? 4;
-            const slideFinish = slide.images[0].mat_finish ?? settings.mat_finish ?? 'flat';
-
-            // Apply per-slide texture override
-            document.body.classList.remove('mat-linen', 'mat-suede', 'mat-silk');
-            if (slideFinish !== 'flat') {
-                document.body.classList.add('mat-' + slideFinish);
-            }
-
             if (slide.type === 'single') {
-                // Single image slide
+                // Single image slide with explicit pixel dimensions
                 const img = document.createElement('img');
-                const scale = slide.images[0].scale || 1.0;
-                if (settings.fit_mode === 'cover') {
-                    img.className = 'cover';
-                } else if (scale !== 1.0) {
-                    // In contain mode, scale adjusts the max dimensions
-                    const pct = Math.min(100, Math.round(100 * scale));
-                    img.style.maxWidth = pct + '%';
-                    img.style.maxHeight = pct + '%';
-                }
                 img.src = '/uploads/' + slide.images[0].filename;
                 img.alt = slide.images[0].filename;
+
+                if (settings.fit_mode === 'cover') {
+                    img.className = 'cover';
+                } else if (photoW > 0 && photoH > 0) {
+                    img.style.width = photoW + 'px';
+                    img.style.height = photoH + 'px';
+                }
 
                 if (slideBevelWidth > 0) {
                     slideEl.appendChild(wrapInBevel(img, slideBevelWidth, matColor));
@@ -484,10 +485,11 @@
                     const containerW = window.innerWidth;
                     const containerH = window.innerHeight;
 
-                    const imgInfos = slide.images.map(imgData => ({
+                    const imgInfos = slide.images.map((imgData, i) => ({
                         filename: imgData.filename,
                         ar: (imgData.width || 1) / (imgData.height || 1),
-                        scale: imgData.scale || 1.0
+                        scale: imgData.scale || 1.0,
+                        bevel: slide.images[i].bevel_width ?? settings.bevel_width ?? 4
                     }));
 
                     // At base height h=1, each image width = ar * scale
@@ -496,8 +498,11 @@
                     // Reserve space for N+1 equal gaps (space-evenly) — each gap ~5% of container
                     const gapFraction = 0.05;
                     const totalGapFraction = gapFraction * (count + 1);
-                    const usableW = containerW * (1 - totalGapFraction);
-                    const usableH = containerH * 0.85;
+                    // Subtract bevel from usable space so photo+bevel fits
+                    const totalBevelW = imgInfos.reduce((sum, info) => sum + 2 * info.bevel, 0);
+                    const maxBevel = Math.max(...imgInfos.map(i => i.bevel));
+                    const usableW = containerW * (1 - totalGapFraction) - totalBevelW;
+                    const usableH = containerH * 0.85 - 2 * maxBevel;
                     // Base height: largest h such that total width fits and tallest image fits
                     const baseHeight = Math.min(usableH / maxScale, usableW / totalWidthAtUnitHeight);
 
@@ -513,9 +518,8 @@
                         img.style.maxHeight = 'none';
                         img.style.flexShrink = '0';
 
-                        const imgBevel = slide.images[i].bevel_width ?? settings.bevel_width ?? 4;
-                        if (imgBevel > 0) {
-                            gridEl.appendChild(wrapInBevel(img, imgBevel, matColor));
+                        if (info.bevel > 0) {
+                            gridEl.appendChild(wrapInBevel(img, info.bevel, matColor));
                         } else {
                             gridEl.appendChild(img);
                         }
@@ -665,39 +669,46 @@
             sendControl(isPaused ? 'pause' : 'play');
         }
 
-        function calculateMatPadding(imgWidth, imgHeight) {
+        function calculateMatPadding(imgWidth, imgHeight, bevelWidth) {
             if (!imgWidth || !imgHeight) {
-                return { vertical: '5%', horizontal: '5%' };
+                return { vertical: '5%', horizontal: '5%', photoW: 0, photoH: 0 };
             }
-
-            const ratioStr = settings.target_aspect_ratio || '16:9';
-            const [targetW, targetH] = ratioStr.split(':').map(Number);
-            const targetRatio = targetW / targetH;
 
             const screenWidth = window.innerWidth;
             const screenHeight = window.innerHeight;
             const imgRatio = imgWidth / imgHeight;
+            const bevel2 = (bevelWidth || 0) * 2;
 
-            const minMat = 0.02;
-            const availableWidth = screenWidth * (1 - 2 * minMat);
-            const availableHeight = screenHeight * (1 - 2 * minMat);
+            // Photo can't exceed 95% of screen; photo+bevel can't exceed screen
+            const maxPhotoW = Math.min(screenWidth * 0.95, screenWidth - bevel2);
+            const maxPhotoH = Math.min(screenHeight * 0.95, screenHeight - bevel2);
 
-            let displayWidth, displayHeight;
-            if (imgRatio > availableWidth / availableHeight) {
-                displayWidth = availableWidth;
-                displayHeight = availableWidth / imgRatio;
-            } else {
-                displayHeight = availableHeight;
-                displayWidth = availableHeight * imgRatio;
+            if (maxPhotoW <= 0 || maxPhotoH <= 0) {
+                return { vertical: '5%', horizontal: '5%', photoW: 0, photoH: 0 };
             }
 
-            const horizontalMat = (screenWidth - displayWidth) / 2;
-            const verticalMat = (screenHeight - displayHeight) / 2;
+            // Fit photo within constraints maintaining aspect ratio
+            let photoW, photoH;
+            if (imgRatio > maxPhotoW / maxPhotoH) {
+                photoW = maxPhotoW;
+                photoH = maxPhotoW / imgRatio;
+            } else {
+                photoH = maxPhotoH;
+                photoW = maxPhotoH * imgRatio;
+            }
+
+            // Total = photo + bevel
+            const totalW = photoW + bevel2;
+            const totalH = photoH + bevel2;
+
+            // Mat = remaining space
+            const horizontalMat = Math.max(0, (screenWidth - totalW) / 2);
+            const verticalMat = Math.max(0, (screenHeight - totalH) / 2);
 
             const hPadding = (horizontalMat / screenWidth * 100).toFixed(2) + '%';
             const vPadding = (verticalMat / screenHeight * 100).toFixed(2) + '%';
 
-            return { vertical: vPadding, horizontal: hPadding };
+            return { vertical: vPadding, horizontal: hPadding, photoW: Math.round(photoW), photoH: Math.round(photoH) };
         }
 
         // Show controls on mouse move, auto-hide after 3 seconds
