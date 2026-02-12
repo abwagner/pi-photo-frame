@@ -75,7 +75,6 @@
             max-width: 100%;
             max-height: 100%;
             object-fit: contain;
-            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
         }
 
         .slide img.cover {
@@ -90,23 +89,10 @@
             display: inline-flex;
             line-height: 0;
             padding: var(--bevel-w, 4px);
-            /* Top-lit gradient: light on top edge, shadow on bottom edge */
-            background: linear-gradient(to bottom, var(--bevel-light, rgba(255,255,255,0.15)), var(--bevel-dark, rgba(0,0,0,0.25)));
+            /* Light from above: top bevel face is in shadow (underside of overhang), bottom is lit */
+            background: linear-gradient(to bottom, var(--bevel-dark, rgba(0,0,0,0.12)), var(--bevel-light, rgba(255,255,255,0.08)));
         }
-        /* Mitered corner lines where bevel cuts meet */
-        .mat-bevel::before {
-            content: '';
-            position: absolute;
-            inset: 0;
-            pointer-events: none;
-            z-index: 2;
-            background:
-                linear-gradient(45deg, rgba(0,0,0,0.15) 0%, rgba(0,0,0,0.15) 50%, transparent 50%) no-repeat top left / var(--bevel-w, 4px) var(--bevel-w, 4px),
-                linear-gradient(-45deg, rgba(0,0,0,0.15) 0%, rgba(0,0,0,0.15) 50%, transparent 50%) no-repeat top right / var(--bevel-w, 4px) var(--bevel-w, 4px),
-                linear-gradient(135deg, rgba(0,0,0,0.15) 0%, rgba(0,0,0,0.15) 50%, transparent 50%) no-repeat bottom left / var(--bevel-w, 4px) var(--bevel-w, 4px),
-                linear-gradient(-135deg, rgba(0,0,0,0.15) 0%, rgba(0,0,0,0.15) 50%, transparent 50%) no-repeat bottom right / var(--bevel-w, 4px) var(--bevel-w, 4px);
-        }
-        /* Shadow cast by bevel onto the image (top edge) */
+        /* Shadow cast by top bevel onto the image */
         .mat-bevel::after {
             content: '';
             position: absolute;
@@ -116,7 +102,7 @@
             bottom: var(--bevel-w, 4px);
             pointer-events: none;
             z-index: 3;
-            box-shadow: inset 0 2px calc(var(--bevel-w, 4px) * 1) rgba(0,0,0,0.25);
+            box-shadow: inset 0 1px calc(var(--bevel-w, 4px) * 0.75) rgba(0,0,0,0.15);
         }
         .mat-bevel img {
             box-shadow: none;
@@ -380,14 +366,22 @@
             const b = parseInt(hex.substring(4, 6), 16);
             const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
 
-            // For dark mats, bevel highlight is more visible; for light mats, shadow is more visible
-            const lightAlpha = luminance < 0.5 ? 0.20 : 0.12;
-            const darkAlpha = luminance < 0.5 ? 0.30 : 0.35;
+            // Subtle bevel shading - light from above
+            const lightAlpha = luminance < 0.5 ? 0.10 : 0.06;
+            const darkAlpha = luminance < 0.5 ? 0.15 : 0.18;
 
             return {
                 light: `rgba(255,255,255,${lightAlpha})`,
                 dark: `rgba(0,0,0,${darkAlpha})`
             };
+        }
+
+        function makeMiterLine(b) {
+            // Creates a small div rotated 45deg to form a diagonal line in a bevel corner
+            const diag = Math.sqrt(2) * b;
+            const d = document.createElement('div');
+            d.style.cssText = `position:absolute;width:${diag.toFixed(1)}px;height:0;border-top:0.5px solid rgba(0,0,0,0.15);transform-origin:0 0;transform:rotate(45deg);pointer-events:none;z-index:2;`;
+            return d;
         }
 
         function wrapInBevel(imgEl, bevelWidth, matColor) {
@@ -398,6 +392,26 @@
             wrapper.style.setProperty('--bevel-light', colors.light);
             wrapper.style.setProperty('--bevel-dark', colors.dark);
             wrapper.appendChild(imgEl);
+            // Mitered corner lines
+            const b = bevelWidth;
+            const corners = [
+                {top:'0',left:'0',rot:45},
+                {top:'0',right:'0',rot:135},
+                {bottom:'0',left:'0',rot:-45},
+                {bottom:'0',right:'0',rot:-135},
+            ];
+            corners.forEach(c => {
+                const diag = Math.sqrt(2) * b;
+                const line = document.createElement('div');
+                const pos = [];
+                if (c.top !== undefined) pos.push(`top:${c.top}`);
+                if (c.bottom !== undefined) pos.push(`bottom:${c.bottom}`);
+                if (c.left !== undefined) pos.push(`left:${c.left}`);
+                if (c.right !== undefined) pos.push(`right:${c.right}`);
+                const origin = `${c.left !== undefined ? '0' : '100%'} ${c.top !== undefined ? '0' : '100%'}`;
+                line.style.cssText = `position:absolute;${pos.join(';')};width:${diag.toFixed(1)}px;height:0;border-top:0.5px solid rgba(0,0,0,0.15);transform-origin:${origin};transform:rotate(${c.rot}deg);pointer-events:none;z-index:2;`;
+                wrapper.appendChild(line);
+            });
             return wrapper;
         }
 
