@@ -1462,9 +1462,13 @@ def api_display_state():
 
 
 @app.route('/api/display/control', methods=['POST'])
-@api_login_required
 def api_display_control():
     """Control the slideshow: next, prev, pause, play."""
+    # Allow control from authenticated users or localhost (Pi kiosk HDMI output)
+    is_localhost = (request.remote_addr in ['127.0.0.1', '::1']
+                    or request.host.split(':')[0] == 'localhost')
+    if not (is_localhost or is_authenticated()):
+        return jsonify({'error': 'Authentication required'}), 401
     data = request.json or {}
     action = data.get('action')
     if action not in ('next', 'prev', 'pause', 'play'):
