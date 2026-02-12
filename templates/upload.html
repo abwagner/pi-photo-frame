@@ -116,7 +116,6 @@
             max-width: 90%;
             max-height: 90%;
             object-fit: contain;
-            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
         }
 
         /* Bevel wrapper in preview - V-groove cut, lit from above */
@@ -125,20 +124,10 @@
             display: inline-flex;
             line-height: 0;
             padding: var(--bevel-w, 4px);
-            background: linear-gradient(to bottom, var(--bevel-light, rgba(255,255,255,0.15)), var(--bevel-dark, rgba(0,0,0,0.25)));
+            /* Light from above: top face in shadow, bottom face lit */
+            background: linear-gradient(to bottom, var(--bevel-dark, rgba(0,0,0,0.12)), var(--bevel-light, rgba(255,255,255,0.08)));
         }
-        .mat-preview .mat-bevel::before {
-            content: '';
-            position: absolute;
-            inset: 0;
-            pointer-events: none;
-            z-index: 2;
-            background:
-                linear-gradient(45deg, rgba(0,0,0,0.15) 0%, rgba(0,0,0,0.15) 50%, transparent 50%) no-repeat top left / var(--bevel-w, 4px) var(--bevel-w, 4px),
-                linear-gradient(-45deg, rgba(0,0,0,0.15) 0%, rgba(0,0,0,0.15) 50%, transparent 50%) no-repeat top right / var(--bevel-w, 4px) var(--bevel-w, 4px),
-                linear-gradient(135deg, rgba(0,0,0,0.15) 0%, rgba(0,0,0,0.15) 50%, transparent 50%) no-repeat bottom left / var(--bevel-w, 4px) var(--bevel-w, 4px),
-                linear-gradient(-135deg, rgba(0,0,0,0.15) 0%, rgba(0,0,0,0.15) 50%, transparent 50%) no-repeat bottom right / var(--bevel-w, 4px) var(--bevel-w, 4px);
-        }
+        /* Shadow cast by top bevel onto the image */
         .mat-preview .mat-bevel::after {
             content: '';
             position: absolute;
@@ -148,7 +137,7 @@
             bottom: var(--bevel-w, 4px);
             pointer-events: none;
             z-index: 3;
-            box-shadow: inset 0 2px calc(var(--bevel-w, 4px) * 1) rgba(0,0,0,0.25);
+            box-shadow: inset 0 1px calc(var(--bevel-w, 4px) * 0.75) rgba(0,0,0,0.15);
         }
         .mat-preview .mat-bevel img {
             box-shadow: none;
@@ -1356,6 +1345,18 @@
         const previewControlsBody = document.getElementById('preview-controls-body');
         const previewControlsTitle = document.getElementById('preview-controls-title');
 
+        // Color presets shared between default and per-image controls
+        const COLOR_PRESETS = [
+            {color: '#000000', title: 'Black'}, {color: '#1a1a1a', title: 'Near Black'},
+            {color: '#2c2c2c', title: 'Dark Gray'}, {color: '#4a4a4a', title: 'Gray'},
+            {color: '#6b5b4e', title: 'Warm Gray'}, {color: '#f5f5f5', title: 'Off White'},
+            {color: '#ffffff', title: 'White'}, {color: '#f5f0e6', title: 'Cream'},
+            {color: '#fffff0', title: 'Ivory'}, {color: '#2d3436', title: 'Charcoal'},
+            {color: '#1e3a5f', title: 'Navy'}, {color: '#4a0e0e', title: 'Burgundy'},
+            {color: '#2d4a2d', title: 'Forest'}, {color: '#8b9a6b', title: 'Sage'},
+            {color: '#3c2415', title: 'Espresso'}, {color: '#4a5568', title: 'Slate Blue'},
+        ];
+
         // Settings elements
         const matColorInput = document.getElementById('mat-color');
         const matFinishSelect = document.getElementById('mat-finish');
@@ -1745,15 +1746,20 @@
                         <span class="scale-value">${parseFloat(scale).toFixed(2)}x</span>
                     </div>
                 </div>
-                <div class="group-edit-item" style="flex-wrap:wrap;gap:12px;">
-                    <div style="display:flex;align-items:center;gap:8px;flex:1;min-width:150px;">
+                <div class="group-edit-item" style="flex-direction:column;gap:8px;">
+                    <div style="display:flex;align-items:center;gap:8px;">
                         <label style="font-size:0.8rem;color:#aaa;white-space:nowrap;">Mat Color:</label>
                         <input type="color" value="${currentMatColor}"
-                               style="width:32px;height:24px;padding:0;border:1px solid rgba(255,255,255,0.2);border-radius:4px;background:transparent;cursor:pointer;"
+                               style="width:24px;height:24px;padding:0;border:1px solid rgba(255,255,255,0.2);border-radius:4px;background:transparent;cursor:pointer;"
                                onchange="updateMatColor('${escAttr(filename)}', this.value)">
                         <button style="font-size:0.7rem;padding:2px 6px;border:1px solid rgba(255,255,255,0.1);border-radius:4px;background:rgba(0,0,0,0.3);color:#aaa;cursor:pointer;"
-                                onclick="updateMatColor('${escAttr(filename)}', null); this.previousElementSibling.value=matColorInput.value; renderSinglePreviewImage('${escAttr(filename)}')">Reset</button>
+                                onclick="updateMatColor('${escAttr(filename)}', null); renderSinglePreviewImage('${escAttr(filename)}'); renderSingleControls('${escAttr(filename)}')">Reset</button>
                     </div>
+                    <div class="color-presets" style="margin-top:0;">
+                        ${COLOR_PRESETS.map(p => `<div class="color-preset${currentMatColor === p.color ? ' active' : ''}" style="background:${p.color};width:22px;height:22px;${p.color === '#ffffff' ? 'border:1px solid rgba(255,255,255,0.2);' : ''}" title="${p.title}" onclick="updateMatColor('${escAttr(filename)}','${p.color}'); renderSingleControls('${escAttr(filename)}')"></div>`).join('')}
+                    </div>
+                </div>
+                <div class="group-edit-item" style="flex-wrap:wrap;gap:12px;">
                     <div style="display:flex;align-items:center;gap:8px;flex:1;min-width:150px;">
                         <label style="font-size:0.8rem;color:#aaa;white-space:nowrap;">Finish:</label>
                         <select style="flex:1;padding:6px;border:1px solid rgba(255,255,255,0.1);border-radius:6px;background:rgba(0,0,0,0.3);color:#e0e0e0;font-size:0.8rem;"
@@ -1766,11 +1772,11 @@
                         </select>
                     </div>
                     <div style="display:flex;align-items:center;gap:8px;flex:1;min-width:150px;">
-                        <label style="font-size:0.8rem;color:#aaa;white-space:nowrap;">Bevel: <span id="single-bevel-val">${currentBevel !== '' ? currentBevel + 'px' : 'Default'}</span></label>
-                        <input type="range" min="-1" max="16" step="1" value="${currentBevel !== '' ? currentBevel : -1}"
+                        <label style="font-size:0.8rem;color:#aaa;white-space:nowrap;">Bevel: <span id="single-bevel-val">${currentBevel !== '' ? currentBevel + 'px' : parseInt(bevelWidthInput.value) + 'px'}</span></label>
+                        <input type="range" min="0" max="16" step="1" value="${currentBevel !== '' ? currentBevel : parseInt(bevelWidthInput.value)}"
                                style="flex:1;accent-color:#00d4ff;"
-                               oninput="this.previousElementSibling.querySelector('span').textContent = this.value == -1 ? 'Default' : this.value + 'px'; previewSingleBevel('${escAttr(filename)}', this.value)"
-                               onchange="updateImageField('${escAttr(filename)}','bevel_width',this.value == -1 ? null : parseInt(this.value))">
+                               oninput="this.previousElementSibling.querySelector('span').textContent = this.value + 'px'; previewSingleBevel('${escAttr(filename)}', this.value)"
+                               onchange="updateImageField('${escAttr(filename)}','bevel_width',parseInt(this.value))">
                     </div>
                 </div>
             `;
@@ -1873,11 +1879,11 @@
                         </select>
                     </div>
                     <div style="display:flex;align-items:center;gap:8px;flex:1;min-width:150px;">
-                        <label style="font-size:0.8rem;color:#aaa;white-space:nowrap;">Bevel: <span id="group-bevel-val">${currentBevel !== '' ? currentBevel + 'px' : 'Default'}</span></label>
-                        <input type="range" min="-1" max="16" step="1" value="${currentBevel !== '' ? currentBevel : -1}"
+                        <label style="font-size:0.8rem;color:#aaa;white-space:nowrap;">Bevel: <span id="group-bevel-val">${currentBevel !== '' ? currentBevel + 'px' : parseInt(bevelWidthInput.value) + 'px'}</span></label>
+                        <input type="range" min="0" max="16" step="1" value="${currentBevel !== '' ? currentBevel : parseInt(bevelWidthInput.value)}"
                                style="flex:1;accent-color:#00d4ff;"
-                               oninput="this.previousElementSibling.querySelector('span').textContent = this.value == -1 ? 'Default' : this.value + 'px'; previewGroupBevel('${groupId}', this.value)"
-                               onchange="updateGroupField('${groupId}','bevel_width',this.value == -1 ? null : parseInt(this.value))">
+                               oninput="this.previousElementSibling.querySelector('span').textContent = this.value + 'px'; previewGroupBevel('${groupId}', this.value)"
+                               onchange="updateGroupField('${groupId}','bevel_width',parseInt(this.value))">
                     </div>
                 </div>
             `;
@@ -2390,10 +2396,11 @@
         function previewSingleBevel(filename, val) {
             const img = images.find(i => i.filename === filename);
             if (!img) return;
-            const bw = val == -1 ? parseInt(bevelWidthInput.value) : parseInt(val);
-            const matColor = img.mat_color || matColorInput.value;
-            const imgHtml = `<img src="/uploads/${filename}" alt="${filename}" style="max-width:90%;max-height:90%;object-fit:contain;">`;
-            previewContent.innerHTML = makeBevelHtml(imgHtml, bw, matColor);
+            // Temporarily override bevel_width for preview, then render normally
+            const savedBevel = img.bevel_width;
+            img.bevel_width = parseInt(val);
+            renderSinglePreviewImage(filename);
+            img.bevel_width = savedBevel;
         }
 
         // ===== Bevel + Texture Helpers =====
@@ -2404,18 +2411,29 @@
             const g = parseInt(hex.substring(2, 4), 16);
             const b = parseInt(hex.substring(4, 6), 16);
             const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
-            const lightAlpha = luminance < 0.5 ? 0.20 : 0.12;
-            const darkAlpha = luminance < 0.5 ? 0.30 : 0.35;
+            const lightAlpha = luminance < 0.5 ? 0.10 : 0.06;
+            const darkAlpha = luminance < 0.5 ? 0.15 : 0.18;
             return {
                 light: `rgba(255,255,255,${lightAlpha})`,
                 dark: `rgba(0,0,0,${darkAlpha})`
             };
         }
 
+        function makeMiterLineHtml(b) {
+            const diag = (Math.sqrt(2) * b).toFixed(1);
+            const style = 'position:absolute;height:0;border-top:0.5px solid rgba(0,0,0,0.15);pointer-events:none;z-index:2;';
+            return [
+                `<div style="${style}top:0;left:0;width:${diag}px;transform-origin:0 0;transform:rotate(45deg);"></div>`,
+                `<div style="${style}top:0;right:0;width:${diag}px;transform-origin:100% 0;transform:rotate(-45deg);"></div>`,
+                `<div style="${style}bottom:0;left:0;width:${diag}px;transform-origin:0 100%;transform:rotate(-45deg);"></div>`,
+                `<div style="${style}bottom:0;right:0;width:${diag}px;transform-origin:100% 100%;transform:rotate(45deg);"></div>`,
+            ].join('');
+        }
+
         function makeBevelHtml(innerHtml, bevelWidth, matColor) {
             if (!bevelWidth || bevelWidth <= 0) return innerHtml;
             const colors = getBevelColors(matColor);
-            return `<div class="mat-bevel" style="--bevel-w:${bevelWidth}px;--bevel-light:${colors.light};--bevel-dark:${colors.dark}">${innerHtml}</div>`;
+            return `<div class="mat-bevel" style="--bevel-w:${bevelWidth}px;--bevel-light:${colors.light};--bevel-dark:${colors.dark}">${innerHtml}${makeMiterLineHtml(bevelWidth)}</div>`;
         }
 
         function updatePreviewTexture() {
