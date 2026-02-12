@@ -143,6 +143,8 @@
         .mat-preview .mat-bevel img {
             box-shadow: none;
             display: block;
+            max-width: none;
+            max-height: none;
         }
 
         /* Texture overlays on preview */
@@ -2425,8 +2427,8 @@
             const g = parseInt(hex.substring(2, 4), 16);
             const b = parseInt(hex.substring(4, 6), 16);
             const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
-            const lightAlpha = luminance < 0.5 ? 0.14 : 0.12;
-            const darkAlpha = luminance < 0.5 ? 0.10 : 0.08;
+            const lightAlpha = luminance < 0.5 ? 0.04 : 0.03;
+            const darkAlpha = luminance < 0.5 ? 0.14 : 0.12;
             return {
                 light: `rgba(255,255,255,${lightAlpha})`,
                 dark: `rgba(0,0,0,${darkAlpha})`
@@ -2435,7 +2437,7 @@
 
         function makeMiterLineHtml(b) {
             const diag = (Math.sqrt(2) * b).toFixed(1);
-            const style = 'position:absolute;height:0;border-top:0.5px solid rgba(0,0,0,0.15);pointer-events:none;z-index:2;';
+            const style = 'position:absolute;height:0;border-top:0.5px solid rgba(0,0,0,0.08);pointer-events:none;z-index:2;';
             return [
                 `<div style="${style}top:0;left:0;width:${diag}px;transform-origin:0 0;transform:rotate(45deg);"></div>`,
                 `<div style="${style}top:0;right:0;width:${diag}px;transform-origin:100% 0;transform:rotate(-45deg);"></div>`,
