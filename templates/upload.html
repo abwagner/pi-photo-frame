@@ -1709,7 +1709,7 @@
                     for (const m of matches) {
                         const similarity = Math.max(0, 100 - Math.round(m.distance * 100 / 64));
                         html += `<div class="upload-modal-match">
-                            <img src="/uploads/${escAttr(m.filename)}" alt="match">
+                            <img src="/thumbnails/${escAttr(m.filename)}" alt="match">
                             <span>Similar to <strong>${cleanFilename(m.filename)}</strong> (${similarity}% match)</span>
                         </div>`;
                     }
@@ -1847,7 +1847,7 @@
                         <div class="group-card" data-group-id="${groupId}">
                             <div class="group-mosaic ${mosaicClass}" onclick="openGroupPreview('${groupId}')">
                                 <span class="group-badge">${count} images</span>
-                                ${displayImages.map(img => `<img src="/uploads/${escAttr(img.filename)}" alt="${escAttr(img.filename)}" loading="lazy">`).join('')}
+                                ${displayImages.map(img => `<img src="/thumbnails/${escAttr(img.filename)}" alt="${escAttr(img.filename)}" loading="lazy">`).join('')}
                             </div>
                             <div class="card-info">
                                 <div class="card-filename">Group (${count} images)</div>
@@ -1877,7 +1877,7 @@
                         <span class="status-badge ${img.enabled ? 'status-enabled' : 'status-disabled'}">
                             ${img.enabled ? 'Visible' : 'Hidden'}
                         </span>
-                        <img src="/uploads/${escAttr(img.filename)}" alt="${escAttr(img.filename)}" loading="lazy">
+                        <img src="/thumbnails/${escAttr(img.filename)}" alt="${escAttr(img.filename)}" loading="lazy">
                     </div>
                     <div class="card-info">
                         <div class="card-filename" title="${escAttr(img.filename)}">${cleanFilename(escAttr(img.filename))}</div>

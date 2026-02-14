@@ -40,6 +40,8 @@ SETTINGS_FILE = DATA_FOLDER / 'settings.json'
 USERS_FILE = DATA_FOLDER / 'users.json'
 GALLERY_FILE = DATA_FOLDER / 'gallery.json'
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp'}
+THUMBNAIL_FOLDER = UPLOAD_FOLDER / 'thumbnails'
+THUMBNAIL_MAX_SIZE = (400, 400)
 RCLONE_CONFIG_DIR = DATA_FOLDER / 'rclone'
 RCLONE_CONFIG_FILE = RCLONE_CONFIG_DIR / 'rclone.conf'
 BACKUP_LOG_FILE = DATA_FOLDER / 'backup_log.json'
@@ -50,6 +52,7 @@ app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024  # 50MB max upload
 
 # Ensure folders exist
 UPLOAD_FOLDER.mkdir(exist_ok=True)
+THUMBNAIL_FOLDER.mkdir(exist_ok=True)
 DATA_FOLDER.mkdir(exist_ok=True)
 
 # Generate a secret key for sessions (persisted so sessions survive restarts)
@@ -405,6 +408,43 @@ def compute_phash(filepath):
             return str(imagehash.phash(oriented))
     except Exception:
         return None
+
+
+def generate_thumbnail(filepath, filename):
+    """Generate a thumbnail for an image. Returns True on success."""
+    thumb_path = THUMBNAIL_FOLDER / filename
+    if thumb_path.exists():
+        return True
+    try:
+        with Image.open(filepath) as img:
+            oriented = ImageOps.exif_transpose(img)
+            oriented.thumbnail(THUMBNAIL_MAX_SIZE, Image.Resampling.LANCZOS)
+            # Save as JPEG for smaller file size (unless PNG with transparency)
+            if oriented.mode in ('RGBA', 'LA', 'P'):
+                oriented.save(thumb_path, quality=85)
+            else:
+                thumb_path = thumb_path.with_suffix('.jpg')
+                oriented = oriented.convert('RGB')
+                oriented.save(thumb_path, 'JPEG', quality=85)
+        return True
+    except Exception:
+        return False
+
+
+def backfill_thumbnails():
+    """Generate thumbnails for any uploaded images missing them."""
+    if not UPLOAD_FOLDER.exists():
+        return 0
+    count = 0
+    for f in UPLOAD_FOLDER.iterdir():
+        if f.is_file() and allowed_file(f.name):
+            # Check both original extension and .jpg fallback
+            thumb_path = THUMBNAIL_FOLDER / f.name
+            thumb_jpg = thumb_path.with_suffix('.jpg')
+            if not thumb_path.exists() and not thumb_jpg.exists():
+                if generate_thumbnail(f, f.name):
+                    count += 1
+    return count
 
 
 def get_uploaded_images():
@@ -1054,6 +1094,7 @@ def api_upload():
             unique_name = f"{uuid.uuid4().hex[:8]}_{secure_filename(file.filename)}"
             filepath = UPLOAD_FOLDER / unique_name
             file.save(filepath)
+            generate_thumbnail(filepath, unique_name)
             uploaded.append(unique_name)
 
             # Extract image dimensions (after applying EXIF rotation)
@@ -1289,6 +1330,10 @@ def api_delete_image(filename):
 
     if filepath.exists():
         filepath.unlink()
+        # Clean up thumbnail (try both original extension and .jpg)
+        thumb = THUMBNAIL_FOLDER / secure_filename(filename)
+        thumb.unlink(missing_ok=True)
+        thumb.with_suffix('.jpg').unlink(missing_ok=True)
         remove_image_metadata(filename)
         remove_filename_from_groups(filename)
         return jsonify({'success': True})
@@ -1323,6 +1368,9 @@ def api_bulk_action():
             filepath = UPLOAD_FOLDER / secure_filename(f)
             if filepath.exists():
                 filepath.unlink()
+                thumb = THUMBNAIL_FOLDER / secure_filename(f)
+                thumb.unlink(missing_ok=True)
+                thumb.with_suffix('.jpg').unlink(missing_ok=True)
                 remove_image_metadata(f)
                 remove_filename_from_groups(f)
                 deleted += 1
@@ -1447,6 +1495,24 @@ def api_reorder():
 @app.route('/uploads/<filename>')
 def serve_upload(filename):
     """Serve uploaded images (only files tracked in gallery metadata)"""
+    gallery = load_gallery()
+    if filename not in gallery.get('images', {}):
+        return jsonify({'error': 'Not found'}), 404
+    return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
+
+
+@app.route('/thumbnails/<filename>')
+def serve_thumbnail(filename):
+    """Serve image thumbnails (falls back to full image if no thumbnail)."""
+    # Try exact filename first, then .jpg variant
+    thumb_path = THUMBNAIL_FOLDER / filename
+    if thumb_path.exists():
+        return send_from_directory(THUMBNAIL_FOLDER, filename)
+    jpg_name = Path(filename).with_suffix('.jpg').name
+    jpg_path = THUMBNAIL_FOLDER / jpg_name
+    if jpg_path.exists():
+        return send_from_directory(THUMBNAIL_FOLDER, jpg_name)
+    # Fall back to full image
     gallery = load_gallery()
     if filename not in gallery.get('images', {}):
         return jsonify({'error': 'Not found'}), 404
@@ -1793,6 +1859,14 @@ def api_maintenance_window():
 @app.errorhandler(413)
 def too_large(e):
     return jsonify({'error': 'File too large. Maximum size is 50MB.'}), 413
+
+
+# ============ Startup ============
+
+# Backfill thumbnails for existing images on startup
+_thumb_count = backfill_thumbnails()
+if _thumb_count > 0:
+    print(f"Generated {_thumb_count} missing thumbnail(s)")
 
 
 # ============ Main ============
