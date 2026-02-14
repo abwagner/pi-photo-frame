@@ -167,17 +167,16 @@
             font-weight: 600;
         }
 
-        /* Bevel wrapper in preview - V-groove cut, lit from above */
+        /* Bevel wrapper in preview - uniform inset border */
         .mat-preview .mat-bevel {
             position: relative;
             display: inline-flex;
             line-height: 0;
             overflow: hidden;
             padding: var(--bevel-w, 4px);
-            /* Light from above: top face shadowed, bottom face lit */
-            background: linear-gradient(to bottom, var(--bevel-dark, rgba(0,0,0,0.10)), var(--bevel-light, rgba(255,255,255,0.04)));
+            background: var(--bevel-color, rgba(0,0,0,0.10));
         }
-        /* Subtle shadow cast by top bevel onto the image */
+        /* Subtle shadow cast by bevel onto the image */
         .mat-preview .mat-bevel::after {
             content: '';
             position: absolute;
@@ -187,7 +186,7 @@
             bottom: var(--bevel-w, 4px);
             pointer-events: none;
             z-index: 3;
-            box-shadow: inset 0 1px 2px rgba(0,0,0,0.10);
+            box-shadow: inset 0 1px 2px rgba(0,0,0,0.08);
         }
         .mat-preview .mat-bevel img {
             box-shadow: none;
@@ -216,6 +215,11 @@
             z-index: 0;
             opacity: 0;
             border-radius: inherit;
+        }
+        .mat-preview.mat-eggshell::before {
+            background-image: url("data:image/svg+xml,%3Csvg width='4' height='4' xmlns='http://www.w3.org/2000/svg'%3E%3Ccircle cx='1' cy='1' r='0.3' fill='%23888'/%3E%3Ccircle cx='3' cy='3' r='0.25' fill='%23888'/%3E%3Ccircle cx='3' cy='0.5' r='0.2' fill='%23888'/%3E%3Ccircle cx='0.5' cy='2.5' r='0.15' fill='%23888'/%3E%3C/svg%3E");
+            background-size: 4px 4px;
+            opacity: 0.05;
         }
         .mat-preview.mat-linen::before {
             background-image: url("data:image/svg+xml,%3Csvg width='8' height='8' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M0 0h8M0 4h8M0 0v8M4 0v8' stroke='%23888' stroke-width='0.3' fill='none'/%3E%3C/svg%3E");
@@ -346,6 +350,43 @@
         }
 
         .settings-column {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .settings-tabs {
+            display: flex;
+            gap: 0;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 8px;
+            padding: 3px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .settings-tab {
+            flex: 1;
+            padding: 8px 12px;
+            background: none;
+            border: none;
+            color: #888;
+            cursor: pointer;
+            border-radius: 6px;
+            font-size: 0.85rem;
+            font-weight: 500;
+            transition: all 0.2s;
+        }
+
+        .settings-tab:hover {
+            color: #ccc;
+        }
+
+        .settings-tab.active {
+            background: rgba(0, 212, 255, 0.15);
+            color: #00d4ff;
+        }
+
+        .settings-tab-content {
             display: flex;
             flex-direction: column;
             gap: 20px;
@@ -871,6 +912,26 @@
             border-color: #00d4ff;
         }
 
+        .btn-more-colors {
+            background: none;
+            border: none;
+            color: #00d4ff;
+            font-size: 0.75rem;
+            cursor: pointer;
+            padding: 4px 0;
+            margin-top: 4px;
+            opacity: 0.8;
+            transition: opacity 0.2s;
+        }
+        .btn-more-colors:hover {
+            opacity: 1;
+        }
+        .accent-colors {
+            margin-top: 4px;
+            padding-top: 6px;
+            border-top: 1px solid rgba(255,255,255,0.06);
+        }
+
         .btn-apply {
             background: linear-gradient(90deg, #7b2cbf, #00d4ff);
             color: white;
@@ -1355,7 +1416,8 @@
                 <!-- Toolbar -->
                 <div class="toolbar">
                     <div class="toolbar-left">
-                        <button class="btn btn-edit" id="toggle-select-mode" onclick="toggleSelectMode()">Select</button>
+                        <button class="btn btn-group" id="start-group" onclick="startGroupMode()">📐 Group</button>
+                        <button class="btn btn-warning" id="done-group" onclick="finishGroupMode()" style="display:none;">Done</button>
                         <span class="selection-count" id="selection-count-wrapper" style="display:none;"><span id="selected-count">0</span> selected</span>
                         <div class="filter-tabs">
                             <button class="filter-tab active" data-filter="all">All</button>
@@ -1364,7 +1426,6 @@
                         </div>
                     </div>
                     <div class="toolbar-right" style="display:none;">
-                        <button class="btn btn-group" id="bulk-group" disabled>📐 Group</button>
                         <button class="btn btn-success" id="bulk-enable" disabled>✓ Show</button>
                         <button class="btn btn-warning" id="bulk-disable" disabled>⊘ Hide</button>
                         <button class="btn btn-danger" id="bulk-delete" disabled>🗑 Delete</button>
@@ -1385,155 +1446,138 @@
 
             <!-- Settings Sidebar -->
             <div class="settings-column">
-                <!-- Mat Settings -->
-                <div class="panel">
-                    <h2>🎨 Mat Settings</h2>
-
-                    <div class="setting-group">
-                        <label>Default Mat Color</label>
-                        <input type="hidden" id="mat-color" value="{{ settings.mat_color }}">
-                        <div class="color-presets">
-                            <div class="color-preset" style="background: #ffffff; border: 1px solid rgba(255,255,255,0.2);" data-color="#ffffff" title="White"></div>
-                            <div class="color-preset" style="background: #faf9f6;" data-color="#faf9f6" title="Soft White"></div>
-                            <div class="color-preset" style="background: #f5f0e6;" data-color="#f5f0e6" title="Cream"></div>
-                            <div class="color-preset" style="background: #fffff0;" data-color="#fffff0" title="Ivory"></div>
-                            <div class="color-preset" style="background: #faf0e6;" data-color="#faf0e6" title="Linen"></div>
-                            <div class="color-preset" style="background: #f0ead6;" data-color="#f0ead6" title="Eggshell"></div>
-                            <div class="color-preset" style="background: #faebd7;" data-color="#faebd7" title="Antique White"></div>
-                            <div class="color-preset" style="background: #e8dfd5;" data-color="#e8dfd5" title="Sand"></div>
-                            <div class="color-preset" style="background: #e0d8cf;" data-color="#e0d8cf" title="Oyster"></div>
-                            <div class="color-preset" style="background: #d6cec5;" data-color="#d6cec5" title="Pebble"></div>
-                            <div class="color-preset" style="background: #2c2c2c;" data-color="#2c2c2c" title="Charcoal"></div>
-                            <div class="color-preset" style="background: #1a1a2e;" data-color="#1a1a2e" title="Dark Navy"></div>
-                            <div class="color-preset" style="background: #3d0c02;" data-color="#3d0c02" title="Dark Burgundy"></div>
-                            <div class="color-preset" style="background: #1b3a2d;" data-color="#1b3a2d" title="Forest Green"></div>
-                            <div class="color-preset" style="background: #4a3728;" data-color="#4a3728" title="Espresso"></div>
-                            <div class="color-preset" style="background: #8b0000;" data-color="#8b0000" title="Dark Red"></div>
-                            <div class="color-preset" style="background: #003366;" data-color="#003366" title="Navy Blue"></div>
-                            <div class="color-preset" style="background: #2e5339;" data-color="#2e5339" title="Hunter Green"></div>
-                            <div class="color-preset" style="background: #4b0082;" data-color="#4b0082" title="Indigo"></div>
-                            <div class="color-preset" style="background: #704214;" data-color="#704214" title="Sepia"></div>
-                            <div class="color-preset" style="background: #b8860b;" data-color="#b8860b" title="Dark Gold"></div>
-                            <div class="color-preset" style="background: #556b2f;" data-color="#556b2f" title="Olive"></div>
-                            <div class="color-preset" style="background: #800020;" data-color="#800020" title="Burgundy"></div>
-                            <div class="color-preset" style="background: #708090;" data-color="#708090" title="Slate Gray"></div>
-                            <div class="color-preset" style="background: #c4a882;" data-color="#c4a882" title="Tan"></div>
-                            <div class="color-preset" style="background: #d4a574;" data-color="#d4a574" title="Camel"></div>
-                            <div class="color-preset" style="background: #c08081;" data-color="#c08081" title="Dusty Rose"></div>
-                            <div class="color-preset" style="background: #7b9ea8;" data-color="#7b9ea8" title="Steel Blue"></div>
-                            <div class="color-preset" style="background: #8fbc8f;" data-color="#8fbc8f" title="Sage"></div>
-                            <div class="color-preset" style="background: #a9a9a9;" data-color="#a9a9a9" title="Dark Gray"></div>
-                        </div>
-                    </div>
-
-                    <div class="setting-group">
-                        <label>Mat Finish</label>
-                        <select id="mat-finish">
-                            <option value="flat" {% if settings.mat_finish == 'flat' %}selected{% endif %}>Flat</option>
-                            <option value="linen" {% if settings.mat_finish == 'linen' %}selected{% endif %}>Linen</option>
-                            <option value="suede" {% if settings.mat_finish == 'suede' %}selected{% endif %}>Suede</option>
-                            <option value="silk" {% if settings.mat_finish == 'silk' %}selected{% endif %}>Silk</option>
-                        </select>
-                    </div>
-
-                    <div class="setting-group">
-                        <label>Border Effect</label>
-                        <select id="border-effect">
-                            <option value="bevel" {% if settings.border_effect == 'bevel' %}selected{% endif %}>Bevel</option>
-                            <option value="shadow" {% if settings.border_effect == 'shadow' %}selected{% endif %}>Shadow</option>
-                        </select>
-                    </div>
-
-                    <div class="setting-group">
-                        <label><span id="effect-size-label">{{ 'Shadow' if settings.border_effect == 'shadow' else 'Bevel' }}</span> Size <span id="bevel-value">{{ settings.bevel_width }}px</span></label>
-                        <input type="range" id="bevel-width" min="0" max="16" value="{{ settings.bevel_width }}" step="1">
-                    </div>
-
-                    <button class="btn btn-apply" id="apply-mat-settings">Apply</button>
-
-                    <p style="font-size: 0.75rem; color: #666; margin-top: 8px;">
-                        Select an image to customize individually.
-                    </p>
+                <!-- Tab bar -->
+                <div class="settings-tabs">
+                    <button class="settings-tab active" data-tab="mat" onclick="switchSettingsTab('mat')">Mat</button>
+                    <button class="settings-tab" data-tab="settings" onclick="switchSettingsTab('settings')">Settings</button>
                 </div>
 
-                <!-- Slideshow Settings -->
-                <div class="panel">
-                    <h2>📺 Slideshow Settings</h2>
+                <!-- Mat Tab -->
+                <div class="settings-tab-content" id="tab-mat">
+                    <div class="panel">
+                        <h2>🎨 Mat Settings</h2>
 
-                    <div class="setting-group">
-                        <label>Slideshow Interval (seconds)</label>
-                        <input type="number" id="slideshow-interval" min="3" max="300" value="{{ settings.slideshow_interval }}">
-                    </div>
-
-                    <div class="setting-group">
-                        <label>Transition Duration (seconds)</label>
-                        <input type="number" id="transition-duration" min="0" max="5" step="0.5" value="{{ settings.transition_duration }}">
-                    </div>
-
-                    <div class="setting-group">
-                        <label>Image Fit</label>
-                        <select id="fit-mode">
-                            <option value="contain" {% if settings.fit_mode == 'contain' %}selected{% endif %}>Contain (show full image)</option>
-                            <option value="cover" {% if settings.fit_mode == 'cover' %}selected{% endif %}>Cover (fill screen, may crop)</option>
-                        </select>
-                    </div>
-
-                    <div class="toggle-group">
-                        <label>Shuffle Order</label>
-                        <label class="toggle">
-                            <input type="checkbox" id="shuffle" {% if settings.shuffle %}checked{% endif %}>
-                            <span class="toggle-slider"></span>
-                        </label>
-                    </div>
-
-                    <div class="setting-group">
-                        <label>Target Screen Ratio</label>
-                        <select id="target-aspect-ratio">
-                            <option value="16:9" {% if settings.target_aspect_ratio == '16:9' %}selected{% endif %}>16:9 (4K TV)</option>
-                            <option value="21:9" {% if settings.target_aspect_ratio == '21:9' %}selected{% endif %}>21:9 (Ultrawide)</option>
-                            <option value="4:3" {% if settings.target_aspect_ratio == '4:3' %}selected{% endif %}>4:3 (Standard)</option>
-                            <option value="1:1" {% if settings.target_aspect_ratio == '1:1' %}selected{% endif %}>1:1 (Square)</option>
-                        </select>
-                    </div>
-
-                    <p style="font-size: 0.75rem; color: #666; text-align: center;">
-                        Slideshow settings are saved automatically.
-                    </p>
-                </div>
-
-                <!-- TV Schedule Settings -->
-                <div class="panel" id="tv-schedule-panel">
-                    <h2>TV Power Schedule</h2>
-
-                    <div id="cec-unavailable-msg" class="cec-unavailable" style="display:none;">
-                        CEC control is not available. Install cec-utils and ensure the
-                        HDMI-CEC device is accessible in Docker.
-                    </div>
-
-                    <div id="cec-controls" style="display:none;">
-                        <div class="tv-schedule-list" id="tv-schedule-list"></div>
-
-                        <div style="margin-top: 12px; display: flex; gap: 8px;">
-                            <button class="btn btn-refresh" onclick="addTvSchedule()" style="flex:1;">+ Add Schedule</button>
-                            <button class="btn btn-refresh" onclick="testCec('on')" title="Turn TV on now">Test On</button>
-                            <button class="btn btn-refresh" onclick="testCec('standby')" title="Turn TV off now">Test Off</button>
+                        <div class="setting-group">
+                            <label>Default Mat Color</label>
+                            <input type="hidden" id="mat-color" value="{{ settings.mat_color }}">
+                            <div class="color-presets" id="default-color-presets"></div>
+                            <button type="button" class="btn-more-colors" id="toggle-more-colors" onclick="toggleMoreColors()">More Colors</button>
+                            <div class="color-presets accent-colors" id="accent-color-presets" style="display:none;"></div>
                         </div>
 
-                        <p style="font-size: 0.75rem; color: #666; text-align: center; margin-top: 10px;">
-                            Schedules are saved automatically.
+                        <div class="setting-group">
+                            <label>Mat Finish</label>
+                            <select id="mat-finish">
+                                <option value="flat" {% if settings.mat_finish == 'flat' %}selected{% endif %}>Flat</option>
+                                <option value="eggshell" {% if settings.mat_finish == 'eggshell' %}selected{% endif %}>Eggshell</option>
+                                <option value="linen" {% if settings.mat_finish == 'linen' %}selected{% endif %}>Linen</option>
+                                <option value="suede" {% if settings.mat_finish == 'suede' %}selected{% endif %}>Suede</option>
+                                <option value="silk" {% if settings.mat_finish == 'silk' %}selected{% endif %}>Silk</option>
+                            </select>
+                        </div>
+
+                        <div class="setting-group">
+                            <label>Border Effect</label>
+                            <select id="border-effect">
+                                <option value="bevel" {% if settings.border_effect == 'bevel' %}selected{% endif %}>Bevel</option>
+                                <option value="shadow" {% if settings.border_effect == 'shadow' %}selected{% endif %}>Shadow</option>
+                            </select>
+                        </div>
+
+                        <div class="setting-group">
+                            <label><span id="effect-size-label">{{ 'Shadow' if settings.border_effect == 'shadow' else 'Bevel' }}</span> Size <span id="bevel-value">{{ settings.bevel_width }}px</span></label>
+                            <input type="range" id="bevel-width" min="0" max="16" value="{{ settings.bevel_width }}" step="1">
+                        </div>
+
+                        <button class="btn btn-apply" id="apply-mat-settings">Apply</button>
+
+                        <p style="font-size: 0.75rem; color: #666; margin-top: 8px;">
+                            Select an image to customize individually.
                         </p>
                     </div>
                 </div>
 
-                {% if is_admin and password_changed %}
-                <!-- Network Info -->
-                <div class="panel" id="network-info-panel">
-                    <h2>Network</h2>
-                    <div id="network-info-content" style="font-size: 0.85rem; color: #aaa;">
-                        Loading...
+                <!-- Settings Tab -->
+                <div class="settings-tab-content" id="tab-settings" style="display:none;">
+                    <!-- Slideshow Settings -->
+                    <div class="panel">
+                        <h2>Slideshow</h2>
+
+                        <div class="setting-group">
+                            <label>Slideshow Interval (seconds)</label>
+                            <input type="number" id="slideshow-interval" min="3" max="300" value="{{ settings.slideshow_interval }}">
+                        </div>
+
+                        <div class="setting-group">
+                            <label>Transition Duration (seconds)</label>
+                            <input type="number" id="transition-duration" min="0" max="5" step="0.5" value="{{ settings.transition_duration }}">
+                        </div>
+
+                        <div class="setting-group">
+                            <label>Image Fit</label>
+                            <select id="fit-mode">
+                                <option value="contain" {% if settings.fit_mode == 'contain' %}selected{% endif %}>Contain (show full image)</option>
+                                <option value="cover" {% if settings.fit_mode == 'cover' %}selected{% endif %}>Cover (fill screen, may crop)</option>
+                            </select>
+                        </div>
+
+                        <div class="toggle-group">
+                            <label>Shuffle Order</label>
+                            <label class="toggle">
+                                <input type="checkbox" id="shuffle" {% if settings.shuffle %}checked{% endif %}>
+                                <span class="toggle-slider"></span>
+                            </label>
+                        </div>
+
+                        <div class="setting-group">
+                            <label>Target Screen Ratio</label>
+                            <select id="target-aspect-ratio">
+                                <option value="16:9" {% if settings.target_aspect_ratio == '16:9' %}selected{% endif %}>16:9 (4K TV)</option>
+                                <option value="21:9" {% if settings.target_aspect_ratio == '21:9' %}selected{% endif %}>21:9 (Ultrawide)</option>
+                                <option value="4:3" {% if settings.target_aspect_ratio == '4:3' %}selected{% endif %}>4:3 (Standard)</option>
+                                <option value="1:1" {% if settings.target_aspect_ratio == '1:1' %}selected{% endif %}>1:1 (Square)</option>
+                            </select>
+                        </div>
+
+                        <p style="font-size: 0.75rem; color: #666; text-align: center;">
+                            Slideshow settings are saved automatically.
+                        </p>
                     </div>
+
+                    <!-- TV Schedule Settings -->
+                    <div class="panel" id="tv-schedule-panel">
+                        <h2>TV Power Schedule</h2>
+
+                        <div id="cec-unavailable-msg" class="cec-unavailable" style="display:none;">
+                            CEC control is not available. Install cec-utils and ensure the
+                            HDMI-CEC device is accessible in Docker.
+                        </div>
+
+                        <div id="cec-controls" style="display:none;">
+                            <div class="tv-schedule-list" id="tv-schedule-list"></div>
+
+                            <div style="margin-top: 12px; display: flex; gap: 8px;">
+                                <button class="btn btn-refresh" onclick="addTvSchedule()" style="flex:1;">+ Add Schedule</button>
+                                <button class="btn btn-refresh" onclick="testCec('on')" title="Turn TV on now">Test On</button>
+                                <button class="btn btn-refresh" onclick="testCec('standby')" title="Turn TV off now">Test Off</button>
+                            </div>
+
+                            <p style="font-size: 0.75rem; color: #666; text-align: center; margin-top: 10px;">
+                                Schedules are saved automatically.
+                            </p>
+                        </div>
+                    </div>
+
+                    {% if is_admin and password_changed %}
+                    <!-- Network Info -->
+                    <div class="panel" id="network-info-panel">
+                        <h2>Network</h2>
+                        <div id="network-info-content" style="font-size: 0.85rem; color: #aaa;">
+                            Loading...
+                        </div>
+                    </div>
+                    {% endif %}
                 </div>
-                {% endif %}
             </div>
         </div>
     </div>
@@ -1569,27 +1613,34 @@
         const previewControlsBody = document.getElementById('preview-controls-body');
         const previewControlsTitle = document.getElementById('preview-controls-title');
 
-        // Color presets shared between default and per-image controls
-        const COLOR_PRESETS = [
-            // Light neutrals
-            {color: '#ffffff', title: 'White'}, {color: '#faf9f6', title: 'Soft White'},
-            {color: '#f5f0e6', title: 'Cream'}, {color: '#fffff0', title: 'Ivory'},
-            {color: '#faf0e6', title: 'Linen'}, {color: '#f0ead6', title: 'Eggshell'},
-            {color: '#faebd7', title: 'Antique White'}, {color: '#e8dfd5', title: 'Sand'},
-            {color: '#e0d8cf', title: 'Oyster'}, {color: '#d6cec5', title: 'Pebble'},
-            // Darks and rich colors
-            {color: '#2c2c2c', title: 'Charcoal'}, {color: '#1a1a2e', title: 'Dark Navy'},
-            {color: '#3d0c02', title: 'Dark Burgundy'}, {color: '#1b3a2d', title: 'Forest Green'},
-            {color: '#4a3728', title: 'Espresso'}, {color: '#8b0000', title: 'Dark Red'},
-            {color: '#003366', title: 'Navy Blue'}, {color: '#2e5339', title: 'Hunter Green'},
-            {color: '#4b0082', title: 'Indigo'}, {color: '#704214', title: 'Sepia'},
-            // Mid-tones
-            {color: '#b8860b', title: 'Dark Gold'}, {color: '#556b2f', title: 'Olive'},
-            {color: '#800020', title: 'Burgundy'}, {color: '#708090', title: 'Slate Gray'},
-            {color: '#c4a882', title: 'Tan'}, {color: '#d4a574', title: 'Camel'},
-            {color: '#c08081', title: 'Dusty Rose'}, {color: '#7b9ea8', title: 'Steel Blue'},
-            {color: '#8fbc8f', title: 'Sage'}, {color: '#a9a9a9', title: 'Dark Gray'},
+        // Neutral presets: shown by default (white to medium-brown warm tones)
+        const NEUTRAL_PRESETS = [
+            {color: '#ffffff', title: 'White'}, {color: '#f5f0e6', title: 'Cream'},
+            {color: '#faebd7', title: 'Antique White'}, {color: '#f0ead6', title: 'Eggshell'},
+            {color: '#e8dfd5', title: 'Sand'}, {color: '#d6cec5', title: 'Pebble'},
+            {color: '#c4a882', title: 'Tan'}, {color: '#b8a088', title: 'Khaki'},
+            {color: '#a08870', title: 'Driftwood'}, {color: '#8b7355', title: 'Medium Brown'},
         ];
+
+        // Accent presets: shown when "More Colors" is expanded
+        const ACCENT_PRESETS = [
+            {color: '#faf9f6', title: 'Soft White'}, {color: '#fffff0', title: 'Ivory'},
+            {color: '#faf0e6', title: 'Linen'}, {color: '#e0d8cf', title: 'Oyster'},
+            {color: '#d4a574', title: 'Camel'}, {color: '#a9a9a9', title: 'Silver'},
+            {color: '#808080', title: 'Gray'}, {color: '#2c2c2c', title: 'Charcoal'},
+            {color: '#111111', title: 'Black'}, {color: '#708090', title: 'Slate Gray'},
+            {color: '#1a1a2e', title: 'Dark Navy'}, {color: '#3d0c02', title: 'Dark Burgundy'},
+            {color: '#1b3a2d', title: 'Forest Green'}, {color: '#4a3728', title: 'Espresso'},
+            {color: '#8b0000', title: 'Dark Red'}, {color: '#003366', title: 'Navy Blue'},
+            {color: '#2e5339', title: 'Hunter Green'}, {color: '#4b0082', title: 'Indigo'},
+            {color: '#704214', title: 'Sepia'}, {color: '#b8860b', title: 'Dark Gold'},
+            {color: '#556b2f', title: 'Olive'}, {color: '#800020', title: 'Burgundy'},
+            {color: '#c08081', title: 'Dusty Rose'}, {color: '#7b9ea8', title: 'Steel Blue'},
+            {color: '#8fbc8f', title: 'Sage'},
+        ];
+
+        // Combined for per-image controls
+        const COLOR_PRESETS = [...NEUTRAL_PRESETS, ...ACCENT_PRESETS];
 
         // Settings elements
         const matColorInput = document.getElementById('mat-color');
@@ -1603,7 +1654,48 @@
         const fitModeSelect = document.getElementById('fit-mode');
         const targetAspectRatioSelect = document.getElementById('target-aspect-ratio');
         const shuffleCheckbox = document.getElementById('shuffle');
+        // Populate sidebar color presets dynamically
+        function buildSidebarPresets() {
+            const neutralContainer = document.getElementById('default-color-presets');
+            const accentContainer = document.getElementById('accent-color-presets');
+            neutralContainer.innerHTML = NEUTRAL_PRESETS.map(p =>
+                `<div class="color-preset" style="background:${p.color};${p.color === '#ffffff' ? 'border:1px solid rgba(255,255,255,0.2);' : ''}" data-color="${p.color}" title="${p.title}"></div>`
+            ).join('');
+            accentContainer.innerHTML = ACCENT_PRESETS.map(p =>
+                `<div class="color-preset" style="background:${p.color};${p.color === '#ffffff' ? 'border:1px solid rgba(255,255,255,0.2);' : ''}" data-color="${p.color}" title="${p.title}"></div>`
+            ).join('');
+        }
+        buildSidebarPresets();
+
+        function toggleMoreColors() {
+            const accentEl = document.getElementById('accent-color-presets');
+            const btn = document.getElementById('toggle-more-colors');
+            const showing = accentEl.style.display !== 'none';
+            accentEl.style.display = showing ? 'none' : 'flex';
+            btn.textContent = showing ? 'More Colors' : 'Fewer Colors';
+            // Rebind click handlers for accent presets
+            if (!showing) bindSidebarPresets();
+        }
+
+        function bindSidebarPresets() {
+            document.querySelectorAll('.settings-column .color-preset').forEach(preset => {
+                preset.onclick = () => {
+                    matColorInput.value = preset.dataset.color;
+                    updateColorPresets();
+                    updatePreviewTexture();
+                };
+            });
+        }
+        bindSidebarPresets();
+
         const colorPresets = document.querySelectorAll('.settings-column .color-preset');
+
+        // ===== Settings Tabs =====
+        function switchSettingsTab(tab) {
+            document.querySelectorAll('.settings-tab').forEach(t => t.classList.toggle('active', t.dataset.tab === tab));
+            document.querySelectorAll('.settings-tab-content').forEach(c => c.style.display = 'none');
+            document.getElementById('tab-' + tab).style.display = 'flex';
+        }
 
         // ===== State =====
         let images = [];
@@ -1935,7 +2027,7 @@
             const scale = img.scale || 1.0;
 
             matPreview.style.backgroundColor = matColor;
-            matPreview.classList.remove('mat-linen', 'mat-suede', 'mat-silk');
+            matPreview.classList.remove('mat-eggshell', 'mat-linen', 'mat-suede', 'mat-silk');
             if (finish !== 'flat') matPreview.classList.add('mat-' + finish);
 
             // Compute pixel dimensions — photo+effect must fit in frame
@@ -2015,7 +2107,11 @@
                                 onclick="updateMatColor('${escAttr(filename)}', null); renderSinglePreviewImage('${escAttr(filename)}'); renderSingleControls('${escAttr(filename)}')">Reset</button>
                     </div>
                     <div class="color-presets" style="margin-top:0;">
-                        ${COLOR_PRESETS.map(p => `<div class="color-preset${currentMatColor === p.color ? ' active' : ''}" style="background:${p.color};width:22px;height:22px;${p.color === '#ffffff' ? 'border:1px solid rgba(255,255,255,0.2);' : ''}" title="${p.title}" onclick="updateMatColor('${escAttr(filename)}','${p.color}'); renderSingleControls('${escAttr(filename)}')"></div>`).join('')}
+                        ${NEUTRAL_PRESETS.map(p => `<div class="color-preset${currentMatColor === p.color ? ' active' : ''}" style="background:${p.color};width:22px;height:22px;${p.color === '#ffffff' ? 'border:1px solid rgba(255,255,255,0.2);' : ''}" title="${p.title}" onclick="updateMatColor('${escAttr(filename)}','${p.color}'); renderSingleControls('${escAttr(filename)}')"></div>`).join('')}
+                    </div>
+                    <button type="button" class="btn-more-colors" onclick="this.nextElementSibling.style.display = this.nextElementSibling.style.display === 'none' ? 'flex' : 'none'; this.textContent = this.nextElementSibling.style.display === 'none' ? 'More Colors' : 'Fewer Colors'">${ACCENT_PRESETS.some(p => p.color === currentMatColor) ? 'Fewer Colors' : 'More Colors'}</button>
+                    <div class="color-presets accent-colors" style="margin-top:0;${ACCENT_PRESETS.some(p => p.color === currentMatColor) ? '' : 'display:none;'}">
+                        ${ACCENT_PRESETS.map(p => `<div class="color-preset${currentMatColor === p.color ? ' active' : ''}" style="background:${p.color};width:22px;height:22px;${p.color === '#ffffff' ? 'border:1px solid rgba(255,255,255,0.2);' : ''}" title="${p.title}" onclick="updateMatColor('${escAttr(filename)}','${p.color}'); renderSingleControls('${escAttr(filename)}')"></div>`).join('')}
                     </div>
                 </div>
                 <div class="group-edit-item" style="flex-wrap:wrap;gap:12px;">
@@ -2025,6 +2121,7 @@
                                 onchange="updateImageField('${escAttr(filename)}','mat_finish',this.value||null)">
                             <option value="" ${!currentFinish ? 'selected' : ''}>Default</option>
                             <option value="flat" ${currentFinish==='flat' ? 'selected' : ''}>Flat</option>
+                            <option value="eggshell" ${currentFinish==='eggshell' ? 'selected' : ''}>Eggshell</option>
                             <option value="linen" ${currentFinish==='linen' ? 'selected' : ''}>Linen</option>
                             <option value="suede" ${currentFinish==='suede' ? 'selected' : ''}>Suede</option>
                             <option value="silk" ${currentFinish==='silk' ? 'selected' : ''}>Silk</option>
@@ -2068,7 +2165,7 @@
 
             // Show uncropped image in preview
             matPreview.style.backgroundColor = '#111';
-            matPreview.classList.remove('mat-linen', 'mat-suede', 'mat-silk');
+            matPreview.classList.remove('mat-eggshell', 'mat-linen', 'mat-suede', 'mat-silk');
 
             const containerW = previewContent.clientWidth;
             const containerH = previewContent.clientHeight;
@@ -2291,7 +2388,7 @@
             const groupBorderEffect = group.border_effect || borderEffectSelect.value;
 
             matPreview.style.backgroundColor = matColor;
-            matPreview.classList.remove('mat-linen', 'mat-suede', 'mat-silk');
+            matPreview.classList.remove('mat-eggshell', 'mat-linen', 'mat-suede', 'mat-silk');
             if (finish !== 'flat') matPreview.classList.add('mat-' + finish);
 
             const groupImages = (group.images || []).map(f => images.find(i => i.filename === f)).filter(Boolean);
@@ -2361,6 +2458,7 @@
                                 onchange="updateGroupField('${groupId}','mat_finish',this.value||null)">
                             <option value="" ${!currentFinish ? 'selected' : ''}>Default</option>
                             <option value="flat" ${currentFinish==='flat' ? 'selected' : ''}>Flat</option>
+                            <option value="eggshell" ${currentFinish==='eggshell' ? 'selected' : ''}>Eggshell</option>
                             <option value="linen" ${currentFinish==='linen' ? 'selected' : ''}>Linen</option>
                             <option value="suede" ${currentFinish==='suede' ? 'selected' : ''}>Suede</option>
                             <option value="silk" ${currentFinish==='silk' ? 'selected' : ''}>Silk</option>
@@ -2483,25 +2581,31 @@
             }
         }
 
-        function toggleSelectMode() {
-            selectMode = !selectMode;
-            document.body.classList.toggle('select-mode', selectMode);
-            const btn = document.getElementById('toggle-select-mode');
-            btn.textContent = selectMode ? 'Done' : 'Select';
-            btn.classList.toggle('btn-warning', selectMode);
-            btn.classList.toggle('btn-edit', !selectMode);
+        function startGroupMode() {
+            selectMode = true;
+            document.body.classList.add('select-mode');
+            document.getElementById('start-group').style.display = 'none';
+            document.getElementById('done-group').style.display = '';
+            document.querySelector('.toolbar-right').style.display = '';
+            document.getElementById('selection-count-wrapper').style.display = '';
+        }
 
-            const toolbarRight = document.querySelector('.toolbar-right');
-            const countWrapper = document.getElementById('selection-count-wrapper');
-            if (selectMode) {
-                toolbarRight.style.display = '';
-                countWrapper.style.display = '';
-            } else {
-                toolbarRight.style.display = 'none';
-                countWrapper.style.display = 'none';
-                selectedImages.clear();
-                updateSelectionUI();
+        function exitSelectMode() {
+            selectMode = false;
+            document.body.classList.remove('select-mode');
+            document.getElementById('start-group').style.display = '';
+            document.getElementById('done-group').style.display = 'none';
+            document.querySelector('.toolbar-right').style.display = 'none';
+            document.getElementById('selection-count-wrapper').style.display = 'none';
+            selectedImages.clear();
+            updateSelectionUI();
+        }
+
+        async function finishGroupMode() {
+            if (selectedImages.size >= 2) {
+                await createGroup();
             }
+            exitSelectMode();
         }
 
         function toggleSelect(filename) {
@@ -2520,7 +2624,6 @@
             document.getElementById('bulk-enable').disabled = !hasSelection;
             document.getElementById('bulk-disable').disabled = !hasSelection;
             document.getElementById('bulk-delete').disabled = !hasSelection;
-            document.getElementById('bulk-group').disabled = selectedImages.size < 2;
 
             document.querySelectorAll('.image-card').forEach(card => {
                 const filename = card.dataset.filename;
@@ -2643,8 +2746,6 @@
         }
 
         // ===== Group Actions =====
-        document.getElementById('bulk-group').addEventListener('click', createGroup);
-
         async function createGroup() {
             const filenames = Array.from(selectedImages);
             if (filenames.length < 2) return;
@@ -2890,15 +2991,6 @@
             bevelValueLabel.textContent = bevelWidthInput.value + 'px';
         });
 
-        // Color presets select color but don't save (Apply button saves)
-        colorPresets.forEach(preset => {
-            preset.addEventListener('click', () => {
-                matColorInput.value = preset.dataset.color;
-                updateColorPresets();
-                updatePreviewTexture();
-            });
-        });
-
         // Slideshow settings: auto-save
         slideshowIntervalInput.addEventListener('change', saveSlideshowSettings);
         transitionDurationInput.addEventListener('change', saveSlideshowSettings);
@@ -2910,9 +3002,15 @@
         });
 
         function updateColorPresets() {
-            colorPresets.forEach(preset => {
+            document.querySelectorAll('.settings-column .color-preset').forEach(preset => {
                 preset.classList.toggle('active', preset.dataset.color === matColorInput.value);
             });
+            // If selected color is in accent presets, auto-expand
+            const inAccent = ACCENT_PRESETS.some(p => p.color === matColorInput.value);
+            if (inAccent) {
+                const accentEl = document.getElementById('accent-color-presets');
+                if (accentEl.style.display === 'none') toggleMoreColors();
+            }
         }
         updateColorPresets();
 
@@ -2946,20 +3044,15 @@
         }
 
         // ===== Bevel + Texture Helpers =====
-        function getBevelColors(matHex) {
+        function getBevelColor(matHex) {
             let hex = matHex.replace('#', '');
             if (hex.length === 3) hex = hex[0]+hex[0]+hex[1]+hex[1]+hex[2]+hex[2];
             const r = parseInt(hex.substring(0, 2), 16);
             const g = parseInt(hex.substring(2, 4), 16);
             const b = parseInt(hex.substring(4, 6), 16);
             const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
-            // Visible bevel shading - consistent on both faces
-            const lightAlpha = luminance < 0.5 ? 0.13 : 0.07;
-            const darkAlpha = luminance < 0.5 ? 0.22 : 0.16;
-            return {
-                light: `rgba(255,255,255,${lightAlpha})`,
-                dark: `rgba(0,0,0,${darkAlpha})`
-            };
+            const alpha = luminance < 0.5 ? 0.18 : 0.12;
+            return `rgba(0,0,0,${alpha})`;
         }
 
         function makeMiterLineHtml(b) {
@@ -2982,8 +3075,7 @@
 
         function makeBevelHtml(innerHtml, bevelWidth, matColor) {
             if (!bevelWidth || bevelWidth <= 0) return innerHtml;
-            const colors = getBevelColors(matColor);
-            return `<div class="mat-bevel" style="--bevel-w:${bevelWidth}px;--bevel-light:${colors.light};--bevel-dark:${colors.dark}">${innerHtml}${makeMiterLineHtml(bevelWidth)}</div>`;
+            return `<div class="mat-bevel" style="--bevel-w:${bevelWidth}px;--bevel-color:${getBevelColor(matColor)}">${innerHtml}${makeMiterLineHtml(bevelWidth)}</div>`;
         }
 
         function makeEffectHtml(innerHtml, effectSize, matColor, borderEffect) {
@@ -3001,7 +3093,7 @@
 
         function updatePreviewTexture() {
             const finish = matFinishSelect.value;
-            matPreview.classList.remove('mat-linen', 'mat-suede', 'mat-silk');
+            matPreview.classList.remove('mat-eggshell', 'mat-linen', 'mat-suede', 'mat-silk');
             if (finish !== 'flat') {
                 matPreview.classList.add('mat-' + finish);
             }

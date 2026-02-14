@@ -20,7 +20,7 @@
         }
 
         body {
-            background-color: var(--mat-color, #2c2c2c);
+            background-color: var(--mat-color, #ffffff);
             display: flex;
             align-items: center;
             justify-content: center;
@@ -84,17 +84,16 @@
             object-fit: cover;
         }
 
-        /* Mat bevel - V-groove cut, lit from above */
+        /* Mat bevel - uniform inset border */
         .mat-bevel {
             position: relative;
             display: inline-flex;
             line-height: 0;
             overflow: hidden;
             padding: var(--bevel-w, 4px);
-            /* Light from above: top face shadowed, bottom face lit */
-            background: linear-gradient(to bottom, var(--bevel-dark, rgba(0,0,0,0.10)), var(--bevel-light, rgba(255,255,255,0.04)));
+            background: var(--bevel-color, rgba(0,0,0,0.10));
         }
-        /* Subtle shadow cast by top bevel onto the image */
+        /* Subtle shadow cast by bevel onto the image */
         .mat-bevel::after {
             content: '';
             position: absolute;
@@ -104,7 +103,7 @@
             bottom: var(--bevel-w, 4px);
             pointer-events: none;
             z-index: 3;
-            box-shadow: inset 0 1px 2px rgba(0,0,0,0.10);
+            box-shadow: inset 0 1px 2px rgba(0,0,0,0.08);
         }
         .mat-bevel img {
             box-shadow: none;
@@ -124,6 +123,11 @@
             pointer-events: none;
             z-index: 0;
             opacity: 0;
+        }
+        body.mat-eggshell::before {
+            background-image: url("data:image/svg+xml,%3Csvg width='4' height='4' xmlns='http://www.w3.org/2000/svg'%3E%3Ccircle cx='1' cy='1' r='0.3' fill='%23888'/%3E%3Ccircle cx='3' cy='3' r='0.25' fill='%23888'/%3E%3Ccircle cx='3' cy='0.5' r='0.2' fill='%23888'/%3E%3Ccircle cx='0.5' cy='2.5' r='0.15' fill='%23888'/%3E%3C/svg%3E");
+            background-size: 4px 4px;
+            opacity: 0.05;
         }
         body.mat-linen::before {
             background-image: url("data:image/svg+xml,%3Csvg width='8' height='8' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M0 0h8M0 4h8M0 0v8M4 0v8' stroke='%23888' stroke-width='0.3' fill='none'/%3E%3C/svg%3E");
@@ -357,31 +361,24 @@
             document.body.style.setProperty('--transition-duration', settings.transition_duration + 's');
 
             // Apply mat texture class
-            document.body.classList.remove('mat-linen', 'mat-suede', 'mat-silk');
+            document.body.classList.remove('mat-eggshell', 'mat-linen', 'mat-suede', 'mat-silk');
             const finish = settings.mat_finish || 'flat';
             if (finish !== 'flat') {
                 document.body.classList.add('mat-' + finish);
             }
         }
 
-        function getBevelColors(matHex) {
-            // Parse hex color to RGB, return light and dark rgba for bevel faces
+        function getBevelColor(matHex) {
+            // Parse hex color to RGB, return a slightly darker shade for the bevel
             let hex = matHex.replace('#', '');
             if (hex.length === 3) hex = hex[0]+hex[0]+hex[1]+hex[1]+hex[2]+hex[2];
             const r = parseInt(hex.substring(0, 2), 16);
             const g = parseInt(hex.substring(2, 4), 16);
             const b = parseInt(hex.substring(4, 6), 16);
             const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
-
-            // Visible bevel shading - light from above
-            // Top face (dark/shadowed), bottom face (light/highlighted)
-            const lightAlpha = luminance < 0.5 ? 0.13 : 0.07;
-            const darkAlpha = luminance < 0.5 ? 0.22 : 0.16;
-
-            return {
-                light: `rgba(255,255,255,${lightAlpha})`,
-                dark: `rgba(0,0,0,${darkAlpha})`
-            };
+            // Uniform bevel: slightly darker than the mat
+            const alpha = luminance < 0.5 ? 0.18 : 0.12;
+            return `rgba(0,0,0,${alpha})`;
         }
 
         function makeMiterLine(b) {
@@ -419,9 +416,7 @@
             const wrapper = document.createElement('div');
             wrapper.className = 'mat-bevel';
             wrapper.style.setProperty('--bevel-w', bevelWidth + 'px');
-            const colors = getBevelColors(matColor);
-            wrapper.style.setProperty('--bevel-light', colors.light);
-            wrapper.style.setProperty('--bevel-dark', colors.dark);
+            wrapper.style.setProperty('--bevel-color', getBevelColor(matColor));
             wrapper.appendChild(imgEl);
             // Mitered corner lines
             const b = bevelWidth;
@@ -459,7 +454,7 @@
             const slideFinish = slide.images[0].mat_finish ?? settings.mat_finish ?? 'flat';
 
             // Apply per-slide texture override
-            document.body.classList.remove('mat-linen', 'mat-suede', 'mat-silk');
+            document.body.classList.remove('mat-eggshell', 'mat-linen', 'mat-suede', 'mat-silk');
             if (slideFinish !== 'flat') {
                 document.body.classList.add('mat-' + slideFinish);
             }

@@ -325,8 +325,8 @@ class TestDisplayControl:
         self._upload_images(auth_client)
         photo_app._display_state['index'] = 0
         photo_app._display_state['paused'] = False
-        # Set last_advanced_at to 15 seconds ago (interval is 10s default)
-        photo_app._display_state['last_advanced_at'] = time.time() - 15
+        # Set last_advanced_at to 65 seconds ago (interval is 60s default)
+        photo_app._display_state['last_advanced_at'] = time.time() - 65
 
         resp = auth_client.get('/api/display/state')
         data = resp.get_json()

@@ -228,7 +228,7 @@ def test_settings_defaults_include_mat_fields(auth_client):
     """Default settings include mat_finish, bevel_width, and border_effect."""
     settings_resp = auth_client.get('/api/settings')
     settings = settings_resp.get_json()
-    assert settings['mat_finish'] == 'flat'
+    assert settings['mat_finish'] == 'eggshell'
     assert settings['bevel_width'] == 4
     assert settings['border_effect'] == 'bevel'
 

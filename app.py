@@ -490,11 +490,11 @@ def get_enabled_images():
 # ============ Settings ============
 
 DEFAULT_SETTINGS = {
-    'mat_color': '#2c2c2c',
-    'mat_finish': 'flat',
+    'mat_color': '#ffffff',
+    'mat_finish': 'eggshell',
     'bevel_width': 4,
     'border_effect': 'bevel',
-    'slideshow_interval': 10,
+    'slideshow_interval': 60,
     'transition_duration': 1,
     'fit_mode': 'contain',
     'shuffle': False,
