@@ -225,8 +225,177 @@ def test_settings_bevel_width(auth_client):
 
 
 def test_settings_defaults_include_mat_fields(auth_client):
-    """Default settings include mat_finish and bevel_width."""
+    """Default settings include mat_finish, bevel_width, and border_effect."""
     settings_resp = auth_client.get('/api/settings')
     settings = settings_resp.get_json()
     assert settings['mat_finish'] == 'flat'
     assert settings['bevel_width'] == 4
+    assert settings['border_effect'] == 'bevel'
+
+
+# ===== Border Effect Tests =====
+
+def test_patch_border_effect(auth_client):
+    """PATCH /api/gallery/<file> with border_effect updates metadata."""
+    result = _upload_image(auth_client)
+    fname = result['uploaded'][0]
+
+    resp = auth_client.patch(f'/api/gallery/{fname}',
+                             json={'border_effect': 'shadow'},
+                             content_type='application/json')
+    assert resp.status_code == 200
+
+    gallery_resp = auth_client.get('/api/gallery')
+    images = gallery_resp.get_json()['images']
+    img = next(i for i in images if i['filename'] == fname)
+    assert img['border_effect'] == 'shadow'
+
+
+def test_patch_border_effect_null(auth_client):
+    """PATCH border_effect to null clears per-image override."""
+    result = _upload_image(auth_client)
+    fname = result['uploaded'][0]
+
+    auth_client.patch(f'/api/gallery/{fname}',
+                      json={'border_effect': 'shadow'},
+                      content_type='application/json')
+    resp = auth_client.patch(f'/api/gallery/{fname}',
+                             json={'border_effect': None},
+                             content_type='application/json')
+    assert resp.status_code == 200
+
+    gallery_resp = auth_client.get('/api/gallery')
+    images = gallery_resp.get_json()['images']
+    img = next(i for i in images if i['filename'] == fname)
+    assert img['border_effect'] is None
+
+
+def test_settings_border_effect(auth_client):
+    """POST /api/settings with border_effect updates global setting."""
+    resp = auth_client.post('/api/settings',
+                            json={'border_effect': 'shadow'},
+                            content_type='application/json')
+    assert resp.status_code == 200
+
+    settings_resp = auth_client.get('/api/settings')
+    settings = settings_resp.get_json()
+    assert settings['border_effect'] == 'shadow'
+
+
+def test_api_images_includes_border_effect(auth_client):
+    """GET /api/images returns border_effect in slides."""
+    result = _upload_image(auth_client)
+    fname = result['uploaded'][0]
+
+    auth_client.patch(f'/api/gallery/{fname}',
+                      json={'border_effect': 'shadow'},
+                      content_type='application/json')
+
+    resp = auth_client.get('/api/images')
+    data = resp.get_json()
+    slides = data['slides']
+    slide = next(s for s in slides if s['type'] == 'single'
+                 and s['images'][0]['filename'] == fname)
+    assert slide['images'][0]['border_effect'] == 'shadow'
+
+
+def test_gallery_list_includes_border_effect(auth_client):
+    """GET /api/gallery returns border_effect in metadata."""
+    result = _upload_image(auth_client)
+    fname = result['uploaded'][0]
+
+    gallery_resp = auth_client.get('/api/gallery')
+    images = gallery_resp.get_json()['images']
+    img = next(i for i in images if i['filename'] == fname)
+    assert 'border_effect' in img
+
+
+def test_custom_settings_not_overridden_by_defaults(auth_client):
+    """Changing default settings does not override per-image custom settings."""
+    result = _upload_image(auth_client)
+    fname = result['uploaded'][0]
+
+    # Set custom per-image settings
+    auth_client.patch(f'/api/gallery/{fname}',
+                      json={'mat_color': '#ff0000', 'border_effect': 'shadow', 'bevel_width': 8},
+                      content_type='application/json')
+
+    # Change default settings
+    auth_client.post('/api/settings',
+                     json={'mat_color': '#00ff00', 'border_effect': 'bevel', 'bevel_width': 2},
+                     content_type='application/json')
+
+    # Verify per-image settings are preserved
+    gallery_resp = auth_client.get('/api/gallery')
+    images = gallery_resp.get_json()['images']
+    img = next(i for i in images if i['filename'] == fname)
+    assert img['mat_color'] == '#ff0000'
+    assert img['border_effect'] == 'shadow'
+    assert img['bevel_width'] == 8
+
+
+# ===== Crop Tests =====
+
+def test_patch_crop(auth_client):
+    """PATCH /api/gallery/<file> with crop updates metadata."""
+    result = _upload_image(auth_client)
+    fname = result['uploaded'][0]
+
+    crop = {'x': 0.1, 'y': 0.2, 'w': 0.6, 'h': 0.5}
+    resp = auth_client.patch(f'/api/gallery/{fname}',
+                             json={'crop': crop},
+                             content_type='application/json')
+    assert resp.status_code == 200
+
+    gallery_resp = auth_client.get('/api/gallery')
+    images = gallery_resp.get_json()['images']
+    img = next(i for i in images if i['filename'] == fname)
+    assert img['crop'] == crop
+
+
+def test_patch_crop_null(auth_client):
+    """PATCH crop to null clears crop."""
+    result = _upload_image(auth_client)
+    fname = result['uploaded'][0]
+
+    auth_client.patch(f'/api/gallery/{fname}',
+                      json={'crop': {'x': 0, 'y': 0, 'w': 0.5, 'h': 0.5}},
+                      content_type='application/json')
+    resp = auth_client.patch(f'/api/gallery/{fname}',
+                             json={'crop': None},
+                             content_type='application/json')
+    assert resp.status_code == 200
+
+    gallery_resp = auth_client.get('/api/gallery')
+    images = gallery_resp.get_json()['images']
+    img = next(i for i in images if i['filename'] == fname)
+    assert img['crop'] is None
+
+
+def test_api_images_includes_crop(auth_client):
+    """GET /api/images returns crop in slide data."""
+    result = _upload_image(auth_client)
+    fname = result['uploaded'][0]
+
+    crop = {'x': 0.1, 'y': 0.1, 'w': 0.8, 'h': 0.8}
+    auth_client.patch(f'/api/gallery/{fname}',
+                      json={'crop': crop},
+                      content_type='application/json')
+
+    resp = auth_client.get('/api/images')
+    data = resp.get_json()
+    slides = data['slides']
+    slide = next(s for s in slides if s['type'] == 'single'
+                 and s['images'][0]['filename'] == fname)
+    assert slide['images'][0]['crop'] == crop
+
+
+def test_gallery_list_includes_crop_field(auth_client):
+    """GET /api/gallery returns crop in metadata."""
+    result = _upload_image(auth_client)
+    fname = result['uploaded'][0]
+
+    gallery_resp = auth_client.get('/api/gallery')
+    images = gallery_resp.get_json()['images']
+    img = next(i for i in images if i['filename'] == fname)
+    assert 'crop' in img

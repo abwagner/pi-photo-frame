@@ -111,6 +111,11 @@
             display: block;
         }
 
+        /* Shadow effect wrapper */
+        .mat-shadow img {
+            display: block;
+        }
+
         /* Texture overlays on body */
         body::before {
             content: '';
@@ -360,7 +365,7 @@
         }
 
         function getBevelColors(matHex) {
-            // Parse hex color to RGB, return light (top-left) and dark (bottom-right) rgba
+            // Parse hex color to RGB, return light and dark rgba for bevel faces
             let hex = matHex.replace('#', '');
             if (hex.length === 3) hex = hex[0]+hex[0]+hex[1]+hex[1]+hex[2]+hex[2];
             const r = parseInt(hex.substring(0, 2), 16);
@@ -368,9 +373,10 @@
             const b = parseInt(hex.substring(4, 6), 16);
             const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
 
-            // Subtle bevel shading - light from above
-            const lightAlpha = luminance < 0.5 ? 0.04 : 0.03;
-            const darkAlpha = luminance < 0.5 ? 0.14 : 0.12;
+            // Visible bevel shading - light from above
+            // Top face (dark/shadowed), bottom face (light/highlighted)
+            const lightAlpha = luminance < 0.5 ? 0.13 : 0.07;
+            const darkAlpha = luminance < 0.5 ? 0.22 : 0.16;
 
             return {
                 light: `rgba(255,255,255,${lightAlpha})`,
@@ -384,6 +390,29 @@
             const d = document.createElement('div');
             d.style.cssText = `position:absolute;width:${diag.toFixed(1)}px;height:0;border-top:0.5px solid rgba(0,0,0,0.08);transform-origin:0 0;transform:rotate(45deg);pointer-events:none;z-index:2;`;
             return d;
+        }
+
+        function getShadowStyle(size) {
+            const blur = size * 2;
+            const spread = Math.round(size * 0.5);
+            const yOffset = Math.round(size * 0.5);
+            return `0 ${yOffset}px ${blur}px ${spread}px rgba(0,0,0,0.35)`;
+        }
+
+        function wrapInShadow(imgEl, shadowSize) {
+            const wrapper = document.createElement('div');
+            wrapper.className = 'mat-shadow';
+            imgEl.style.boxShadow = getShadowStyle(shadowSize);
+            wrapper.appendChild(imgEl);
+            return wrapper;
+        }
+
+        function wrapInEffect(imgEl, effectSize, matColor, borderEffect) {
+            if (effectSize <= 0) return imgEl;
+            if (borderEffect === 'shadow') {
+                return wrapInShadow(imgEl, effectSize);
+            }
+            return wrapInBevel(imgEl, effectSize, matColor);
         }
 
         function wrapInBevel(imgEl, bevelWidth, matColor) {
@@ -424,8 +453,9 @@
             const matColor = slide.mat_color || settings.mat_color;
             document.body.style.setProperty('--mat-color', matColor);
 
-            // Determine bevel and finish for this slide (needed before mat padding calc)
-            const slideBevelWidth = slide.images[0].bevel_width ?? settings.bevel_width ?? 4;
+            // Determine effect settings for this slide
+            const slideEffectSize = slide.images[0].bevel_width ?? settings.bevel_width ?? 4;
+            const slideBorderEffect = slide.images[0].border_effect ?? settings.border_effect ?? 'bevel';
             const slideFinish = slide.images[0].mat_finish ?? settings.mat_finish ?? 'flat';
 
             // Apply per-slide texture override
@@ -434,13 +464,17 @@
                 document.body.classList.add('mat-' + slideFinish);
             }
 
-            // Calculate mat padding based on slide content (bevel-aware)
+            // Calculate mat padding based on slide content (effect-aware)
             const container = document.querySelector('.frame-container');
             let photoW = 0, photoH = 0;
             if (slide.type === 'single') {
                 const imgData = slide.images[0];
                 const scale = imgData.scale || 1.0;
-                const result = calculateMatPadding(imgData.width * scale, imgData.height * scale, slideBevelWidth);
+                const crop = imgData.crop;
+                const effectSpace = slideBorderEffect === 'shadow' ? Math.round(slideEffectSize * 2) : slideEffectSize;
+                const imgW = crop ? imgData.width * crop.w * scale : imgData.width * scale;
+                const imgH = crop ? imgData.height * crop.h * scale : imgData.height * scale;
+                const result = calculateMatPadding(imgW, imgH, effectSpace);
                 container.style.setProperty('--mat-padding-vertical', result.vertical);
                 container.style.setProperty('--mat-padding-horizontal', result.horizontal);
                 photoW = result.photoW;
@@ -456,22 +490,47 @@
             slideEl.className = 'slide';
 
             if (slide.type === 'single') {
-                // Single image slide with explicit pixel dimensions
-                const img = document.createElement('img');
-                img.src = '/uploads/' + slide.images[0].filename;
-                img.alt = slide.images[0].filename;
+                const imgData = slide.images[0];
+                const crop = imgData.crop;
 
                 if (settings.fit_mode === 'cover') {
+                    const img = document.createElement('img');
+                    img.src = '/uploads/' + imgData.filename;
+                    img.alt = imgData.filename;
                     img.className = 'cover';
-                } else if (photoW > 0 && photoH > 0) {
-                    img.style.width = photoW + 'px';
-                    img.style.height = photoH + 'px';
-                }
+                    slideEl.appendChild(wrapInEffect(img, slideEffectSize, matColor, slideBorderEffect));
+                } else if (crop && photoW > 0 && photoH > 0) {
+                    // Cropped: container with overflow hidden
+                    const cropContainer = document.createElement('div');
+                    cropContainer.style.width = photoW + 'px';
+                    cropContainer.style.height = photoH + 'px';
+                    cropContainer.style.overflow = 'hidden';
+                    cropContainer.style.lineHeight = '0';
 
-                if (slideBevelWidth > 0) {
-                    slideEl.appendChild(wrapInBevel(img, slideBevelWidth, matColor));
+                    const img = document.createElement('img');
+                    img.src = '/uploads/' + imgData.filename;
+                    img.alt = imgData.filename;
+                    const fullW = photoW / crop.w;
+                    const fullH = photoH / crop.h;
+                    img.style.width = fullW + 'px';
+                    img.style.height = fullH + 'px';
+                    img.style.marginLeft = (-crop.x * fullW) + 'px';
+                    img.style.marginTop = (-crop.y * fullH) + 'px';
+                    img.style.display = 'block';
+                    img.style.maxWidth = 'none';
+                    img.style.maxHeight = 'none';
+
+                    cropContainer.appendChild(img);
+                    slideEl.appendChild(wrapInEffect(cropContainer, slideEffectSize, matColor, slideBorderEffect));
                 } else {
-                    slideEl.appendChild(img);
+                    const img = document.createElement('img');
+                    img.src = '/uploads/' + imgData.filename;
+                    img.alt = imgData.filename;
+                    if (photoW > 0 && photoH > 0) {
+                        img.style.width = photoW + 'px';
+                        img.style.height = photoH + 'px';
+                    }
+                    slideEl.appendChild(wrapInEffect(img, slideEffectSize, matColor, slideBorderEffect));
                 }
             } else {
                 // Group slide - create grid layout
@@ -489,7 +548,8 @@
                         filename: imgData.filename,
                         ar: (imgData.width || 1) / (imgData.height || 1),
                         scale: imgData.scale || 1.0,
-                        bevel: slide.images[i].bevel_width ?? settings.bevel_width ?? 4
+                        effectSize: slide.images[i].bevel_width ?? settings.bevel_width ?? 4,
+                        borderEffect: slide.images[i].border_effect ?? settings.border_effect ?? 'bevel'
                     }));
 
                     // At base height h=1, each image width = ar * scale
@@ -498,11 +558,14 @@
                     // Reserve space for N+1 equal gaps (space-evenly) — each gap ~5% of container
                     const gapFraction = 0.05;
                     const totalGapFraction = gapFraction * (count + 1);
-                    // Subtract bevel from usable space so photo+bevel fits
-                    const totalBevelW = imgInfos.reduce((sum, info) => sum + 2 * info.bevel, 0);
-                    const maxBevel = Math.max(...imgInfos.map(i => i.bevel));
-                    const usableW = containerW * (1 - totalGapFraction) - totalBevelW;
-                    const usableH = containerH * 0.85 - 2 * maxBevel;
+                    // Subtract effect space from usable area
+                    const totalEffectW = imgInfos.reduce((sum, info) => {
+                        const space = info.borderEffect === 'shadow' ? info.effectSize * 2 : info.effectSize;
+                        return sum + 2 * space;
+                    }, 0);
+                    const maxEffect = Math.max(...imgInfos.map(i => i.borderEffect === 'shadow' ? i.effectSize * 2 : i.effectSize));
+                    const usableW = containerW * (1 - totalGapFraction) - totalEffectW;
+                    const usableH = containerH * 0.85 - 2 * maxEffect;
                     // Base height: largest h such that total width fits and tallest image fits
                     const baseHeight = Math.min(usableH / maxScale, usableW / totalWidthAtUnitHeight);
 
@@ -518,11 +581,7 @@
                         img.style.maxHeight = 'none';
                         img.style.flexShrink = '0';
 
-                        if (info.bevel > 0) {
-                            gridEl.appendChild(wrapInBevel(img, info.bevel, matColor));
-                        } else {
-                            gridEl.appendChild(img);
-                        }
+                        gridEl.appendChild(wrapInEffect(img, info.effectSize, matColor, info.borderEffect));
                     });
                 } else {
                     // Grid layout
@@ -533,12 +592,9 @@
                         const img = document.createElement('img');
                         img.src = '/uploads/' + imgData.filename;
                         img.alt = imgData.filename;
-                        const imgBevel = imgData.bevel_width ?? settings.bevel_width ?? 4;
-                        if (imgBevel > 0) {
-                            gridEl.appendChild(wrapInBevel(img, imgBevel, matColor));
-                        } else {
-                            gridEl.appendChild(img);
-                        }
+                        const imgEffectSize = imgData.bevel_width ?? settings.bevel_width ?? 4;
+                        const imgBorderEffect = imgData.border_effect ?? settings.border_effect ?? 'bevel';
+                        gridEl.appendChild(wrapInEffect(img, imgEffectSize, matColor, imgBorderEffect));
                     });
                 }
                 slideEl.appendChild(gridEl);
@@ -669,22 +725,31 @@
             sendControl(isPaused ? 'pause' : 'play');
         }
 
-        function calculateMatPadding(imgWidth, imgHeight, bevelWidth) {
+        function calculateMatPadding(imgWidth, imgHeight, effectSpace) {
             if (!imgWidth || !imgHeight) {
-                return { vertical: '5%', horizontal: '5%', photoW: 0, photoH: 0 };
+                return { vertical: '10%', horizontal: '10%', photoW: 0, photoH: 0 };
             }
 
             const screenWidth = window.innerWidth;
             const screenHeight = window.innerHeight;
             const imgRatio = imgWidth / imgHeight;
-            const bevel2 = (bevelWidth || 0) * 2;
+            const effect2 = (effectSpace || 0) * 2;
+            const isPortrait = imgHeight > imgWidth;
 
-            // Photo can't exceed 95% of screen; photo+bevel can't exceed screen
-            const maxPhotoW = Math.min(screenWidth * 0.95, screenWidth - bevel2);
-            const maxPhotoH = Math.min(screenHeight * 0.95, screenHeight - bevel2);
+            // Default: 80% of the constraining dimension based on orientation
+            // Portrait images: 80% of screen height
+            // Landscape images: 80% of screen width
+            let maxPhotoW, maxPhotoH;
+            if (isPortrait) {
+                maxPhotoH = Math.min(screenHeight * 0.80, screenHeight - effect2);
+                maxPhotoW = Math.min(screenWidth - effect2, screenWidth * 0.95);
+            } else {
+                maxPhotoW = Math.min(screenWidth * 0.80, screenWidth - effect2);
+                maxPhotoH = Math.min(screenHeight - effect2, screenHeight * 0.95);
+            }
 
             if (maxPhotoW <= 0 || maxPhotoH <= 0) {
-                return { vertical: '5%', horizontal: '5%', photoW: 0, photoH: 0 };
+                return { vertical: '10%', horizontal: '10%', photoW: 0, photoH: 0 };
             }
 
             // Fit photo within constraints maintaining aspect ratio
@@ -697,9 +762,9 @@
                 photoW = maxPhotoH * imgRatio;
             }
 
-            // Total = photo + bevel
-            const totalW = photoW + bevel2;
-            const totalH = photoH + bevel2;
+            // Total = photo + effect space
+            const totalW = photoW + effect2;
+            const totalH = photoH + effect2;
 
             // Mat = remaining space
             const horizontalMat = Math.max(0, (screenWidth - totalW) / 2);
