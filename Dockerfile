@@ -33,7 +33,7 @@ COPY app.py .
 COPY templates templates/
 
 # Create directories for persistent data
-RUN mkdir -p /app/uploads /app/data /app/data/rclone && \
+RUN mkdir -p /app/uploads /app/uploads/thumbnails /app/data /app/data/rclone && \
     chown -R photoframe:photoframe /app
 
 # Switch to non-root user

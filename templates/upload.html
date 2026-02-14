@@ -118,17 +118,65 @@
             object-fit: contain;
         }
 
-        /* Bevel wrapper in preview - V-groove cut, lit from above */
+        /* Crop overlay */
+        .crop-overlay {
+            position: absolute;
+            inset: 0;
+            z-index: 20;
+        }
+
+        .crop-selection {
+            position: absolute;
+            border: 2px dashed #00d4ff;
+            cursor: move;
+            box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.5);
+            z-index: 21;
+        }
+
+        .crop-handle {
+            position: absolute;
+            width: 14px;
+            height: 14px;
+            background: #00d4ff;
+            border-radius: 50%;
+            z-index: 22;
+        }
+
+        .crop-handle.nw { top: -7px; left: -7px; cursor: nw-resize; }
+        .crop-handle.ne { top: -7px; right: -7px; cursor: ne-resize; }
+        .crop-handle.sw { bottom: -7px; left: -7px; cursor: sw-resize; }
+        .crop-handle.se { bottom: -7px; right: -7px; cursor: se-resize; }
+        .crop-handle.n  { top: -7px; left: calc(50% - 7px); cursor: n-resize; }
+        .crop-handle.s  { bottom: -7px; left: calc(50% - 7px); cursor: s-resize; }
+        .crop-handle.e  { top: calc(50% - 7px); right: -7px; cursor: e-resize; }
+        .crop-handle.w  { top: calc(50% - 7px); left: -7px; cursor: w-resize; }
+
+        .crop-toolbar {
+            position: absolute;
+            bottom: 12px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            gap: 8px;
+            z-index: 25;
+        }
+
+        .crop-toolbar .btn {
+            padding: 8px 20px;
+            font-size: 0.9rem;
+            font-weight: 600;
+        }
+
+        /* Bevel wrapper in preview - uniform inset border */
         .mat-preview .mat-bevel {
             position: relative;
             display: inline-flex;
             line-height: 0;
             overflow: hidden;
             padding: var(--bevel-w, 4px);
-            /* Light from above: top face shadowed, bottom face lit */
-            background: linear-gradient(to bottom, var(--bevel-dark, rgba(0,0,0,0.10)), var(--bevel-light, rgba(255,255,255,0.04)));
+            background: var(--bevel-color, rgba(0,0,0,0.10));
         }
-        /* Subtle shadow cast by top bevel onto the image */
+        /* Subtle shadow cast by bevel onto the image */
         .mat-preview .mat-bevel::after {
             content: '';
             position: absolute;
@@ -138,10 +186,21 @@
             bottom: var(--bevel-w, 4px);
             pointer-events: none;
             z-index: 3;
-            box-shadow: inset 0 1px 2px rgba(0,0,0,0.10);
+            box-shadow: inset 0 1px 2px rgba(0,0,0,0.08);
         }
         .mat-preview .mat-bevel img {
             box-shadow: none;
+            display: block;
+            max-width: none;
+            max-height: none;
+        }
+
+        /* Shadow effect wrapper in preview */
+        .mat-preview .mat-shadow {
+            display: inline-flex;
+            line-height: 0;
+        }
+        .mat-preview .mat-shadow img {
             display: block;
             max-width: none;
             max-height: none;
@@ -156,6 +215,11 @@
             z-index: 0;
             opacity: 0;
             border-radius: inherit;
+        }
+        .mat-preview.mat-eggshell::before {
+            background-image: url("data:image/svg+xml,%3Csvg width='4' height='4' xmlns='http://www.w3.org/2000/svg'%3E%3Ccircle cx='1' cy='1' r='0.3' fill='%23888'/%3E%3Ccircle cx='3' cy='3' r='0.25' fill='%23888'/%3E%3Ccircle cx='3' cy='0.5' r='0.2' fill='%23888'/%3E%3Ccircle cx='0.5' cy='2.5' r='0.15' fill='%23888'/%3E%3C/svg%3E");
+            background-size: 4px 4px;
+            opacity: 0.05;
         }
         .mat-preview.mat-linen::before {
             background-image: url("data:image/svg+xml,%3Csvg width='8' height='8' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M0 0h8M0 4h8M0 0v8M4 0v8' stroke='%23888' stroke-width='0.3' fill='none'/%3E%3C/svg%3E");
@@ -241,13 +305,33 @@
         .panels {
             display: grid;
             grid-template-columns: 1fr 300px;
+            grid-template-rows: auto 1fr;
             gap: 20px;
+        }
+
+        .main-upload-section {
+            grid-column: 1;
+            grid-row: 1;
+        }
+
+        .main-gallery-section {
+            grid-column: 1;
+            grid-row: 2;
+        }
+
+        .settings-column {
+            grid-column: 2;
+            grid-row: 1 / -1;
         }
 
         @media (max-width: 900px) {
             .panels {
                 grid-template-columns: 1fr;
+                grid-template-rows: auto;
             }
+            .main-upload-section { grid-column: 1; grid-row: auto; }
+            .settings-column { grid-column: 1; grid-row: auto; }
+            .main-gallery-section { grid-column: 1; grid-row: auto; }
         }
 
         .panel {
@@ -266,6 +350,43 @@
         }
 
         .settings-column {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .settings-tabs {
+            display: flex;
+            gap: 0;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 8px;
+            padding: 3px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .settings-tab {
+            flex: 1;
+            padding: 8px 12px;
+            background: none;
+            border: none;
+            color: #888;
+            cursor: pointer;
+            border-radius: 6px;
+            font-size: 0.85rem;
+            font-weight: 500;
+            transition: all 0.2s;
+        }
+
+        .settings-tab:hover {
+            color: #ccc;
+        }
+
+        .settings-tab.active {
+            background: rgba(0, 212, 255, 0.15);
+            color: #00d4ff;
+        }
+
+        .settings-tab-content {
             display: flex;
             flex-direction: column;
             gap: 20px;
@@ -346,18 +467,6 @@
             display: flex;
             gap: 8px;
             flex-wrap: wrap;
-        }
-
-        .select-all-wrapper {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
-
-        .select-all-wrapper input {
-            width: 18px;
-            height: 18px;
-            cursor: pointer;
         }
 
         .selection-count {
@@ -489,16 +598,6 @@
             width: 100%;
             height: 100%;
             object-fit: cover;
-        }
-
-        .image-checkbox {
-            position: absolute;
-            top: 8px;
-            left: 8px;
-            width: 20px;
-            height: 20px;
-            cursor: pointer;
-            z-index: 10;
         }
 
         .status-badge {
@@ -813,6 +912,35 @@
             border-color: #00d4ff;
         }
 
+        .btn-more-colors {
+            background: none;
+            border: none;
+            color: #00d4ff;
+            font-size: 0.75rem;
+            cursor: pointer;
+            padding: 4px 0;
+            margin-top: 4px;
+            opacity: 0.8;
+            transition: opacity 0.2s;
+        }
+        .btn-more-colors:hover {
+            opacity: 1;
+        }
+        .accent-colors {
+            margin-top: 4px;
+            padding-top: 6px;
+            border-top: 1px solid rgba(255,255,255,0.06);
+        }
+
+        .btn-apply {
+            background: linear-gradient(90deg, #7b2cbf, #00d4ff);
+            color: white;
+            border: none;
+            width: 100%;
+            margin-top: 12px;
+            font-weight: 600;
+        }
+
         .toggle-group {
             display: flex;
             justify-content: space-between;
@@ -1085,6 +1213,135 @@
             background: rgba(255, 255, 255, 0.1);
             color: #e0e0e0;
         }
+
+        /* ===== Mobile Layout ===== */
+        @media (max-width: 768px) {
+            body {
+                padding: 10px;
+            }
+
+            h1 {
+                font-size: 1.5rem;
+            }
+
+            .display-link {
+                padding: 8px 16px;
+                font-size: 0.85rem;
+            }
+
+            .panels {
+                display: flex;
+                flex-direction: column;
+                gap: 12px;
+            }
+
+            .main-upload-section {
+                order: 1;
+            }
+
+            .settings-column {
+                order: 2;
+            }
+
+            .main-gallery-section {
+                order: 3;
+            }
+
+            /* Upload zone: compact */
+            .upload-zone {
+                padding: 15px;
+            }
+
+            .upload-zone svg {
+                width: 24px;
+                height: 24px;
+            }
+
+            /* Preview: more compact */
+            .mat-preview {
+                aspect-ratio: 4/3;
+            }
+
+            .preview-controls {
+                padding: 10px;
+            }
+
+            /* Gallery: horizontal thumbnail strip */
+            .gallery-grid {
+                display: flex !important;
+                overflow-x: auto;
+                gap: 8px;
+                padding: 8px 0;
+                -webkit-overflow-scrolling: touch;
+                scrollbar-width: thin;
+            }
+
+            .gallery-grid .image-card,
+            .gallery-grid .group-card {
+                flex: 0 0 auto;
+                width: 72px;
+                border-radius: 8px;
+            }
+
+            .gallery-grid .card-info {
+                display: none;
+            }
+
+            .gallery-grid .card-thumb {
+                aspect-ratio: 1;
+                border-radius: 8px;
+            }
+
+            .gallery-grid .status-badge {
+                display: none;
+            }
+
+            .gallery-grid .group-mosaic {
+                aspect-ratio: 1;
+                border-radius: 8px;
+            }
+
+            .gallery-grid .group-badge {
+                font-size: 0.5rem;
+                padding: 2px 5px;
+            }
+
+            /* Toolbar: compact */
+            .toolbar {
+                padding: 8px 10px;
+                gap: 8px;
+            }
+
+            /* Settings: compact */
+            .settings-column .panel {
+                padding: 12px;
+            }
+
+            .settings-column .panel h2 {
+                font-size: 1rem;
+                margin-bottom: 12px;
+            }
+
+            /* Color presets: smaller on mobile */
+            .color-presets {
+                gap: 5px;
+            }
+
+            .color-preset {
+                width: 24px;
+                height: 24px;
+            }
+
+            header {
+                margin-bottom: 15px;
+            }
+        }
+
+        /* Select mode: highlight selected cards */
+        body.select-mode .image-card.selected {
+            border-color: #00d4ff;
+            box-shadow: 0 0 0 2px rgba(0, 212, 255, 0.3);
+        }
     </style>
 </head>
 <body>
@@ -1124,8 +1381,8 @@
         </div>
 
         <div class="panels">
-            <!-- Main Content Panel -->
-            <div class="panel">
+            <!-- Upload Section -->
+            <div class="panel main-upload-section">
                 <div id="status" class="status"></div>
 
                 <div class="upload-zone" id="upload-zone">
@@ -1152,22 +1409,23 @@
                         <span class="stat-value" id="disabled-count">0</span>
                     </div>
                 </div>
+            </div>
 
+            <!-- Gallery Section -->
+            <div class="main-gallery-section">
                 <!-- Toolbar -->
                 <div class="toolbar">
                     <div class="toolbar-left">
-                        <div class="select-all-wrapper">
-                            <input type="checkbox" id="select-all" title="Select all">
-                            <span class="selection-count"><span id="selected-count">0</span> selected</span>
-                        </div>
+                        <button class="btn btn-group" id="start-group" onclick="startGroupMode()">📐 Group</button>
+                        <button class="btn btn-warning" id="done-group" onclick="finishGroupMode()" style="display:none;">Done</button>
+                        <span class="selection-count" id="selection-count-wrapper" style="display:none;"><span id="selected-count">0</span> selected</span>
                         <div class="filter-tabs">
                             <button class="filter-tab active" data-filter="all">All</button>
                             <button class="filter-tab" data-filter="enabled">Visible</button>
                             <button class="filter-tab" data-filter="disabled">Hidden</button>
                         </div>
                     </div>
-                    <div class="toolbar-right">
-                        <button class="btn btn-group" id="bulk-group" disabled>📐 Group</button>
+                    <div class="toolbar-right" style="display:none;">
                         <button class="btn btn-success" id="bulk-enable" disabled>✓ Show</button>
                         <button class="btn btn-warning" id="bulk-disable" disabled>⊘ Hide</button>
                         <button class="btn btn-danger" id="bulk-delete" disabled>🗑 Delete</button>
@@ -1188,131 +1446,138 @@
 
             <!-- Settings Sidebar -->
             <div class="settings-column">
-                <!-- Mat Settings -->
-                <div class="panel">
-                    <h2>🎨 Mat Settings</h2>
-
-                    <div class="setting-group">
-                        <label>Default Mat Color</label>
-                        <input type="color" id="mat-color" value="{{ settings.mat_color }}">
-                        <div class="color-presets">
-                            <div class="color-preset" style="background: #000000;" data-color="#000000" title="Black"></div>
-                            <div class="color-preset" style="background: #1a1a1a;" data-color="#1a1a1a" title="Near Black"></div>
-                            <div class="color-preset" style="background: #2c2c2c;" data-color="#2c2c2c" title="Dark Gray"></div>
-                            <div class="color-preset" style="background: #4a4a4a;" data-color="#4a4a4a" title="Gray"></div>
-                            <div class="color-preset" style="background: #6b5b4e;" data-color="#6b5b4e" title="Warm Gray"></div>
-                            <div class="color-preset" style="background: #f5f5f5;" data-color="#f5f5f5" title="Off White"></div>
-                            <div class="color-preset" style="background: #ffffff; border: 1px solid rgba(255,255,255,0.2);" data-color="#ffffff" title="White"></div>
-                            <div class="color-preset" style="background: #f5f0e6;" data-color="#f5f0e6" title="Cream"></div>
-                            <div class="color-preset" style="background: #fffff0;" data-color="#fffff0" title="Ivory"></div>
-                            <div class="color-preset" style="background: #2d3436;" data-color="#2d3436" title="Charcoal"></div>
-                            <div class="color-preset" style="background: #1e3a5f;" data-color="#1e3a5f" title="Navy"></div>
-                            <div class="color-preset" style="background: #4a0e0e;" data-color="#4a0e0e" title="Burgundy"></div>
-                            <div class="color-preset" style="background: #2d4a2d;" data-color="#2d4a2d" title="Forest"></div>
-                            <div class="color-preset" style="background: #8b9a6b;" data-color="#8b9a6b" title="Sage"></div>
-                            <div class="color-preset" style="background: #3c2415;" data-color="#3c2415" title="Espresso"></div>
-                            <div class="color-preset" style="background: #4a5568;" data-color="#4a5568" title="Slate Blue"></div>
-                        </div>
-                    </div>
-
-                    <div class="setting-group">
-                        <label>Mat Finish</label>
-                        <select id="mat-finish">
-                            <option value="flat" {% if settings.mat_finish == 'flat' %}selected{% endif %}>Flat</option>
-                            <option value="linen" {% if settings.mat_finish == 'linen' %}selected{% endif %}>Linen</option>
-                            <option value="suede" {% if settings.mat_finish == 'suede' %}selected{% endif %}>Suede</option>
-                            <option value="silk" {% if settings.mat_finish == 'silk' %}selected{% endif %}>Silk</option>
-                        </select>
-                    </div>
-
-                    <div class="setting-group">
-                        <label>Inner Bevel <span id="bevel-value">{{ settings.bevel_width }}px</span></label>
-                        <input type="range" id="bevel-width" min="0" max="16" value="{{ settings.bevel_width }}" step="1">
-                    </div>
-
-                    <p style="font-size: 0.75rem; color: #666;">
-                        Select an image to customize individually.
-                    </p>
+                <!-- Tab bar -->
+                <div class="settings-tabs">
+                    <button class="settings-tab active" data-tab="mat" onclick="switchSettingsTab('mat')">Mat</button>
+                    <button class="settings-tab" data-tab="settings" onclick="switchSettingsTab('settings')">Settings</button>
                 </div>
 
-                <!-- Slideshow Settings -->
-                <div class="panel">
-                    <h2>📺 Slideshow Settings</h2>
+                <!-- Mat Tab -->
+                <div class="settings-tab-content" id="tab-mat">
+                    <div class="panel">
+                        <h2>🎨 Mat Settings</h2>
 
-                    <div class="setting-group">
-                        <label>Slideshow Interval (seconds)</label>
-                        <input type="number" id="slideshow-interval" min="3" max="300" value="{{ settings.slideshow_interval }}">
-                    </div>
-
-                    <div class="setting-group">
-                        <label>Transition Duration (seconds)</label>
-                        <input type="number" id="transition-duration" min="0" max="5" step="0.5" value="{{ settings.transition_duration }}">
-                    </div>
-
-                    <div class="setting-group">
-                        <label>Image Fit</label>
-                        <select id="fit-mode">
-                            <option value="contain" {% if settings.fit_mode == 'contain' %}selected{% endif %}>Contain (show full image)</option>
-                            <option value="cover" {% if settings.fit_mode == 'cover' %}selected{% endif %}>Cover (fill screen, may crop)</option>
-                        </select>
-                    </div>
-
-                    <div class="toggle-group">
-                        <label>Shuffle Order</label>
-                        <label class="toggle">
-                            <input type="checkbox" id="shuffle" {% if settings.shuffle %}checked{% endif %}>
-                            <span class="toggle-slider"></span>
-                        </label>
-                    </div>
-
-                    <div class="setting-group">
-                        <label>Target Screen Ratio</label>
-                        <select id="target-aspect-ratio">
-                            <option value="16:9" {% if settings.target_aspect_ratio == '16:9' %}selected{% endif %}>16:9 (4K TV)</option>
-                            <option value="21:9" {% if settings.target_aspect_ratio == '21:9' %}selected{% endif %}>21:9 (Ultrawide)</option>
-                            <option value="4:3" {% if settings.target_aspect_ratio == '4:3' %}selected{% endif %}>4:3 (Standard)</option>
-                            <option value="1:1" {% if settings.target_aspect_ratio == '1:1' %}selected{% endif %}>1:1 (Square)</option>
-                        </select>
-                    </div>
-
-                    <p style="font-size: 0.75rem; color: #666; text-align: center;">
-                        Settings are saved automatically.
-                    </p>
-                </div>
-
-                <!-- TV Schedule Settings -->
-                <div class="panel" id="tv-schedule-panel">
-                    <h2>TV Power Schedule</h2>
-
-                    <div id="cec-unavailable-msg" class="cec-unavailable" style="display:none;">
-                        CEC control is not available. Install cec-utils and ensure the
-                        HDMI-CEC device is accessible in Docker.
-                    </div>
-
-                    <div id="cec-controls" style="display:none;">
-                        <div class="tv-schedule-list" id="tv-schedule-list"></div>
-
-                        <div style="margin-top: 12px; display: flex; gap: 8px;">
-                            <button class="btn btn-refresh" onclick="addTvSchedule()" style="flex:1;">+ Add Schedule</button>
-                            <button class="btn btn-refresh" onclick="testCec('on')" title="Turn TV on now">Test On</button>
-                            <button class="btn btn-refresh" onclick="testCec('standby')" title="Turn TV off now">Test Off</button>
+                        <div class="setting-group">
+                            <label>Default Mat Color</label>
+                            <input type="hidden" id="mat-color" value="{{ settings.mat_color }}">
+                            <div class="color-presets" id="default-color-presets"></div>
+                            <button type="button" class="btn-more-colors" id="toggle-more-colors" onclick="toggleMoreColors()">More Colors</button>
+                            <div class="color-presets accent-colors" id="accent-color-presets" style="display:none;"></div>
                         </div>
 
-                        <p style="font-size: 0.75rem; color: #666; text-align: center; margin-top: 10px;">
-                            Schedules are saved automatically.
+                        <div class="setting-group">
+                            <label>Mat Finish</label>
+                            <select id="mat-finish">
+                                <option value="flat" {% if settings.mat_finish == 'flat' %}selected{% endif %}>Flat</option>
+                                <option value="eggshell" {% if settings.mat_finish == 'eggshell' %}selected{% endif %}>Eggshell</option>
+                                <option value="linen" {% if settings.mat_finish == 'linen' %}selected{% endif %}>Linen</option>
+                                <option value="suede" {% if settings.mat_finish == 'suede' %}selected{% endif %}>Suede</option>
+                                <option value="silk" {% if settings.mat_finish == 'silk' %}selected{% endif %}>Silk</option>
+                            </select>
+                        </div>
+
+                        <div class="setting-group">
+                            <label>Border Effect</label>
+                            <select id="border-effect">
+                                <option value="bevel" {% if settings.border_effect == 'bevel' %}selected{% endif %}>Bevel</option>
+                                <option value="shadow" {% if settings.border_effect == 'shadow' %}selected{% endif %}>Shadow</option>
+                            </select>
+                        </div>
+
+                        <div class="setting-group">
+                            <label><span id="effect-size-label">{{ 'Shadow' if settings.border_effect == 'shadow' else 'Bevel' }}</span> Size <span id="bevel-value">{{ settings.bevel_width }}px</span></label>
+                            <input type="range" id="bevel-width" min="0" max="16" value="{{ settings.bevel_width }}" step="1">
+                        </div>
+
+                        <button class="btn btn-apply" id="apply-mat-settings">Apply</button>
+
+                        <p style="font-size: 0.75rem; color: #666; margin-top: 8px;">
+                            Select an image to customize individually.
                         </p>
                     </div>
                 </div>
 
-                {% if is_admin and password_changed %}
-                <!-- Network Info -->
-                <div class="panel" id="network-info-panel">
-                    <h2>Network</h2>
-                    <div id="network-info-content" style="font-size: 0.85rem; color: #aaa;">
-                        Loading...
+                <!-- Settings Tab -->
+                <div class="settings-tab-content" id="tab-settings" style="display:none;">
+                    <!-- Slideshow Settings -->
+                    <div class="panel">
+                        <h2>Slideshow</h2>
+
+                        <div class="setting-group">
+                            <label>Slideshow Interval (seconds)</label>
+                            <input type="number" id="slideshow-interval" min="3" max="300" value="{{ settings.slideshow_interval }}">
+                        </div>
+
+                        <div class="setting-group">
+                            <label>Transition Duration (seconds)</label>
+                            <input type="number" id="transition-duration" min="0" max="5" step="0.5" value="{{ settings.transition_duration }}">
+                        </div>
+
+                        <div class="setting-group">
+                            <label>Image Fit</label>
+                            <select id="fit-mode">
+                                <option value="contain" {% if settings.fit_mode == 'contain' %}selected{% endif %}>Contain (show full image)</option>
+                                <option value="cover" {% if settings.fit_mode == 'cover' %}selected{% endif %}>Cover (fill screen, may crop)</option>
+                            </select>
+                        </div>
+
+                        <div class="toggle-group">
+                            <label>Shuffle Order</label>
+                            <label class="toggle">
+                                <input type="checkbox" id="shuffle" {% if settings.shuffle %}checked{% endif %}>
+                                <span class="toggle-slider"></span>
+                            </label>
+                        </div>
+
+                        <div class="setting-group">
+                            <label>Target Screen Ratio</label>
+                            <select id="target-aspect-ratio">
+                                <option value="16:9" {% if settings.target_aspect_ratio == '16:9' %}selected{% endif %}>16:9 (4K TV)</option>
+                                <option value="21:9" {% if settings.target_aspect_ratio == '21:9' %}selected{% endif %}>21:9 (Ultrawide)</option>
+                                <option value="4:3" {% if settings.target_aspect_ratio == '4:3' %}selected{% endif %}>4:3 (Standard)</option>
+                                <option value="1:1" {% if settings.target_aspect_ratio == '1:1' %}selected{% endif %}>1:1 (Square)</option>
+                            </select>
+                        </div>
+
+                        <p style="font-size: 0.75rem; color: #666; text-align: center;">
+                            Slideshow settings are saved automatically.
+                        </p>
                     </div>
+
+                    <!-- TV Schedule Settings -->
+                    <div class="panel" id="tv-schedule-panel">
+                        <h2>TV Power Schedule</h2>
+
+                        <div id="cec-unavailable-msg" class="cec-unavailable" style="display:none;">
+                            CEC control is not available. Install cec-utils and ensure the
+                            HDMI-CEC device is accessible in Docker.
+                        </div>
+
+                        <div id="cec-controls" style="display:none;">
+                            <div class="tv-schedule-list" id="tv-schedule-list"></div>
+
+                            <div style="margin-top: 12px; display: flex; gap: 8px;">
+                                <button class="btn btn-refresh" onclick="addTvSchedule()" style="flex:1;">+ Add Schedule</button>
+                                <button class="btn btn-refresh" onclick="testCec('on')" title="Turn TV on now">Test On</button>
+                                <button class="btn btn-refresh" onclick="testCec('standby')" title="Turn TV off now">Test Off</button>
+                            </div>
+
+                            <p style="font-size: 0.75rem; color: #666; text-align: center; margin-top: 10px;">
+                                Schedules are saved automatically.
+                            </p>
+                        </div>
+                    </div>
+
+                    {% if is_admin and password_changed %}
+                    <!-- Network Info -->
+                    <div class="panel" id="network-info-panel">
+                        <h2>Network</h2>
+                        <div id="network-info-content" style="font-size: 0.85rem; color: #aaa;">
+                            Loading...
+                        </div>
+                    </div>
+                    {% endif %}
                 </div>
-                {% endif %}
             </div>
         </div>
     </div>
@@ -1348,29 +1613,89 @@
         const previewControlsBody = document.getElementById('preview-controls-body');
         const previewControlsTitle = document.getElementById('preview-controls-title');
 
-        // Color presets shared between default and per-image controls
-        const COLOR_PRESETS = [
-            {color: '#000000', title: 'Black'}, {color: '#1a1a1a', title: 'Near Black'},
-            {color: '#2c2c2c', title: 'Dark Gray'}, {color: '#4a4a4a', title: 'Gray'},
-            {color: '#6b5b4e', title: 'Warm Gray'}, {color: '#f5f5f5', title: 'Off White'},
+        // Neutral presets: shown by default (white to medium-brown warm tones)
+        const NEUTRAL_PRESETS = [
             {color: '#ffffff', title: 'White'}, {color: '#f5f0e6', title: 'Cream'},
-            {color: '#fffff0', title: 'Ivory'}, {color: '#2d3436', title: 'Charcoal'},
-            {color: '#1e3a5f', title: 'Navy'}, {color: '#4a0e0e', title: 'Burgundy'},
-            {color: '#2d4a2d', title: 'Forest'}, {color: '#8b9a6b', title: 'Sage'},
-            {color: '#3c2415', title: 'Espresso'}, {color: '#4a5568', title: 'Slate Blue'},
+            {color: '#faebd7', title: 'Antique White'}, {color: '#f0ead6', title: 'Eggshell'},
+            {color: '#e8dfd5', title: 'Sand'}, {color: '#d6cec5', title: 'Pebble'},
+            {color: '#c4a882', title: 'Tan'}, {color: '#b8a088', title: 'Khaki'},
+            {color: '#a08870', title: 'Driftwood'}, {color: '#8b7355', title: 'Medium Brown'},
         ];
+
+        // Accent presets: shown when "More Colors" is expanded
+        const ACCENT_PRESETS = [
+            {color: '#faf9f6', title: 'Soft White'}, {color: '#fffff0', title: 'Ivory'},
+            {color: '#faf0e6', title: 'Linen'}, {color: '#e0d8cf', title: 'Oyster'},
+            {color: '#d4a574', title: 'Camel'}, {color: '#a9a9a9', title: 'Silver'},
+            {color: '#808080', title: 'Gray'}, {color: '#2c2c2c', title: 'Charcoal'},
+            {color: '#111111', title: 'Black'}, {color: '#708090', title: 'Slate Gray'},
+            {color: '#1a1a2e', title: 'Dark Navy'}, {color: '#3d0c02', title: 'Dark Burgundy'},
+            {color: '#1b3a2d', title: 'Forest Green'}, {color: '#4a3728', title: 'Espresso'},
+            {color: '#8b0000', title: 'Dark Red'}, {color: '#003366', title: 'Navy Blue'},
+            {color: '#2e5339', title: 'Hunter Green'}, {color: '#4b0082', title: 'Indigo'},
+            {color: '#704214', title: 'Sepia'}, {color: '#b8860b', title: 'Dark Gold'},
+            {color: '#556b2f', title: 'Olive'}, {color: '#800020', title: 'Burgundy'},
+            {color: '#c08081', title: 'Dusty Rose'}, {color: '#7b9ea8', title: 'Steel Blue'},
+            {color: '#8fbc8f', title: 'Sage'},
+        ];
+
+        // Combined for per-image controls
+        const COLOR_PRESETS = [...NEUTRAL_PRESETS, ...ACCENT_PRESETS];
 
         // Settings elements
         const matColorInput = document.getElementById('mat-color');
         const matFinishSelect = document.getElementById('mat-finish');
+        const borderEffectSelect = document.getElementById('border-effect');
         const bevelWidthInput = document.getElementById('bevel-width');
         const bevelValueLabel = document.getElementById('bevel-value');
+        const effectSizeLabel = document.getElementById('effect-size-label');
         const slideshowIntervalInput = document.getElementById('slideshow-interval');
         const transitionDurationInput = document.getElementById('transition-duration');
         const fitModeSelect = document.getElementById('fit-mode');
         const targetAspectRatioSelect = document.getElementById('target-aspect-ratio');
         const shuffleCheckbox = document.getElementById('shuffle');
-        const colorPresets = document.querySelectorAll('.color-preset');
+        // Populate sidebar color presets dynamically
+        function buildSidebarPresets() {
+            const neutralContainer = document.getElementById('default-color-presets');
+            const accentContainer = document.getElementById('accent-color-presets');
+            neutralContainer.innerHTML = NEUTRAL_PRESETS.map(p =>
+                `<div class="color-preset" style="background:${p.color};${p.color === '#ffffff' ? 'border:1px solid rgba(255,255,255,0.2);' : ''}" data-color="${p.color}" title="${p.title}"></div>`
+            ).join('');
+            accentContainer.innerHTML = ACCENT_PRESETS.map(p =>
+                `<div class="color-preset" style="background:${p.color};${p.color === '#ffffff' ? 'border:1px solid rgba(255,255,255,0.2);' : ''}" data-color="${p.color}" title="${p.title}"></div>`
+            ).join('');
+        }
+        buildSidebarPresets();
+
+        function toggleMoreColors() {
+            const accentEl = document.getElementById('accent-color-presets');
+            const btn = document.getElementById('toggle-more-colors');
+            const showing = accentEl.style.display !== 'none';
+            accentEl.style.display = showing ? 'none' : 'flex';
+            btn.textContent = showing ? 'More Colors' : 'Fewer Colors';
+            // Rebind click handlers for accent presets
+            if (!showing) bindSidebarPresets();
+        }
+
+        function bindSidebarPresets() {
+            document.querySelectorAll('.settings-column .color-preset').forEach(preset => {
+                preset.onclick = () => {
+                    matColorInput.value = preset.dataset.color;
+                    updateColorPresets();
+                    updatePreviewTexture();
+                };
+            });
+        }
+        bindSidebarPresets();
+
+        const colorPresets = document.querySelectorAll('.settings-column .color-preset');
+
+        // ===== Settings Tabs =====
+        function switchSettingsTab(tab) {
+            document.querySelectorAll('.settings-tab').forEach(t => t.classList.toggle('active', t.dataset.tab === tab));
+            document.querySelectorAll('.settings-tab-content').forEach(c => c.style.display = 'none');
+            document.getElementById('tab-' + tab).style.display = 'flex';
+        }
 
         // ===== State =====
         let images = [];
@@ -1476,7 +1801,7 @@
                     for (const m of matches) {
                         const similarity = Math.max(0, 100 - Math.round(m.distance * 100 / 64));
                         html += `<div class="upload-modal-match">
-                            <img src="/uploads/${escAttr(m.filename)}" alt="match">
+                            <img src="/thumbnails/${escAttr(m.filename)}" alt="match">
                             <span>Similar to <strong>${cleanFilename(m.filename)}</strong> (${similarity}% match)</span>
                         </div>`;
                     }
@@ -1584,8 +1909,9 @@
                 filtered = images.filter(img => !img.enabled);
             }
 
-            // Separate ungrouped images from grouped
+            // Separate ungrouped images from grouped, sorted by upload time (newest first)
             const ungrouped = filtered.filter(img => !groupedFilenames.has(img.filename));
+            ungrouped.sort((a, b) => (b.uploaded_at || '').localeCompare(a.uploaded_at || ''));
 
             if (images.length === 0 && Object.keys(groups).length === 0) {
                 grid.style.display = 'none';
@@ -1613,7 +1939,7 @@
                         <div class="group-card" data-group-id="${groupId}">
                             <div class="group-mosaic ${mosaicClass}" onclick="openGroupPreview('${groupId}')">
                                 <span class="group-badge">${count} images</span>
-                                ${displayImages.map(img => `<img src="/uploads/${escAttr(img.filename)}" alt="${escAttr(img.filename)}" loading="lazy">`).join('')}
+                                ${displayImages.map(img => `<img src="/thumbnails/${escAttr(img.filename)}" alt="${escAttr(img.filename)}" loading="lazy">`).join('')}
                             </div>
                             <div class="card-info">
                                 <div class="card-filename">Group (${count} images)</div>
@@ -1639,15 +1965,11 @@
             html += ungrouped.map(img => `
                 <div class="image-card ${img.enabled ? '' : 'disabled'} ${selectedImages.has(img.filename) ? 'selected' : ''}"
                      data-filename="${escAttr(img.filename)}">
-                    <div class="card-thumb" onclick="openPreview('${escAttr(img.filename)}')">
-                        <input type="checkbox" class="image-checkbox"
-                               ${selectedImages.has(img.filename) ? 'checked' : ''}
-                               onclick="event.stopPropagation()"
-                               onchange="toggleSelect('${escAttr(img.filename)}')">
+                    <div class="card-thumb" onclick="handleCardClick('${escAttr(img.filename)}')">
                         <span class="status-badge ${img.enabled ? 'status-enabled' : 'status-disabled'}">
                             ${img.enabled ? 'Visible' : 'Hidden'}
                         </span>
-                        <img src="/uploads/${escAttr(img.filename)}" alt="${escAttr(img.filename)}" loading="lazy">
+                        <img src="/thumbnails/${escAttr(img.filename)}" alt="${escAttr(img.filename)}" loading="lazy">
                     </div>
                     <div class="card-info">
                         <div class="card-filename" title="${escAttr(img.filename)}">${cleanFilename(escAttr(img.filename))}</div>
@@ -1699,30 +2021,34 @@
             if (!img) return;
 
             const matColor = img.mat_color || matColorInput.value;
-            const bevelWidth = img.bevel_width ?? parseInt(bevelWidthInput.value);
+            const effectSize = img.bevel_width ?? parseInt(bevelWidthInput.value);
+            const borderEffect = img.border_effect || borderEffectSelect.value;
             const finish = img.mat_finish || matFinishSelect.value;
             const scale = img.scale || 1.0;
 
             matPreview.style.backgroundColor = matColor;
-            matPreview.classList.remove('mat-linen', 'mat-suede', 'mat-silk');
+            matPreview.classList.remove('mat-eggshell', 'mat-linen', 'mat-suede', 'mat-silk');
             if (finish !== 'flat') matPreview.classList.add('mat-' + finish);
 
-            // Compute pixel dimensions — photo+bevel must fit in frame
+            // Compute pixel dimensions — photo+effect must fit in frame
             const containerW = previewContent.clientWidth;
             const containerH = previewContent.clientHeight;
-            const bevel2 = (bevelWidth > 0 ? bevelWidth : 0) * 2;
+            const effectSpace = borderEffect === 'shadow' ? Math.round(effectSize * 2) : effectSize;
+            const effect2 = (effectSpace > 0 ? effectSpace : 0) * 2;
 
-            // Photo ≤ 95% of container; photo+bevel ≤ container
-            const maxPhotoW = Math.min(containerW * 0.95, containerW - bevel2);
-            const maxPhotoH = Math.min(containerH * 0.95, containerH - bevel2);
+            // Photo ≤ 95% of container; photo+effect ≤ container
+            const maxPhotoW = Math.min(containerW * 0.95, containerW - effect2);
+            const maxPhotoH = Math.min(containerH * 0.95, containerH - effect2);
 
-            // At scale=1 use 90%-bevel as base, scale adjusts, hard-capped at max
-            const baseW = Math.min(containerW * 0.90 - bevel2, maxPhotoW);
-            const baseH = Math.min(containerH * 0.90 - bevel2, maxPhotoH);
+            // At scale=1 use 90%-effect as base, scale adjusts, hard-capped at max
+            const baseW = Math.min(containerW * 0.90 - effect2, maxPhotoW);
+            const baseH = Math.min(containerH * 0.90 - effect2, maxPhotoH);
             const scaledW = Math.max(1, Math.min(baseW * scale, maxPhotoW));
             const scaledH = Math.max(1, Math.min(baseH * scale, maxPhotoH));
 
-            const imgRatio = (img.width && img.height) ? img.width / img.height : 4 / 3;
+            const rawRatio = (img.width && img.height) ? img.width / img.height : 4 / 3;
+            const crop = img.crop;
+            const imgRatio = crop ? (rawRatio * crop.w / crop.h) : rawRatio;
             let displayW, displayH;
             if (imgRatio > scaledW / scaledH) {
                 displayW = scaledW;
@@ -1732,8 +2058,21 @@
                 displayW = scaledH * imgRatio;
             }
 
-            const imgHtml = `<img src="/uploads/${filename}" alt="${filename}" style="width:${Math.round(displayW)}px;height:${Math.round(displayH)}px;object-fit:contain;">`;
-            previewContent.innerHTML = makeBevelHtml(imgHtml, bevelWidth, matColor);
+            let imgHtml;
+            if (crop) {
+                const dW = Math.round(displayW);
+                const dH = Math.round(displayH);
+                const fullW = Math.round(dW / crop.w);
+                const fullH = Math.round(dH / crop.h);
+                const offsetX = Math.round(-crop.x * fullW);
+                const offsetY = Math.round(-crop.y * fullH);
+                imgHtml = `<div style="width:${dW}px;height:${dH}px;overflow:hidden;line-height:0;">` +
+                          `<img src="/uploads/${filename}" alt="${filename}" style="width:${fullW}px;height:${fullH}px;margin-left:${offsetX}px;margin-top:${offsetY}px;display:block;max-width:none;max-height:none;">` +
+                          `</div>`;
+            } else {
+                imgHtml = `<img src="/uploads/${filename}" alt="${filename}" style="width:${Math.round(displayW)}px;height:${Math.round(displayH)}px;object-fit:contain;">`;
+            }
+            previewContent.innerHTML = makeEffectHtml(imgHtml, effectSize, matColor, borderEffect);
         }
 
         function renderSingleControls(filename) {
@@ -1745,6 +2084,8 @@
             document.querySelector('.preview-controls-actions').style.display = 'none';
             const currentFinish = img.mat_finish || '';
             const currentBevel = img.bevel_width ?? '';
+            const currentBorderEffect = img.border_effect || '';
+            const effectLabel = (currentBorderEffect || borderEffectSelect.value) === 'shadow' ? 'Shadow' : 'Bevel';
 
             const currentMatColor = img.mat_color || matColorInput.value;
 
@@ -1762,14 +2103,15 @@
                 <div class="group-edit-item" style="flex-direction:column;gap:8px;">
                     <div style="display:flex;align-items:center;gap:8px;">
                         <label style="font-size:0.8rem;color:#aaa;white-space:nowrap;">Mat Color:</label>
-                        <input type="color" value="${currentMatColor}"
-                               style="width:24px;height:24px;padding:0;border:1px solid rgba(255,255,255,0.2);border-radius:4px;background:transparent;cursor:pointer;"
-                               onchange="updateMatColor('${escAttr(filename)}', this.value)">
                         <button style="font-size:0.7rem;padding:2px 6px;border:1px solid rgba(255,255,255,0.1);border-radius:4px;background:rgba(0,0,0,0.3);color:#aaa;cursor:pointer;"
                                 onclick="updateMatColor('${escAttr(filename)}', null); renderSinglePreviewImage('${escAttr(filename)}'); renderSingleControls('${escAttr(filename)}')">Reset</button>
                     </div>
                     <div class="color-presets" style="margin-top:0;">
-                        ${COLOR_PRESETS.map(p => `<div class="color-preset${currentMatColor === p.color ? ' active' : ''}" style="background:${p.color};width:22px;height:22px;${p.color === '#ffffff' ? 'border:1px solid rgba(255,255,255,0.2);' : ''}" title="${p.title}" onclick="updateMatColor('${escAttr(filename)}','${p.color}'); renderSingleControls('${escAttr(filename)}')"></div>`).join('')}
+                        ${NEUTRAL_PRESETS.map(p => `<div class="color-preset${currentMatColor === p.color ? ' active' : ''}" style="background:${p.color};width:22px;height:22px;${p.color === '#ffffff' ? 'border:1px solid rgba(255,255,255,0.2);' : ''}" title="${p.title}" onclick="updateMatColor('${escAttr(filename)}','${p.color}'); renderSingleControls('${escAttr(filename)}')"></div>`).join('')}
+                    </div>
+                    <button type="button" class="btn-more-colors" onclick="this.nextElementSibling.style.display = this.nextElementSibling.style.display === 'none' ? 'flex' : 'none'; this.textContent = this.nextElementSibling.style.display === 'none' ? 'More Colors' : 'Fewer Colors'">${ACCENT_PRESETS.some(p => p.color === currentMatColor) ? 'Fewer Colors' : 'More Colors'}</button>
+                    <div class="color-presets accent-colors" style="margin-top:0;${ACCENT_PRESETS.some(p => p.color === currentMatColor) ? '' : 'display:none;'}">
+                        ${ACCENT_PRESETS.map(p => `<div class="color-preset${currentMatColor === p.color ? ' active' : ''}" style="background:${p.color};width:22px;height:22px;${p.color === '#ffffff' ? 'border:1px solid rgba(255,255,255,0.2);' : ''}" title="${p.title}" onclick="updateMatColor('${escAttr(filename)}','${p.color}'); renderSingleControls('${escAttr(filename)}')"></div>`).join('')}
                     </div>
                 </div>
                 <div class="group-edit-item" style="flex-wrap:wrap;gap:12px;">
@@ -1779,20 +2121,243 @@
                                 onchange="updateImageField('${escAttr(filename)}','mat_finish',this.value||null)">
                             <option value="" ${!currentFinish ? 'selected' : ''}>Default</option>
                             <option value="flat" ${currentFinish==='flat' ? 'selected' : ''}>Flat</option>
+                            <option value="eggshell" ${currentFinish==='eggshell' ? 'selected' : ''}>Eggshell</option>
                             <option value="linen" ${currentFinish==='linen' ? 'selected' : ''}>Linen</option>
                             <option value="suede" ${currentFinish==='suede' ? 'selected' : ''}>Suede</option>
                             <option value="silk" ${currentFinish==='silk' ? 'selected' : ''}>Silk</option>
                         </select>
                     </div>
                     <div style="display:flex;align-items:center;gap:8px;flex:1;min-width:150px;">
-                        <label style="font-size:0.8rem;color:#aaa;white-space:nowrap;">Bevel: <span id="single-bevel-val">${currentBevel !== '' ? currentBevel + 'px' : parseInt(bevelWidthInput.value) + 'px'}</span></label>
+                        <label style="font-size:0.8rem;color:#aaa;white-space:nowrap;">Effect:</label>
+                        <select style="flex:1;padding:6px;border:1px solid rgba(255,255,255,0.1);border-radius:6px;background:rgba(0,0,0,0.3);color:#e0e0e0;font-size:0.8rem;"
+                                onchange="updateImageField('${escAttr(filename)}','border_effect',this.value||null); renderSingleControls('${escAttr(filename)}')">
+                            <option value="" ${!currentBorderEffect ? 'selected' : ''}>Default</option>
+                            <option value="bevel" ${currentBorderEffect==='bevel' ? 'selected' : ''}>Bevel</option>
+                            <option value="shadow" ${currentBorderEffect==='shadow' ? 'selected' : ''}>Shadow</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="group-edit-item" style="flex-wrap:wrap;gap:12px;">
+                    <div style="display:flex;align-items:center;gap:8px;flex:1;min-width:150px;">
+                        <label style="font-size:0.8rem;color:#aaa;white-space:nowrap;">${effectLabel}: <span id="single-bevel-val">${currentBevel !== '' ? currentBevel + 'px' : parseInt(bevelWidthInput.value) + 'px'}</span></label>
                         <input type="range" min="0" max="16" step="1" value="${currentBevel !== '' ? currentBevel : parseInt(bevelWidthInput.value)}"
                                style="flex:1;accent-color:#00d4ff;"
                                oninput="this.previousElementSibling.querySelector('span').textContent = this.value + 'px'; previewSingleBevel('${escAttr(filename)}', this.value)"
                                onchange="updateImageField('${escAttr(filename)}','bevel_width',parseInt(this.value))">
                     </div>
                 </div>
+                <div class="group-edit-item" style="gap:8px;">
+                    <button class="btn btn-edit" onclick="enterCropMode('${escAttr(filename)}')">Crop</button>
+                    <button class="btn btn-warning" onclick="clearCrop('${escAttr(filename)}')" ${!img.crop ? 'disabled style="opacity:0.5"' : ''}>Clear Crop</button>
+                </div>
             `;
+        }
+
+        // ===== Crop Mode =====
+        let cropState = null; // {filename, x, y, w, h, imgRect}
+
+        function enterCropMode(filename) {
+            const img = images.find(i => i.filename === filename);
+            if (!img) return;
+
+            const existing = img.crop || {x: 0, y: 0, w: 1, h: 1};
+            cropState = { filename, x: existing.x, y: existing.y, w: existing.w, h: existing.h };
+
+            // Show uncropped image in preview
+            matPreview.style.backgroundColor = '#111';
+            matPreview.classList.remove('mat-eggshell', 'mat-linen', 'mat-suede', 'mat-silk');
+
+            const containerW = previewContent.clientWidth;
+            const containerH = previewContent.clientHeight;
+            const imgRatio = (img.width || 1) / (img.height || 1);
+
+            let dispW, dispH;
+            if (imgRatio > containerW / containerH) {
+                dispW = containerW * 0.92;
+                dispH = dispW / imgRatio;
+            } else {
+                dispH = containerH * 0.92;
+                dispW = dispH * imgRatio;
+            }
+            const offsetX = (containerW - dispW) / 2;
+            const offsetY = (containerH - dispH) / 2;
+
+            // Store image rect for coordinate conversion
+            cropState.imgRect = {x: offsetX, y: offsetY, w: dispW, h: dispH};
+
+            previewContent.style.position = 'relative';
+            previewContent.innerHTML = `
+                <img id="crop-image" src="/uploads/${filename}"
+                     style="position:absolute;left:${offsetX}px;top:${offsetY}px;width:${dispW}px;height:${dispH}px;user-select:none;pointer-events:none;">
+                <div class="crop-overlay" id="crop-overlay"></div>
+                <div class="crop-selection" id="crop-selection">
+                    <div class="crop-handle nw" data-handle="nw"></div>
+                    <div class="crop-handle ne" data-handle="ne"></div>
+                    <div class="crop-handle sw" data-handle="sw"></div>
+                    <div class="crop-handle se" data-handle="se"></div>
+                    <div class="crop-handle n" data-handle="n"></div>
+                    <div class="crop-handle s" data-handle="s"></div>
+                    <div class="crop-handle e" data-handle="e"></div>
+                    <div class="crop-handle w" data-handle="w"></div>
+                </div>
+                <div class="crop-toolbar">
+                    <button class="btn btn-success" onclick="applyCrop()">Apply</button>
+                    <button class="btn btn-warning" onclick="cancelCrop()">Cancel</button>
+                </div>
+            `;
+
+            updateCropSelection();
+            initCropHandlers();
+        }
+
+        function updateCropSelection() {
+            if (!cropState) return;
+            const sel = document.getElementById('crop-selection');
+            if (!sel) return;
+            const r = cropState.imgRect;
+            sel.style.left   = (r.x + cropState.x * r.w) + 'px';
+            sel.style.top    = (r.y + cropState.y * r.h) + 'px';
+            sel.style.width  = (cropState.w * r.w) + 'px';
+            sel.style.height = (cropState.h * r.h) + 'px';
+        }
+
+        function initCropHandlers() {
+            const overlay = document.getElementById('crop-overlay');
+            const sel = document.getElementById('crop-selection');
+            if (!overlay || !sel) return;
+
+            let dragMode = null; // 'move' or handle name
+            let startX, startY, startCrop;
+
+            function getPointer(e) {
+                const t = e.touches ? e.touches[0] : e;
+                const rect = previewContent.getBoundingClientRect();
+                return {x: t.clientX - rect.left, y: t.clientY - rect.top};
+            }
+
+            function onStart(e) {
+                e.preventDefault();
+                const target = e.target;
+                const handle = target.dataset ? target.dataset.handle : null;
+                if (handle) {
+                    dragMode = handle;
+                } else if (target === sel || sel.contains(target)) {
+                    dragMode = 'move';
+                } else {
+                    return;
+                }
+                const p = getPointer(e);
+                startX = p.x;
+                startY = p.y;
+                startCrop = {x: cropState.x, y: cropState.y, w: cropState.w, h: cropState.h};
+            }
+
+            function onMove(e) {
+                if (!dragMode) return;
+                e.preventDefault();
+                const p = getPointer(e);
+                const r = cropState.imgRect;
+                const dx = (p.x - startX) / r.w;
+                const dy = (p.y - startY) / r.h;
+                const minSize = 0.05;
+
+                if (dragMode === 'move') {
+                    cropState.x = Math.max(0, Math.min(1 - startCrop.w, startCrop.x + dx));
+                    cropState.y = Math.max(0, Math.min(1 - startCrop.h, startCrop.y + dy));
+                } else {
+                    let nx = startCrop.x, ny = startCrop.y, nw = startCrop.w, nh = startCrop.h;
+
+                    if (dragMode.includes('w')) {
+                        const newX = Math.max(0, Math.min(startCrop.x + startCrop.w - minSize, startCrop.x + dx));
+                        nw = startCrop.w - (newX - startCrop.x);
+                        nx = newX;
+                    }
+                    if (dragMode.includes('e')) {
+                        nw = Math.max(minSize, Math.min(1 - startCrop.x, startCrop.w + dx));
+                    }
+                    if (dragMode.includes('n')) {
+                        const newY = Math.max(0, Math.min(startCrop.y + startCrop.h - minSize, startCrop.y + dy));
+                        nh = startCrop.h - (newY - startCrop.y);
+                        ny = newY;
+                    }
+                    if (dragMode.includes('s')) {
+                        nh = Math.max(minSize, Math.min(1 - startCrop.y, startCrop.h + dy));
+                    }
+
+                    cropState.x = nx;
+                    cropState.y = ny;
+                    cropState.w = nw;
+                    cropState.h = nh;
+                }
+
+                updateCropSelection();
+            }
+
+            function onEnd() {
+                dragMode = null;
+            }
+
+            // Mouse events on the entire preview content
+            previewContent.addEventListener('mousedown', onStart);
+            document.addEventListener('mousemove', onMove);
+            document.addEventListener('mouseup', onEnd);
+
+            // Touch events
+            previewContent.addEventListener('touchstart', onStart, {passive: false});
+            document.addEventListener('touchmove', onMove, {passive: false});
+            document.addEventListener('touchend', onEnd);
+
+            // Store cleanup function
+            cropState._cleanup = () => {
+                previewContent.removeEventListener('mousedown', onStart);
+                document.removeEventListener('mousemove', onMove);
+                document.removeEventListener('mouseup', onEnd);
+                previewContent.removeEventListener('touchstart', onStart);
+                document.removeEventListener('touchmove', onMove);
+                document.removeEventListener('touchend', onEnd);
+            };
+        }
+
+        async function applyCrop() {
+            if (!cropState) return;
+            const crop = {
+                x: Math.round(cropState.x * 1000) / 1000,
+                y: Math.round(cropState.y * 1000) / 1000,
+                w: Math.round(cropState.w * 1000) / 1000,
+                h: Math.round(cropState.h * 1000) / 1000
+            };
+
+            // Skip if it's the full image (no actual crop)
+            const isFullImage = crop.x === 0 && crop.y === 0 && crop.w === 1 && crop.h === 1;
+            const saveCrop = isFullImage ? null : crop;
+
+            const fn = cropState.filename;
+            if (cropState._cleanup) cropState._cleanup();
+            cropState = null;
+
+            const img = images.find(i => i.filename === fn);
+            if (img) img.crop = saveCrop;
+
+            await updateImageField(fn, 'crop', saveCrop);
+            renderSinglePreviewImage(fn);
+            renderSingleControls(fn);
+        }
+
+        function cancelCrop() {
+            if (!cropState) return;
+            const fn = cropState.filename;
+            if (cropState._cleanup) cropState._cleanup();
+            cropState = null;
+            renderSinglePreviewImage(fn);
+            renderSingleControls(fn);
+        }
+
+        async function clearCrop(filename) {
+            const img = images.find(i => i.filename === filename);
+            if (img) img.crop = null;
+            await updateImageField(filename, 'crop', null);
+            renderSinglePreviewImage(filename);
+            renderSingleControls(filename);
         }
 
         function openGroupPreview(groupId) {
@@ -1819,10 +2384,11 @@
 
             const matColor = group.mat_color || matColorInput.value;
             const finish = group.mat_finish || matFinishSelect.value;
-            const groupBevel = group.bevel_width ?? parseInt(bevelWidthInput.value);
+            const groupEffectSize = group.bevel_width ?? parseInt(bevelWidthInput.value);
+            const groupBorderEffect = group.border_effect || borderEffectSelect.value;
 
             matPreview.style.backgroundColor = matColor;
-            matPreview.classList.remove('mat-linen', 'mat-suede', 'mat-silk');
+            matPreview.classList.remove('mat-eggshell', 'mat-linen', 'mat-suede', 'mat-silk');
             if (finish !== 'flat') matPreview.classList.add('mat-' + finish);
 
             const groupImages = (group.images || []).map(f => images.find(i => i.filename === f)).filter(Boolean);
@@ -1833,7 +2399,8 @@
                 // Compute explicit pixel sizes so all images render at the same height (when scale=1)
                 const containerW = matPreview.clientWidth;
                 const containerH = matPreview.clientHeight;
-                const bevel2 = (groupBevel > 0 ? groupBevel : 0) * 2;
+                const effectSpace = groupBorderEffect === 'shadow' ? Math.round(groupEffectSize * 2) : groupEffectSize;
+                const effect2 = (effectSpace > 0 ? effectSpace : 0) * 2;
 
                 const imgInfos = groupImages.map(img => ({
                     filename: img.filename,
@@ -1847,10 +2414,10 @@
                 // Reserve space for N+1 equal gaps (space-evenly) — each gap ~5% of container
                 const gapFraction = 0.05;
                 const totalGapFraction = gapFraction * (count + 1);
-                // Subtract bevel from usable space so photo+bevel fits
-                const totalBevelW = bevel2 * count;
-                const usableW = containerW * (1 - totalGapFraction) - totalBevelW;
-                const usableH = containerH * 0.85 - bevel2;
+                // Subtract effect space from usable area
+                const totalEffectW = effect2 * count;
+                const usableW = containerW * (1 - totalGapFraction) - totalEffectW;
+                const usableH = containerH * 0.85 - effect2;
                 // Base height: largest h such that total width fits and tallest image fits
                 const baseHeight = Math.min(usableH / maxScale, usableW / totalWidthAtUnitHeight);
 
@@ -1858,13 +2425,13 @@
                     const h = baseHeight * info.scale;
                     const w = h * info.ar;
                     const imgHtml = `<img src="/uploads/${info.filename}" alt="${info.filename}" style="width:${w}px;height:${h}px;max-width:none;max-height:none;flex-shrink:0;">`;
-                    return makeBevelHtml(imgHtml, groupBevel, matColor);
+                    return makeEffectHtml(imgHtml, groupEffectSize, matColor, groupBorderEffect);
                 }).join('')}</div>`;
             } else {
                 const cols = Math.ceil(Math.sqrt(count));
                 previewContent.innerHTML = `<div class="group-preview-grid" style="grid-template-columns:repeat(${cols},1fr);">${groupImages.map(img => {
                     const imgHtml = `<img src="/uploads/${img.filename}" alt="${img.filename}">`;
-                    return makeBevelHtml(imgHtml, groupBevel, matColor);
+                    return makeEffectHtml(imgHtml, groupEffectSize, matColor, groupBorderEffect);
                 }).join('')}</div>`;
             }
         }
@@ -1878,6 +2445,8 @@
             const count = groupImages.length;
             const currentFinish = group.mat_finish || '';
             const currentBevel = group.bevel_width ?? '';
+            const currentBorderEffect = group.border_effect || '';
+            const effectLabel = (currentBorderEffect || borderEffectSelect.value) === 'shadow' ? 'Shadow' : 'Bevel';
 
             previewControlsTitle.textContent = `Group (${count} images)`;
 
@@ -1889,13 +2458,23 @@
                                 onchange="updateGroupField('${groupId}','mat_finish',this.value||null)">
                             <option value="" ${!currentFinish ? 'selected' : ''}>Default</option>
                             <option value="flat" ${currentFinish==='flat' ? 'selected' : ''}>Flat</option>
+                            <option value="eggshell" ${currentFinish==='eggshell' ? 'selected' : ''}>Eggshell</option>
                             <option value="linen" ${currentFinish==='linen' ? 'selected' : ''}>Linen</option>
                             <option value="suede" ${currentFinish==='suede' ? 'selected' : ''}>Suede</option>
                             <option value="silk" ${currentFinish==='silk' ? 'selected' : ''}>Silk</option>
                         </select>
                     </div>
                     <div style="display:flex;align-items:center;gap:8px;flex:1;min-width:150px;">
-                        <label style="font-size:0.8rem;color:#aaa;white-space:nowrap;">Bevel: <span id="group-bevel-val">${currentBevel !== '' ? currentBevel + 'px' : parseInt(bevelWidthInput.value) + 'px'}</span></label>
+                        <label style="font-size:0.8rem;color:#aaa;white-space:nowrap;">Effect:</label>
+                        <select style="flex:1;padding:6px;border:1px solid rgba(255,255,255,0.1);border-radius:6px;background:rgba(0,0,0,0.3);color:#e0e0e0;font-size:0.8rem;"
+                                onchange="updateGroupField('${groupId}','border_effect',this.value||null); renderGroupControls('${groupId}')">
+                            <option value="" ${!currentBorderEffect ? 'selected' : ''}>Default</option>
+                            <option value="bevel" ${currentBorderEffect==='bevel' ? 'selected' : ''}>Bevel</option>
+                            <option value="shadow" ${currentBorderEffect==='shadow' ? 'selected' : ''}>Shadow</option>
+                        </select>
+                    </div>
+                    <div style="display:flex;align-items:center;gap:8px;flex:1;min-width:150px;">
+                        <label style="font-size:0.8rem;color:#aaa;white-space:nowrap;">${effectLabel}: <span id="group-bevel-val">${currentBevel !== '' ? currentBevel + 'px' : parseInt(bevelWidthInput.value) + 'px'}</span></label>
                         <input type="range" min="0" max="16" step="1" value="${currentBevel !== '' ? currentBevel : parseInt(bevelWidthInput.value)}"
                                style="flex:1;accent-color:#00d4ff;"
                                oninput="this.previousElementSibling.querySelector('span').textContent = this.value + 'px'; previewGroupBevel('${groupId}', this.value)"
@@ -1991,7 +2570,44 @@
             document.getElementById('disabled-count').textContent = total - enabled;
         }
 
-        // ===== Selection =====
+        // ===== Selection & Select Mode =====
+        let selectMode = false;
+
+        function handleCardClick(filename) {
+            if (selectMode) {
+                toggleSelect(filename);
+            } else {
+                openPreview(filename);
+            }
+        }
+
+        function startGroupMode() {
+            selectMode = true;
+            document.body.classList.add('select-mode');
+            document.getElementById('start-group').style.display = 'none';
+            document.getElementById('done-group').style.display = '';
+            document.querySelector('.toolbar-right').style.display = '';
+            document.getElementById('selection-count-wrapper').style.display = '';
+        }
+
+        function exitSelectMode() {
+            selectMode = false;
+            document.body.classList.remove('select-mode');
+            document.getElementById('start-group').style.display = '';
+            document.getElementById('done-group').style.display = 'none';
+            document.querySelector('.toolbar-right').style.display = 'none';
+            document.getElementById('selection-count-wrapper').style.display = 'none';
+            selectedImages.clear();
+            updateSelectionUI();
+        }
+
+        async function finishGroupMode() {
+            if (selectedImages.size >= 2) {
+                await createGroup();
+            }
+            exitSelectMode();
+        }
+
         function toggleSelect(filename) {
             if (selectedImages.has(filename)) {
                 selectedImages.delete(filename);
@@ -2008,18 +2624,10 @@
             document.getElementById('bulk-enable').disabled = !hasSelection;
             document.getElementById('bulk-disable').disabled = !hasSelection;
             document.getElementById('bulk-delete').disabled = !hasSelection;
-            document.getElementById('bulk-group').disabled = selectedImages.size < 2;
-
-            const visibleImages = getFilteredImages();
-            const allSelected = visibleImages.length > 0 &&
-                               visibleImages.every(img => selectedImages.has(img.filename));
-            document.getElementById('select-all').checked = allSelected;
 
             document.querySelectorAll('.image-card').forEach(card => {
                 const filename = card.dataset.filename;
                 card.classList.toggle('selected', selectedImages.has(filename));
-                const cb = card.querySelector('.image-checkbox');
-                if (cb) cb.checked = selectedImages.has(filename);
             });
         }
 
@@ -2028,17 +2636,6 @@
             if (currentFilter === 'disabled') return images.filter(img => !img.enabled);
             return images;
         }
-
-        // Select all
-        document.getElementById('select-all').addEventListener('change', (e) => {
-            const filtered = getFilteredImages();
-            if (e.target.checked) {
-                filtered.forEach(img => selectedImages.add(img.filename));
-            } else {
-                filtered.forEach(img => selectedImages.delete(img.filename));
-            }
-            updateSelectionUI();
-        });
 
         // Filter tabs
         document.querySelectorAll('.filter-tab').forEach(tab => {
@@ -2149,8 +2746,6 @@
         }
 
         // ===== Group Actions =====
-        document.getElementById('bulk-group').addEventListener('click', createGroup);
-
         async function createGroup() {
             const filenames = Array.from(selectedImages);
             if (filenames.length < 2) return;
@@ -2338,11 +2933,8 @@
             matPreview.style.setProperty('--preview-aspect-ratio', ratio.replace(':', '/'));
         }
 
-        function saveSettings() {
+        function saveSlideshowSettings() {
             const settings = {
-                mat_color: matColorInput.value,
-                mat_finish: matFinishSelect.value,
-                bevel_width: parseInt(bevelWidthInput.value),
                 slideshow_interval: parseInt(slideshowIntervalInput.value),
                 transition_duration: parseFloat(transitionDurationInput.value),
                 fit_mode: fitModeSelect.value,
@@ -2355,38 +2947,70 @@
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(settings)
             });
+        }
+
+        function applyMatSettings() {
+            const settings = {
+                mat_color: matColorInput.value,
+                mat_finish: matFinishSelect.value,
+                bevel_width: parseInt(bevelWidthInput.value),
+                border_effect: borderEffectSelect.value
+            };
+
+            fetch('/api/settings', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(settings)
+            }).then(() => {
+                showStatus('Mat settings applied', 'success');
+                // Re-render preview if an image/group is shown and uses defaults
+                if (previewFilename) {
+                    const img = images.find(i => i.filename === previewFilename);
+                    if (img && !img.mat_color) renderSinglePreviewImage(previewFilename);
+                } else if (previewGroupId) {
+                    const group = groups[previewGroupId];
+                    if (group && !group.mat_color) renderGroupPreviewImage(previewGroupId);
+                }
+            }).catch(() => {
+                showStatus('Failed to apply mat settings', 'error');
+            });
 
             updateColorPresets();
             updatePreviewTexture();
         }
 
-        matColorInput.addEventListener('input', saveSettings);
-        matFinishSelect.addEventListener('change', saveSettings);
+        // Mat settings: Apply button (not auto-save)
+        document.getElementById('apply-mat-settings').addEventListener('click', applyMatSettings);
+
+        // Live preview updates for mat settings (no save)
+        matFinishSelect.addEventListener('change', updatePreviewTexture);
+        borderEffectSelect.addEventListener('change', () => {
+            effectSizeLabel.textContent = borderEffectSelect.value === 'shadow' ? 'Shadow' : 'Bevel';
+        });
         bevelWidthInput.addEventListener('input', () => {
             bevelValueLabel.textContent = bevelWidthInput.value + 'px';
-            saveSettings();
         });
-        slideshowIntervalInput.addEventListener('change', saveSettings);
-        transitionDurationInput.addEventListener('change', saveSettings);
-        fitModeSelect.addEventListener('change', saveSettings);
-        shuffleCheckbox.addEventListener('change', saveSettings);
+
+        // Slideshow settings: auto-save
+        slideshowIntervalInput.addEventListener('change', saveSlideshowSettings);
+        transitionDurationInput.addEventListener('change', saveSlideshowSettings);
+        fitModeSelect.addEventListener('change', saveSlideshowSettings);
+        shuffleCheckbox.addEventListener('change', saveSlideshowSettings);
         targetAspectRatioSelect.addEventListener('change', () => {
-            saveSettings();
+            saveSlideshowSettings();
             updatePreviewAspectRatio();
         });
 
-        // Color presets
-        colorPresets.forEach(preset => {
-            preset.addEventListener('click', () => {
-                matColorInput.value = preset.dataset.color;
-                saveSettings();
-            });
-        });
-
         function updateColorPresets() {
-            colorPresets.forEach(preset => {
+            document.querySelectorAll('.settings-column .color-preset').forEach(preset => {
                 preset.classList.toggle('active', preset.dataset.color === matColorInput.value);
             });
+            // If selected color is in accent presets, auto-expand
+            const inAccent = ACCENT_PRESETS.some(p => p.color === matColorInput.value);
+            if (inAccent) {
+                const accentEl = document.getElementById('accent-color-presets');
+                if (accentEl.style.display === 'none') toggleMoreColors();
+            }
         }
         updateColorPresets();
 
@@ -2420,19 +3044,15 @@
         }
 
         // ===== Bevel + Texture Helpers =====
-        function getBevelColors(matHex) {
+        function getBevelColor(matHex) {
             let hex = matHex.replace('#', '');
             if (hex.length === 3) hex = hex[0]+hex[0]+hex[1]+hex[1]+hex[2]+hex[2];
             const r = parseInt(hex.substring(0, 2), 16);
             const g = parseInt(hex.substring(2, 4), 16);
             const b = parseInt(hex.substring(4, 6), 16);
             const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
-            const lightAlpha = luminance < 0.5 ? 0.04 : 0.03;
-            const darkAlpha = luminance < 0.5 ? 0.14 : 0.12;
-            return {
-                light: `rgba(255,255,255,${lightAlpha})`,
-                dark: `rgba(0,0,0,${darkAlpha})`
-            };
+            const alpha = luminance < 0.5 ? 0.18 : 0.12;
+            return `rgba(0,0,0,${alpha})`;
         }
 
         function makeMiterLineHtml(b) {
@@ -2446,15 +3066,34 @@
             ].join('');
         }
 
+        function getShadowStyle(size) {
+            const blur = size * 2;
+            const spread = Math.round(size * 0.5);
+            const yOffset = Math.round(size * 0.5);
+            return `0 ${yOffset}px ${blur}px ${spread}px rgba(0,0,0,0.35)`;
+        }
+
         function makeBevelHtml(innerHtml, bevelWidth, matColor) {
             if (!bevelWidth || bevelWidth <= 0) return innerHtml;
-            const colors = getBevelColors(matColor);
-            return `<div class="mat-bevel" style="--bevel-w:${bevelWidth}px;--bevel-light:${colors.light};--bevel-dark:${colors.dark}">${innerHtml}${makeMiterLineHtml(bevelWidth)}</div>`;
+            return `<div class="mat-bevel" style="--bevel-w:${bevelWidth}px;--bevel-color:${getBevelColor(matColor)}">${innerHtml}${makeMiterLineHtml(bevelWidth)}</div>`;
+        }
+
+        function makeEffectHtml(innerHtml, effectSize, matColor, borderEffect) {
+            if (!effectSize || effectSize <= 0) return innerHtml;
+            if (borderEffect === 'shadow') {
+                const shadow = getShadowStyle(effectSize);
+                // Wrap in shadow container and apply box-shadow to the inner element
+                if (innerHtml.includes('style="')) {
+                    return `<div class="mat-shadow">${innerHtml.replace('style="', 'style="box-shadow:' + shadow + ';')}</div>`;
+                }
+                return `<div class="mat-shadow" style="box-shadow:${shadow};display:inline-flex;line-height:0;">${innerHtml}</div>`;
+            }
+            return makeBevelHtml(innerHtml, effectSize, matColor);
         }
 
         function updatePreviewTexture() {
             const finish = matFinishSelect.value;
-            matPreview.classList.remove('mat-linen', 'mat-suede', 'mat-silk');
+            matPreview.classList.remove('mat-eggshell', 'mat-linen', 'mat-suede', 'mat-silk');
             if (finish !== 'flat') {
                 matPreview.classList.add('mat-' + finish);
             }

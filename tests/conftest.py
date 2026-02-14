@@ -32,12 +32,17 @@ def app(tmp_dirs):
 
     # Override module-level paths
     original_upload = photo_app.UPLOAD_FOLDER
+    original_thumbnail = photo_app.THUMBNAIL_FOLDER
     original_data = photo_app.DATA_FOLDER
     original_settings = photo_app.SETTINGS_FILE
     original_users = photo_app.USERS_FILE
     original_gallery = photo_app.GALLERY_FILE
 
+    thumb_dir = upload_dir / "thumbnails"
+    thumb_dir.mkdir()
+
     photo_app.UPLOAD_FOLDER = upload_dir
+    photo_app.THUMBNAIL_FOLDER = thumb_dir
     photo_app.DATA_FOLDER = data_dir
     photo_app.SETTINGS_FILE = data_dir / "settings.json"
     photo_app.USERS_FILE = data_dir / "users.json"
@@ -52,6 +57,7 @@ def app(tmp_dirs):
 
     # Restore original paths
     photo_app.UPLOAD_FOLDER = original_upload
+    photo_app.THUMBNAIL_FOLDER = original_thumbnail
     photo_app.DATA_FOLDER = original_data
     photo_app.SETTINGS_FILE = original_settings
     photo_app.USERS_FILE = original_users

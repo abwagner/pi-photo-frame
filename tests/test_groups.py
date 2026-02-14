@@ -172,6 +172,44 @@ def test_api_images_returns_group_slides(auth_client):
         assert fn not in single_fnames
 
 
+def test_update_group_border_effect(auth_client):
+    """PATCH /api/groups/<id> updates border_effect."""
+    fnames = _upload_images(auth_client, 2)
+    create_resp = auth_client.post('/api/groups',
+                                   json={'images': fnames},
+                                   content_type='application/json')
+    group_id = create_resp.get_json()['group_id']
+
+    resp = auth_client.patch(f'/api/groups/{group_id}',
+                             json={'border_effect': 'shadow'},
+                             content_type='application/json')
+    assert resp.status_code == 200
+
+    groups = auth_client.get('/api/groups').get_json()['groups']
+    assert groups[group_id]['border_effect'] == 'shadow'
+
+
+def test_update_group_border_effect_null(auth_client):
+    """PATCH /api/groups/<id> with border_effect null clears override."""
+    fnames = _upload_images(auth_client, 2)
+    create_resp = auth_client.post('/api/groups',
+                                   json={'images': fnames},
+                                   content_type='application/json')
+    group_id = create_resp.get_json()['group_id']
+
+    # Set then clear
+    auth_client.patch(f'/api/groups/{group_id}',
+                      json={'border_effect': 'shadow'},
+                      content_type='application/json')
+    resp = auth_client.patch(f'/api/groups/{group_id}',
+                             json={'border_effect': None},
+                             content_type='application/json')
+    assert resp.status_code == 200
+
+    groups = auth_client.get('/api/groups').get_json()['groups']
+    assert groups[group_id]['border_effect'] is None
+
+
 def test_groups_require_auth(client):
     """Groups API endpoints require authentication."""
     assert client.get('/api/groups').status_code == 401
