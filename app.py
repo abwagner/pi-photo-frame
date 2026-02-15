@@ -825,10 +825,10 @@ init_scheduler()
 # ============ CEC TV Control ============
 
 def is_cec_available():
-    """Check if cec-client is installed and a CEC device is accessible."""
+    """Check if cec-ctl is installed and a CEC device is accessible."""
     try:
         result = subprocess.run(
-            ['cec-client', '--list-devices'],
+            ['cec-ctl', '-d0', '--phys-addr'],
             capture_output=True, text=True, timeout=5
         )
         return result.returncode == 0
@@ -837,21 +837,22 @@ def is_cec_available():
 
 
 def cec_send_command(command):
-    """Send a CEC command via cec-client. Returns dict with success and optional error."""
-    cec_map = {'on': 'on 0', 'standby': 'standby 0'}
-    cec_str = cec_map.get(command)
-    if not cec_str:
+    """Send a CEC command via cec-ctl. Returns dict with success and optional error."""
+    cec_args = {
+        'on': ['cec-ctl', '-d0', '--playback', '--image-view-on'],
+        'standby': ['cec-ctl', '-d0', '--playback', '--standby'],
+    }
+    cmd = cec_args.get(command)
+    if not cmd:
         return {'success': False, 'error': f'Unknown command: {command}'}
     try:
         result = subprocess.run(
-            ['cec-client', '-s', '-d', '1'],
-            input=cec_str + '\n',
-            capture_output=True, text=True, timeout=10
+            cmd, capture_output=True, text=True, timeout=10
         )
         return {'success': result.returncode == 0,
                 'error': result.stderr.strip()[:200] if result.returncode != 0 else None}
     except FileNotFoundError:
-        return {'success': False, 'error': 'cec-client not installed'}
+        return {'success': False, 'error': 'cec-ctl not installed'}
     except subprocess.TimeoutExpired:
         return {'success': False, 'error': 'CEC command timed out'}
 

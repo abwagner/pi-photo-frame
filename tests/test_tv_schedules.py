@@ -19,14 +19,14 @@ def test_get_tv_schedules_empty(auth_client):
 
 @patch('app.is_cec_available', return_value=False)
 def test_cec_status_unavailable(mock_cec, auth_client):
-    """CEC status reports unavailable when cec-client is missing."""
+    """CEC status reports unavailable when cec-ctl is missing."""
     resp = auth_client.get('/api/cec/status')
     assert resp.get_json()['available'] is False
 
 
 @patch('app.is_cec_available', return_value=True)
 def test_cec_status_available(mock_cec, auth_client):
-    """CEC status reports available when cec-client works."""
+    """CEC status reports available when cec-ctl works."""
     resp = auth_client.get('/api/cec/status')
     assert resp.get_json()['available'] is True
 
@@ -125,3 +125,53 @@ def test_cec_test_invalid_command(auth_client):
                             data=json.dumps({'command': 'reboot'}),
                             content_type='application/json')
     assert resp.status_code == 400
+
+
+# ===== cec-ctl integration unit tests =====
+
+@patch('app.subprocess.run')
+def test_is_cec_available_calls_cec_ctl(mock_run):
+    """is_cec_available uses cec-ctl to probe the device."""
+    from app import is_cec_available
+    mock_run.return_value.returncode = 0
+    assert is_cec_available() is True
+    mock_run.assert_called_once_with(
+        ['cec-ctl', '-d0', '--phys-addr'],
+        capture_output=True, text=True, timeout=5
+    )
+
+
+@patch('app.subprocess.run')
+def test_cec_send_command_on_calls_cec_ctl(mock_run):
+    """cec_send_command('on') invokes cec-ctl with --image-view-on."""
+    from app import cec_send_command
+    mock_run.return_value.returncode = 0
+    result = cec_send_command('on')
+    assert result['success'] is True
+    mock_run.assert_called_once_with(
+        ['cec-ctl', '-d0', '--playback', '--image-view-on'],
+        capture_output=True, text=True, timeout=10
+    )
+
+
+@patch('app.subprocess.run')
+def test_cec_send_command_standby_calls_cec_ctl(mock_run):
+    """cec_send_command('standby') invokes cec-ctl with --standby."""
+    from app import cec_send_command
+    mock_run.return_value.returncode = 0
+    result = cec_send_command('standby')
+    assert result['success'] is True
+    mock_run.assert_called_once_with(
+        ['cec-ctl', '-d0', '--playback', '--standby'],
+        capture_output=True, text=True, timeout=10
+    )
+
+
+@patch('app.subprocess.run')
+def test_cec_send_command_unknown(mock_run):
+    """cec_send_command with unknown command returns error without calling subprocess."""
+    from app import cec_send_command
+    result = cec_send_command('reboot')
+    assert result['success'] is False
+    assert 'Unknown command' in result['error']
+    mock_run.assert_not_called()
