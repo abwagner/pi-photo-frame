@@ -561,6 +561,38 @@
             gap: 16px;
         }
 
+        .gallery-grid.scroll-view {
+            display: flex;
+            overflow-x: auto;
+            gap: 12px;
+            padding: 8px 0;
+            -webkit-overflow-scrolling: touch;
+            scrollbar-width: thin;
+        }
+        .gallery-grid.scroll-view .image-card,
+        .gallery-grid.scroll-view .group-card {
+            flex: 0 0 auto;
+            width: 120px;
+        }
+        .gallery-grid.scroll-view .card-info {
+            display: none;
+        }
+        .gallery-grid.scroll-view .card-thumb {
+            aspect-ratio: 1;
+        }
+        .gallery-grid.scroll-view .group-mosaic {
+            aspect-ratio: 1;
+        }
+
+        .btn-view-toggle {
+            background: rgba(255, 255, 255, 0.1);
+            color: #aaa;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            font-size: 1rem;
+            padding: 4px 8px;
+            line-height: 1;
+        }
+
         .image-card {
             background: rgba(255, 255, 255, 0.05);
             border-radius: 12px;
@@ -1308,6 +1340,11 @@
                 padding: 2px 5px;
             }
 
+            /* Hide view toggle on mobile (always horizontal) */
+            .btn-view-toggle {
+                display: none;
+            }
+
             /* Toolbar: compact */
             .toolbar {
                 padding: 8px 10px;
@@ -1396,6 +1433,7 @@
                         <button class="filter-tab" data-filter="enabled">Visible</button>
                         <button class="filter-tab" data-filter="disabled">Hidden</button>
                     </div>
+                    <button class="btn btn-view-toggle" id="view-toggle" onclick="toggleGalleryView()" title="Toggle gallery view">☰</button>
                 </div>
                 <div class="toolbar-right" style="display:none;">
                     <button class="btn btn-success" id="bulk-enable" disabled>✓ Show</button>
@@ -1506,7 +1544,8 @@
                 <div class="settings-tab-content" id="tab-settings" style="display:none;">
                     <!-- Slideshow Settings -->
                     <div class="panel">
-                        <h2>Slideshow</h2>
+                        <h2 class="collapsible-header" onclick="this.classList.toggle('open'); this.nextElementSibling.style.display = this.classList.contains('open') ? '' : 'none';">Slideshow <span class="collapse-arrow">▶</span></h2>
+                        <div class="collapsible-body" style="display:none;">
 
                         <div class="setting-group">
                             <label>Slideshow Interval (seconds)</label>
@@ -1545,6 +1584,7 @@
                         </div>
 
                         <button class="btn btn-apply" id="apply-slideshow-settings">Apply</button>
+                        </div><!-- /collapsible-body -->
                     </div>
 
                     <!-- TV Schedule Settings -->
@@ -1698,6 +1738,16 @@
             document.querySelectorAll('.settings-tab').forEach(t => t.classList.toggle('active', t.dataset.tab === tab));
             document.querySelectorAll('.settings-tab-content').forEach(c => c.style.display = 'none');
             document.getElementById('tab-' + tab).style.display = 'flex';
+        }
+
+        let galleryScrollView = false;
+        function toggleGalleryView() {
+            galleryScrollView = !galleryScrollView;
+            const grid = document.getElementById('gallery-grid');
+            const btn = document.getElementById('view-toggle');
+            grid.classList.toggle('scroll-view', galleryScrollView);
+            btn.textContent = galleryScrollView ? '▦' : '☰';
+            btn.title = galleryScrollView ? 'Grid view' : 'Strip view';
         }
 
         // ===== State =====
@@ -2155,6 +2205,13 @@
                 <div class="group-edit-item" style="gap:8px;">
                     <button class="btn btn-edit" onclick="enterCropMode('${escAttr(filename)}')">Crop</button>
                     <button class="btn btn-warning" onclick="clearCrop('${escAttr(filename)}')" ${!img.crop ? 'disabled style="opacity:0.5"' : ''}>Clear Crop</button>
+                </div>
+                <div class="group-edit-item" style="gap:8px;">
+                    <button class="btn ${img.enabled ? 'btn-warning' : 'btn-success'}"
+                            onclick="toggleImage('${escAttr(filename)}', ${!img.enabled}); renderSingleControls('${escAttr(filename)}')">
+                        ${img.enabled ? '⊘ Hide' : '✓ Show'}
+                    </button>
+                    <button class="btn btn-danger" onclick="deleteImage('${escAttr(filename)}')">🗑 Delete</button>
                 </div>
             `;
         }
