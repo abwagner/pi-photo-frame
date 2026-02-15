@@ -338,17 +338,22 @@
                 const imgResponse = await fetch('/api/images');
                 const imgData = await imgResponse.json();
                 const newSlides = imgData.slides || [];
+                const newSlidesJson = JSON.stringify(newSlides);
 
-                const newKey = JSON.stringify(newSlides.map(s => s.type === 'group' ? s.group_id : s.images[0]?.filename));
-                const oldKey = JSON.stringify(slides.map(s => s.type === 'group' ? s.group_id : s.images[0]?.filename));
-
-                if (newKey !== oldKey) {
+                if (newSlidesJson !== JSON.stringify(slides)) {
+                    const oldKeys = slides.map(s => s.type === 'group' ? s.group_id : s.images[0]?.filename);
+                    const newKeys = newSlides.map(s => s.type === 'group' ? s.group_id : s.images[0]?.filename);
+                    const structureChanged = JSON.stringify(newKeys) !== JSON.stringify(oldKeys);
                     slides = newSlides;
-                    if (slides.length > 0 && loadingEl.style.display !== 'none') {
+
+                    if (slides.length === 0) {
+                        showNoImages();
+                    } else if (structureChanged && loadingEl.style.display !== 'none') {
                         loadingEl.style.display = 'none';
                         showSlide(currentIndex);
-                    } else if (slides.length === 0) {
-                        showNoImages();
+                    } else {
+                        // Metadata changed (crop, scale, mat_color, etc.) — re-render current slide
+                        showSlide(currentIndex);
                     }
                 }
             } catch (err) {
