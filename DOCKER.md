@@ -151,7 +151,7 @@ Set these in `docker-compose.yml` or pass via `-e` flag:
 
 | Volume | Purpose |
 |--------|---------|
-| `photoframe_uploads` | Stores uploaded images |
+| `photoframe_uploads` | Stores uploaded images and auto-generated thumbnails |
 | `photoframe_data` | Stores settings, users, gallery metadata |
 
 ### Custom Port

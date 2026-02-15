@@ -2236,8 +2236,9 @@
             }
 
             function onStart(e) {
-                e.preventDefault();
                 const target = e.target;
+                // Don't intercept taps on toolbar buttons
+                if (target.closest('.crop-toolbar')) return;
                 const handle = target.dataset ? target.dataset.handle : null;
                 if (handle) {
                     dragMode = handle;
@@ -2246,6 +2247,7 @@
                 } else {
                     return;
                 }
+                e.preventDefault();
                 const p = getPointer(e);
                 startX = p.x;
                 startY = p.y;

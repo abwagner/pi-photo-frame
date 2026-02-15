@@ -10,10 +10,12 @@ A beautiful, web-based digital photo frame with user management, gallery control
 - **Password Protection** - Secure login with forced password change on first login
 - **Duplicate Detection** - Perceptual hashing warns before uploading duplicate images
 - **Individual Image Scale** - Adjust zoom per image or match heights across a group
-- **Customizable Mat Colors** - 16 presets or any custom color, per-image overrides
-- **Mat Finishes** - Flat, Linen, Suede, or Silk texture overlays
-- **Inner Bevel** - Adjustable 45-degree V-groove cut effect around images (0-16px)
-- **Smooth Slideshow** - Configurable timing and transitions
+- **Image Cropping** - Interactive crop overlay with drag-and-resize handles
+- **Customizable Mat Colors** - 10 neutral presets (white to brown) plus 25 accent colors, per-image overrides
+- **Mat Finishes** - Eggshell (default), Flat, Linen, Suede, or Silk texture overlays
+- **Border Effects** - Inner bevel (uniform color, 0-16px) or drop shadow
+- **Smooth Slideshow** - Configurable timing and transitions (default 60s)
+- **Thumbnail Generation** - Auto-generates 400px thumbnails for fast gallery loading
 - **Drag & Drop Reordering** - Arrange photos in your preferred order
 - **TV Power Schedule (HDMI-CEC)** - Automatically turn your TV on/off on a schedule
 - **HTTPS** - Self-signed, Let's Encrypt via Cloudflare, or Let's Encrypt via DuckDNS
@@ -123,28 +125,39 @@ On first login, you'll be redirected to a password change page. You must set a n
 The gallery page lets you:
 
 - **Show/Hide Photos** - Toggle visibility without deleting
-- **Bulk Actions** - Select multiple photos to show/hide/delete
+- **Group Images** - Click "Group" to select images that display together as a multi-image slide
+- **Bulk Actions** - Select mode for show/hide/delete across multiple photos
 - **Filter View** - Show all, visible only, or hidden only
+- **Upload Order** - Gallery shows newest uploads first
 - **See Metadata** - Upload date, uploader, file size
 
 Hidden photos remain on disk but won't appear in the slideshow.
 
 ## Settings
 
+Settings are organized into two tabs in the sidebar:
+
+### Mat Tab
+
 | Setting | Description |
 |---------|-------------|
-| **Mat Color** | Background color around photos (16 presets or custom) |
-| **Mat Finish** | Texture overlay: Flat (default), Linen, Suede, or Silk |
-| **Inner Bevel** | 45-degree V-groove cut width around images (0-16px) |
-| **Slideshow Interval** | Seconds between transitions (3-300) |
+| **Mat Color** | Background color around photos (10 neutrals + 25 accent colors) |
+| **Mat Finish** | Texture overlay: Eggshell (default), Flat, Linen, Suede, or Silk |
+| **Border Effect** | Bevel (uniform inset border) or Shadow (drop shadow) |
+| **Bevel/Shadow Size** | Effect width around images (0-16px) |
+
+### Settings Tab
+
+| Setting | Description |
+|---------|-------------|
+| **Slideshow Interval** | Seconds between transitions (3-300, default 60) |
 | **Transition Duration** | Fade animation length |
 | **Image Fit** | "Contain" (full image) or "Cover" (fill screen) |
-| **Image Scale** | Individual zoom per image (0.1x-2.0x) |
 | **Shuffle** | Randomize photo order |
-| **Show Filename** | Display photo name on screen |
+| **Target Screen Ratio** | 16:9, 21:9, 4:3, or 1:1 |
 | **TV Power Schedule** | HDMI-CEC on/off times by day of week |
 
-Mat color, mat finish, inner bevel, and image scale can be overridden per image or per group from the upload page preview.
+Mat color, mat finish, border effect, and image scale can be overridden per image or per group from the upload page preview. Image cropping is also available per image.
 
 ## TV Power Schedule (HDMI-CEC)
 
@@ -380,6 +393,7 @@ pi-photo-frame/
 │   └── deploy.yml          # CI/CD pipeline (test + deploy)
 ├── tests/                  # Test suite
 ├── uploads/                # Uploaded photos
+│   └── thumbnails/         # Auto-generated 400px thumbnails
 ├── data/                   # Settings, users, gallery data
 │   ├── settings.json
 │   ├── users.json

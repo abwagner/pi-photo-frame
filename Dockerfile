@@ -11,7 +11,7 @@ ENV FLASK_ENV=production
 
 # Install rclone (multi-arch: AMD64 + ARM64) and curl (needed for healthcheck)
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends curl unzip cec-utils && \
+    apt-get install -y --no-install-recommends curl unzip v4l-utils && \
     curl -fsSL https://rclone.org/install.sh | bash && \
     apt-get purge -y unzip && \
     apt-get autoremove -y && \
