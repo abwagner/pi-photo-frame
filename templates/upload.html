@@ -1539,9 +1539,7 @@
                             </select>
                         </div>
 
-                        <p style="font-size: 0.75rem; color: #666; text-align: center;">
-                            Slideshow settings are saved automatically.
-                        </p>
+                        <button class="btn btn-apply" id="apply-slideshow-settings">Apply</button>
                     </div>
 
                     <!-- TV Schedule Settings -->
@@ -1549,8 +1547,8 @@
                         <h2>TV Power Schedule</h2>
 
                         <div id="cec-unavailable-msg" class="cec-unavailable" style="display:none;">
-                            CEC control is not available. Install cec-utils and ensure the
-                            HDMI-CEC device is accessible in Docker.
+                            CEC control is not available. Ensure the HDMI-CEC device
+                            (/dev/cec0) is accessible in Docker.
                         </div>
 
                         <div id="cec-controls" style="display:none;">
@@ -2948,6 +2946,10 @@
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(settings)
+            }).then(() => {
+                showStatus('Slideshow settings applied', 'success');
+            }).catch(() => {
+                showStatus('Failed to apply slideshow settings', 'error');
             });
         }
 
@@ -2993,15 +2995,9 @@
             bevelValueLabel.textContent = bevelWidthInput.value + 'px';
         });
 
-        // Slideshow settings: auto-save
-        slideshowIntervalInput.addEventListener('change', saveSlideshowSettings);
-        transitionDurationInput.addEventListener('change', saveSlideshowSettings);
-        fitModeSelect.addEventListener('change', saveSlideshowSettings);
-        shuffleCheckbox.addEventListener('change', saveSlideshowSettings);
-        targetAspectRatioSelect.addEventListener('change', () => {
-            saveSlideshowSettings();
-            updatePreviewAspectRatio();
-        });
+        // Slideshow settings: Apply button
+        document.getElementById('apply-slideshow-settings').addEventListener('click', saveSlideshowSettings);
+        targetAspectRatioSelect.addEventListener('change', updatePreviewAspectRatio);
 
         function updateColorPresets() {
             document.querySelectorAll('.settings-column .color-preset').forEach(preset => {
