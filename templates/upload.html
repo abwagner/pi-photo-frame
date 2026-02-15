@@ -302,21 +302,18 @@
         }
 
         /* ===== Main Layout ===== */
+        .main-gallery-section {
+            margin-bottom: 20px;
+        }
+
         .panels {
             display: grid;
             grid-template-columns: 1fr 300px;
-            grid-template-rows: auto 1fr;
             gap: 20px;
         }
 
         .main-upload-section {
             grid-column: 1;
-            grid-row: 1;
-        }
-
-        .main-gallery-section {
-            grid-column: 1;
-            grid-row: 2;
         }
 
         .settings-column {
@@ -327,11 +324,9 @@
         @media (max-width: 900px) {
             .panels {
                 grid-template-columns: 1fr;
-                grid-template-rows: auto;
             }
-            .main-upload-section { grid-column: 1; grid-row: auto; }
-            .settings-column { grid-column: 1; grid-row: auto; }
-            .main-gallery-section { grid-column: 1; grid-row: auto; }
+            .main-upload-section { grid-column: 1; }
+            .settings-column { grid-column: 1; }
         }
 
         .panel {
@@ -353,6 +348,21 @@
             display: flex;
             flex-direction: column;
             gap: 20px;
+        }
+
+        .collapsible-header {
+            cursor: pointer;
+            user-select: none;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .collapse-arrow {
+            font-size: 0.7rem;
+            transition: transform 0.2s;
+        }
+        .collapsible-header.open .collapse-arrow {
+            transform: rotate(90deg);
         }
 
         .settings-tabs {
@@ -735,6 +745,10 @@
             background: rgba(123, 44, 191, 0.2);
             color: #c084fc;
             border: 1px solid rgba(123, 44, 191, 0.4);
+        }
+        .btn-group:disabled {
+            opacity: 0.35;
+            cursor: default;
         }
 
         .btn-ungroup {
@@ -1235,18 +1249,6 @@
                 gap: 12px;
             }
 
-            .main-upload-section {
-                order: 1;
-            }
-
-            .settings-column {
-                order: 2;
-            }
-
-            .main-gallery-section {
-                order: 3;
-            }
-
             /* Upload zone: compact */
             .upload-zone {
                 padding: 15px;
@@ -1374,9 +1376,43 @@
                     <div class="preview-controls-actions">
                         <button class="btn btn-refresh" onclick="autoMatchHeights()">Match Heights</button>
                         <button class="btn btn-refresh" onclick="refreshPreview()">Refresh Preview</button>
+                        <button class="btn btn-ungroup" id="preview-ungroup-btn" onclick="ungroupFromPreview()" style="display:none;">Ungroup</button>
                     </div>
                 </div>
                 <div id="preview-controls-body"></div>
+            </div>
+        </div>
+
+        <!-- Gallery Section (below preview, above panels) -->
+        <div class="main-gallery-section">
+            <!-- Toolbar -->
+            <div class="toolbar">
+                <div class="toolbar-left">
+                    <button class="btn btn-group" id="start-group" onclick="startGroupMode()">📐 Group</button>
+                    <button class="btn btn-warning" id="done-group" onclick="finishGroupMode()" style="display:none;">Done</button>
+                    <span class="selection-count" id="selection-count-wrapper" style="display:none;"><span id="selected-count">0</span> selected</span>
+                    <div class="filter-tabs">
+                        <button class="filter-tab active" data-filter="all">All</button>
+                        <button class="filter-tab" data-filter="enabled">Visible</button>
+                        <button class="filter-tab" data-filter="disabled">Hidden</button>
+                    </div>
+                </div>
+                <div class="toolbar-right" style="display:none;">
+                    <button class="btn btn-success" id="bulk-enable" disabled>✓ Show</button>
+                    <button class="btn btn-warning" id="bulk-disable" disabled>⊘ Hide</button>
+                    <button class="btn btn-danger" id="bulk-delete" disabled>🗑 Delete</button>
+                </div>
+            </div>
+
+            <!-- Gallery Grid -->
+            <div class="gallery-grid" id="gallery-grid"></div>
+
+            <div class="empty-state" id="empty-state" style="display: none;">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                </svg>
+                <p>No photos yet</p>
+                <p style="font-size: 0.9rem;">Upload some photos to get started</p>
             </div>
         </div>
 
@@ -1411,39 +1447,6 @@
                 </div>
             </div>
 
-            <!-- Gallery Section -->
-            <div class="main-gallery-section">
-                <!-- Toolbar -->
-                <div class="toolbar">
-                    <div class="toolbar-left">
-                        <button class="btn btn-group" id="start-group" onclick="startGroupMode()">📐 Group</button>
-                        <button class="btn btn-warning" id="done-group" onclick="finishGroupMode()" style="display:none;">Done</button>
-                        <span class="selection-count" id="selection-count-wrapper" style="display:none;"><span id="selected-count">0</span> selected</span>
-                        <div class="filter-tabs">
-                            <button class="filter-tab active" data-filter="all">All</button>
-                            <button class="filter-tab" data-filter="enabled">Visible</button>
-                            <button class="filter-tab" data-filter="disabled">Hidden</button>
-                        </div>
-                    </div>
-                    <div class="toolbar-right" style="display:none;">
-                        <button class="btn btn-success" id="bulk-enable" disabled>✓ Show</button>
-                        <button class="btn btn-warning" id="bulk-disable" disabled>⊘ Hide</button>
-                        <button class="btn btn-danger" id="bulk-delete" disabled>🗑 Delete</button>
-                    </div>
-                </div>
-
-                <!-- Gallery Grid -->
-                <div class="gallery-grid" id="gallery-grid"></div>
-
-                <div class="empty-state" id="empty-state" style="display: none;">
-                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                    </svg>
-                    <p>No photos yet</p>
-                    <p style="font-size: 0.9rem;">Upload some photos to get started</p>
-                </div>
-            </div>
-
             <!-- Settings Sidebar -->
             <div class="settings-column">
                 <!-- Tab bar -->
@@ -1455,7 +1458,8 @@
                 <!-- Mat Tab -->
                 <div class="settings-tab-content" id="tab-mat">
                     <div class="panel">
-                        <h2>🎨 Mat Settings</h2>
+                        <h2 class="collapsible-header" onclick="this.classList.toggle('open'); this.nextElementSibling.style.display = this.classList.contains('open') ? '' : 'none';">Default Mat Settings <span class="collapse-arrow">▶</span></h2>
+                        <div class="collapsible-body" style="display:none;">
 
                         <div class="setting-group">
                             <label>Default Mat Color</label>
@@ -1494,6 +1498,7 @@
                         <p style="font-size: 0.75rem; color: #666; margin-top: 8px;">
                             Select an image to customize individually.
                         </p>
+                        </div><!-- /collapsible-body -->
                     </div>
                 </div>
 
@@ -1539,9 +1544,7 @@
                             </select>
                         </div>
 
-                        <p style="font-size: 0.75rem; color: #666; text-align: center;">
-                            Slideshow settings are saved automatically.
-                        </p>
+                        <button class="btn btn-apply" id="apply-slideshow-settings">Apply</button>
                     </div>
 
                     <!-- TV Schedule Settings -->
@@ -1549,8 +1552,8 @@
                         <h2>TV Power Schedule</h2>
 
                         <div id="cec-unavailable-msg" class="cec-unavailable" style="display:none;">
-                            CEC control is not available. Install cec-utils and ensure the
-                            HDMI-CEC device is accessible in Docker.
+                            CEC control is not available. Ensure the HDMI-CEC device
+                            (/dev/cec0) is accessible in Docker.
                         </div>
 
                         <div id="cec-controls" style="display:none;">
@@ -2011,6 +2014,8 @@
             previewControls.classList.add('active');
             previewSection.classList.add('has-controls');
             previewSection.classList.add('active');
+            document.getElementById('preview-ungroup-btn').style.display = 'none';
+            document.getElementById('start-group').disabled = false;
 
             renderSinglePreviewImage(filename);
             renderSingleControls(filename);
@@ -2021,7 +2026,8 @@
             if (!img) return;
 
             const matColor = img.mat_color || matColorInput.value;
-            const effectSize = img.bevel_width ?? parseInt(bevelWidthInput.value);
+            const rawEffectSize = img.bevel_width ?? parseInt(bevelWidthInput.value);
+            const effectSize = previewScaledEffect(rawEffectSize);
             const borderEffect = img.border_effect || borderEffectSelect.value;
             const finish = img.mat_finish || matFinishSelect.value;
             const scale = img.scale || 1.0;
@@ -2374,6 +2380,8 @@
             previewSection.classList.add('has-controls');
             previewSection.classList.add('active');
             document.querySelector('.preview-controls-actions').style.display = '';
+            document.getElementById('preview-ungroup-btn').style.display = '';
+            document.getElementById('start-group').disabled = true;
 
             // Now render (container clientWidth/clientHeight are non-zero)
             renderGroupPreviewImage(groupId);
@@ -2386,7 +2394,8 @@
 
             const matColor = group.mat_color || matColorInput.value;
             const finish = group.mat_finish || matFinishSelect.value;
-            const groupEffectSize = group.bevel_width ?? parseInt(bevelWidthInput.value);
+            const rawGroupEffectSize = group.bevel_width ?? parseInt(bevelWidthInput.value);
+            const groupEffectSize = previewScaledEffect(rawGroupEffectSize);
             const groupBorderEffect = group.border_effect || borderEffectSelect.value;
 
             matPreview.style.backgroundColor = matColor;
@@ -2545,6 +2554,7 @@
             previewSection.classList.remove('has-controls');
             previewControls.classList.remove('active');
             document.querySelector('.preview-controls-actions').style.display = '';
+            document.getElementById('start-group').disabled = false;
             previewFilename = null;
             previewGroupId = null;
         }
@@ -2768,6 +2778,10 @@
             }
         }
 
+        async function ungroupFromPreview() {
+            if (previewGroupId) await ungroupGroup(previewGroupId);
+        }
+
         async function ungroupGroup(groupId) {
             try {
                 const response = await fetch(`/api/groups/${groupId}`, {
@@ -2948,6 +2962,10 @@
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(settings)
+            }).then(() => {
+                showStatus('Slideshow settings applied', 'success');
+            }).catch(() => {
+                showStatus('Failed to apply slideshow settings', 'error');
             });
         }
 
@@ -2993,15 +3011,9 @@
             bevelValueLabel.textContent = bevelWidthInput.value + 'px';
         });
 
-        // Slideshow settings: auto-save
-        slideshowIntervalInput.addEventListener('change', saveSlideshowSettings);
-        transitionDurationInput.addEventListener('change', saveSlideshowSettings);
-        fitModeSelect.addEventListener('change', saveSlideshowSettings);
-        shuffleCheckbox.addEventListener('change', saveSlideshowSettings);
-        targetAspectRatioSelect.addEventListener('change', () => {
-            saveSlideshowSettings();
-            updatePreviewAspectRatio();
-        });
+        // Slideshow settings: Apply button
+        document.getElementById('apply-slideshow-settings').addEventListener('click', saveSlideshowSettings);
+        targetAspectRatioSelect.addEventListener('change', updatePreviewAspectRatio);
 
         function updateColorPresets() {
             document.querySelectorAll('.settings-column .color-preset').forEach(preset => {
@@ -3078,6 +3090,11 @@
         function makeBevelHtml(innerHtml, bevelWidth, matColor) {
             if (!bevelWidth || bevelWidth <= 0) return innerHtml;
             return `<div class="mat-bevel" style="--bevel-w:${bevelWidth}px;--bevel-color:${getBevelColor(matColor)}">${innerHtml}${makeMiterLineHtml(bevelWidth)}</div>`;
+        }
+
+        function previewScaledEffect(effectSize) {
+            const pw = previewContent.clientWidth || matPreview.clientWidth || 800;
+            return Math.max(1, Math.round(effectSize * pw / 1920));
         }
 
         function makeEffectHtml(innerHtml, effectSize, matColor, borderEffect) {
