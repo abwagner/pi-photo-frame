@@ -421,7 +421,8 @@ def generate_thumbnail(filepath, filename):
             oriented.thumbnail(THUMBNAIL_MAX_SIZE, Image.Resampling.LANCZOS)
             # Save as JPEG for smaller file size (unless PNG with transparency)
             if oriented.mode in ('RGBA', 'LA', 'P'):
-                oriented.save(thumb_path, quality=85)
+                # PNG doesn't accept quality param; use optimize for smaller size
+                oriented.save(thumb_path, 'PNG', optimize=True)
             else:
                 thumb_path = thumb_path.with_suffix('.jpg')
                 oriented = oriented.convert('RGB')
