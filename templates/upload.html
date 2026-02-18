@@ -2525,19 +2525,48 @@
                 }).join('')}</div>`;
             } else {
                 const cols = Math.ceil(Math.sqrt(count));
+                const rows = Math.ceil(count / cols);
+                const previewW = matPreview.clientWidth;
+                const previewH = matPreview.clientHeight;
+                const gapFrac = 0.04;
+                const cellW = previewW * (1 - gapFrac * (cols + 1)) / cols;
+                const cellH = previewH * (1 - gapFrac * (rows + 1)) / rows;
+                const effectSpace = groupBorderEffect === 'shadow' ? Math.round(groupEffectSize * 2) : groupEffectSize;
+                const usableCellW = cellW - 2 * effectSpace;
+                const usableCellH = cellH - 2 * effectSpace;
+
                 previewContent.innerHTML = `<div class="group-preview-grid" style="grid-template-columns:repeat(${cols},1fr);">${groupImages.map(img => {
                     const c = img.crop;
+                    const imgScale = scales[img.filename] || 1.0;
+                    const rawAr = (img.width || 1) / (img.height || 1);
                     let imgHtml;
                     if (c) {
-                        const pctW = (100 / c.w).toFixed(2);
-                        const pctH = (100 / c.h).toFixed(2);
-                        const leftPct = (c.x / c.w * 100).toFixed(2);
-                        const topPct = (c.y / c.h * 100).toFixed(2);
-                        imgHtml = `<div style="width:100%;height:100%;overflow:hidden;position:relative;">` +
-                                  `<img src="/uploads/${img.filename}" alt="${img.filename}" style="position:absolute;width:${pctW}%;height:${pctH}%;left:-${leftPct}%;top:-${topPct}%;object-fit:none;">` +
+                        const cropAr = rawAr * c.w / c.h;
+                        let dW, dH;
+                        if (cropAr > usableCellW / usableCellH) {
+                            dW = usableCellW * imgScale;
+                            dH = dW / cropAr;
+                        } else {
+                            dH = usableCellH * imgScale;
+                            dW = dH * cropAr;
+                        }
+                        const fullW = Math.round(dW / c.w);
+                        const fullH = Math.round(dH / c.h);
+                        const offsetX = Math.round(-c.x * fullW);
+                        const offsetY = Math.round(-c.y * fullH);
+                        imgHtml = `<div style="width:${Math.round(dW)}px;height:${Math.round(dH)}px;overflow:hidden;line-height:0;">` +
+                                  `<img src="/uploads/${img.filename}" alt="${img.filename}" style="width:${fullW}px;height:${fullH}px;margin-left:${offsetX}px;margin-top:${offsetY}px;display:block;max-width:none;max-height:none;">` +
                                   `</div>`;
                     } else {
-                        imgHtml = `<img src="/uploads/${img.filename}" alt="${img.filename}">`;
+                        let dW, dH;
+                        if (rawAr > usableCellW / usableCellH) {
+                            dW = usableCellW * imgScale;
+                            dH = dW / rawAr;
+                        } else {
+                            dH = usableCellH * imgScale;
+                            dW = dH * rawAr;
+                        }
+                        imgHtml = `<img src="/uploads/${img.filename}" alt="${img.filename}" style="width:${Math.round(dW)}px;height:${Math.round(dH)}px;max-width:none;max-height:none;">`;
                     }
                     return makeEffectHtml(imgHtml, groupEffectSize, matColor, groupBorderEffect);
                 }).join('')}</div>`;
@@ -2591,22 +2620,39 @@
                 </div>
             `;
 
-            const imageControlsHtml = groupImages.map((img, idx) => `
-                <div class="group-edit-item">
+            const gridCols = count > 3 ? Math.ceil(Math.sqrt(count)) : count;
+
+            const imageControlsHtml = groupImages.map((img, idx) => {
+                const canLeft = idx > 0;
+                const canRight = idx < count - 1;
+                const canUp = count > 3 && idx >= gridCols;
+                const canDown = count > 3 && idx + gridCols < count;
+                return `
+                <div class="group-edit-item" style="flex-wrap:wrap;">
                     <img class="group-edit-thumb" src="/uploads/${img.filename}" alt="${img.filename}">
+                    <div style="display:flex;flex-direction:column;gap:2px;flex-shrink:0;">
+                        <div style="display:flex;gap:2px;">
+                            <button class="move-btn" ${!canLeft ? 'disabled' : ''} onclick="moveGroupImage('${groupId}', ${idx}, -1)" title="Move left">&larr;</button>
+                            <button class="move-btn" ${!canRight ? 'disabled' : ''} onclick="moveGroupImage('${groupId}', ${idx}, 1)" title="Move right">&rarr;</button>
+                        </div>
+                        ${count > 3 ? `<div style="display:flex;gap:2px;">
+                            <button class="move-btn" ${!canUp ? 'disabled' : ''} onclick="moveGroupImage('${groupId}', ${idx}, -${gridCols})" title="Move up">&uarr;</button>
+                            <button class="move-btn" ${!canDown ? 'disabled' : ''} onclick="moveGroupImage('${groupId}', ${idx}, ${gridCols})" title="Move down">&darr;</button>
+                        </div>` : ''}
+                    </div>
                     <div class="group-edit-controls">
-                        <button class="move-btn" ${idx === 0 ? 'disabled' : ''} onclick="moveGroupImage('${groupId}', ${idx}, -1)" title="Move left">&larr;</button>
                         <input type="range" min="0.25" max="3" step="0.05"
                                value="${scales[img.filename] || 1.0}"
                                oninput="updateGroupScalePreview('${groupId}', '${img.filename}', this.value); this.nextElementSibling.textContent = parseFloat(this.value).toFixed(2) + 'x'"
                                onchange="updateGroupScale('${groupId}', '${img.filename}', this.value)">
                         <span class="scale-value">${parseFloat(scales[img.filename] || 1.0).toFixed(2)}x</span>
-                        <button class="move-btn" ${idx === count - 1 ? 'disabled' : ''} onclick="moveGroupImage('${groupId}', ${idx}, 1)" title="Move right">&rarr;</button>
-                        <button class="btn btn-edit" style="margin-left:8px;font-size:0.75rem;padding:4px 8px;" onclick="enterCropMode('${escAttr(img.filename)}')" title="Crop">Crop</button>
-                        <button class="btn btn-warning" style="font-size:0.75rem;padding:4px 8px;" onclick="clearCrop('${escAttr(img.filename)}')" ${!img.crop ? 'disabled style="opacity:0.5"' : ''} title="Clear crop">Clear</button>
                     </div>
-                </div>
-            `).join('');
+                    <div style="display:flex;gap:8px;width:100%;padding-left:48px;">
+                        <button class="btn btn-edit" style="font-size:0.75rem;padding:4px 8px;" onclick="enterCropMode('${escAttr(img.filename)}')">Crop</button>
+                        <button class="btn btn-warning" style="font-size:0.75rem;padding:4px 8px;${!img.crop ? 'opacity:0.5;' : ''}" onclick="clearCrop('${escAttr(img.filename)}')" ${!img.crop ? 'disabled' : ''}>Clear Crop</button>
+                    </div>
+                </div>`;
+            }).join('');
 
             previewControlsBody.innerHTML = groupSettingsHtml + imageControlsHtml;
         }
