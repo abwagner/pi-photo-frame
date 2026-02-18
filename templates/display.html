@@ -614,30 +614,52 @@
                         gridEl.appendChild(node);
                     });
                 } else {
-                    // Grid layout
+                    // Grid layout — use explicit pixel sizes so crop containers have real dimensions
                     gridEl.className = 'slide-grid grid-layout';
                     gridEl.style.gridTemplateColumns = `repeat(${layout.cols}, 1fr)`;
                     gridEl.style.gridTemplateRows = `repeat(${layout.rows}, 1fr)`;
+                    const gridW = window.innerWidth;
+                    const gridH = window.innerHeight;
+                    const gapFrac = 0.04;
+                    const cellW = gridW * (1 - gapFrac * (layout.cols + 1)) / layout.cols;
+                    const cellH = gridH * (1 - gapFrac * (layout.rows + 1)) / layout.rows;
+
                     slide.images.forEach(imgData => {
                         const crop = imgData.crop;
                         const imgEffectSize = imgData.bevel_width ?? settings.bevel_width ?? 4;
                         const imgBorderEffect = imgData.border_effect ?? settings.border_effect ?? 'bevel';
+                        const effectSpace = imgBorderEffect === 'shadow' ? imgEffectSize * 2 : imgEffectSize;
+                        const usableCellW = cellW - 2 * effectSpace;
+                        const usableCellH = cellH - 2 * effectSpace;
                         let node;
                         if (crop) {
+                            const rawAr = (imgData.width || 1) / (imgData.height || 1);
+                            const cropAr = rawAr * crop.w / crop.h;
+                            let dW, dH;
+                            if (cropAr > usableCellW / usableCellH) {
+                                dW = usableCellW;
+                                dH = dW / cropAr;
+                            } else {
+                                dH = usableCellH;
+                                dW = dH * cropAr;
+                            }
                             const cropContainer = document.createElement('div');
-                            cropContainer.style.width = '100%';
-                            cropContainer.style.height = '100%';
+                            cropContainer.style.width = dW + 'px';
+                            cropContainer.style.height = dH + 'px';
                             cropContainer.style.overflow = 'hidden';
-                            cropContainer.style.position = 'relative';
+                            cropContainer.style.lineHeight = '0';
                             const img = document.createElement('img');
                             img.src = '/uploads/' + imgData.filename;
                             img.alt = imgData.filename;
-                            img.style.position = 'absolute';
-                            img.style.width = (100 / crop.w).toFixed(2) + '%';
-                            img.style.height = (100 / crop.h).toFixed(2) + '%';
-                            img.style.left = '-' + (crop.x / crop.w * 100).toFixed(2) + '%';
-                            img.style.top = '-' + (crop.y / crop.h * 100).toFixed(2) + '%';
-                            img.style.objectFit = 'none';
+                            const fullW = dW / crop.w;
+                            const fullH = dH / crop.h;
+                            img.style.width = fullW + 'px';
+                            img.style.height = fullH + 'px';
+                            img.style.marginLeft = (-crop.x * fullW) + 'px';
+                            img.style.marginTop = (-crop.y * fullH) + 'px';
+                            img.style.display = 'block';
+                            img.style.maxWidth = 'none';
+                            img.style.maxHeight = 'none';
                             cropContainer.appendChild(img);
                             node = wrapInEffect(cropContainer, imgEffectSize, matColor, imgBorderEffect);
                         } else {
