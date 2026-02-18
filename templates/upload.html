@@ -2404,25 +2404,41 @@
             if (img) img.crop = saveCrop;
 
             await updateImageField(fn, 'crop', saveCrop);
-            renderSinglePreviewImage(fn);
-            renderSingleControls(fn);
+            if (previewGroupId) {
+                renderGroupPreviewImage(previewGroupId);
+                renderGroupControls(previewGroupId);
+            } else {
+                renderSinglePreviewImage(fn);
+                renderSingleControls(fn);
+            }
         }
 
         function cancelCrop() {
             if (!cropState) return;
             const fn = cropState.filename;
+            const groupId = previewGroupId;
             if (cropState._cleanup) cropState._cleanup();
             cropState = null;
-            renderSinglePreviewImage(fn);
-            renderSingleControls(fn);
+            if (groupId) {
+                renderGroupPreviewImage(groupId);
+                renderGroupControls(groupId);
+            } else {
+                renderSinglePreviewImage(fn);
+                renderSingleControls(fn);
+            }
         }
 
         async function clearCrop(filename) {
             const img = images.find(i => i.filename === filename);
             if (img) img.crop = null;
             await updateImageField(filename, 'crop', null);
-            renderSinglePreviewImage(filename);
-            renderSingleControls(filename);
+            if (previewGroupId) {
+                renderGroupPreviewImage(previewGroupId);
+                renderGroupControls(previewGroupId);
+            } else {
+                renderSinglePreviewImage(filename);
+                renderSingleControls(filename);
+            }
         }
 
         function openGroupPreview(groupId) {
@@ -2470,11 +2486,12 @@
                 const effectSpace = groupBorderEffect === 'shadow' ? Math.round(groupEffectSize * 2) : groupEffectSize;
                 const effect2 = (effectSpace > 0 ? effectSpace : 0) * 2;
 
-                const imgInfos = groupImages.map(img => ({
-                    filename: img.filename,
-                    ar: (img.width || 1) / (img.height || 1),
-                    scale: scales[img.filename] || 1.0
-                }));
+                const imgInfos = groupImages.map(img => {
+                    const rawAr = (img.width || 1) / (img.height || 1);
+                    const c = img.crop;
+                    const ar = c ? rawAr * c.w / c.h : rawAr;
+                    return { filename: img.filename, ar, scale: scales[img.filename] || 1.0, crop: c };
+                });
 
                 // At base height h=1, each image has width = ar * scale
                 const totalWidthAtUnitHeight = imgInfos.reduce((sum, info) => sum + info.ar * info.scale, 0);
@@ -2492,13 +2509,36 @@
                 previewContent.innerHTML = `<div class="group-preview-images">${imgInfos.map(info => {
                     const h = baseHeight * info.scale;
                     const w = h * info.ar;
-                    const imgHtml = `<img src="/uploads/${info.filename}" alt="${info.filename}" style="width:${w}px;height:${h}px;max-width:none;max-height:none;flex-shrink:0;">`;
+                    let imgHtml;
+                    if (info.crop) {
+                        const fullW = Math.round(w / info.crop.w);
+                        const fullH = Math.round(h / info.crop.h);
+                        const offsetX = Math.round(-info.crop.x * fullW);
+                        const offsetY = Math.round(-info.crop.y * fullH);
+                        imgHtml = `<div style="width:${Math.round(w)}px;height:${Math.round(h)}px;overflow:hidden;line-height:0;flex-shrink:0;">` +
+                                  `<img src="/uploads/${info.filename}" alt="${info.filename}" style="width:${fullW}px;height:${fullH}px;margin-left:${offsetX}px;margin-top:${offsetY}px;display:block;max-width:none;max-height:none;">` +
+                                  `</div>`;
+                    } else {
+                        imgHtml = `<img src="/uploads/${info.filename}" alt="${info.filename}" style="width:${Math.round(w)}px;height:${Math.round(h)}px;max-width:none;max-height:none;flex-shrink:0;">`;
+                    }
                     return makeEffectHtml(imgHtml, groupEffectSize, matColor, groupBorderEffect);
                 }).join('')}</div>`;
             } else {
                 const cols = Math.ceil(Math.sqrt(count));
                 previewContent.innerHTML = `<div class="group-preview-grid" style="grid-template-columns:repeat(${cols},1fr);">${groupImages.map(img => {
-                    const imgHtml = `<img src="/uploads/${img.filename}" alt="${img.filename}">`;
+                    const c = img.crop;
+                    let imgHtml;
+                    if (c) {
+                        const pctW = (100 / c.w).toFixed(2);
+                        const pctH = (100 / c.h).toFixed(2);
+                        const leftPct = (c.x / c.w * 100).toFixed(2);
+                        const topPct = (c.y / c.h * 100).toFixed(2);
+                        imgHtml = `<div style="width:100%;height:100%;overflow:hidden;position:relative;">` +
+                                  `<img src="/uploads/${img.filename}" alt="${img.filename}" style="position:absolute;width:${pctW}%;height:${pctH}%;left:-${leftPct}%;top:-${topPct}%;object-fit:none;">` +
+                                  `</div>`;
+                    } else {
+                        imgHtml = `<img src="/uploads/${img.filename}" alt="${img.filename}">`;
+                    }
                     return makeEffectHtml(imgHtml, groupEffectSize, matColor, groupBorderEffect);
                 }).join('')}</div>`;
             }
@@ -2562,6 +2602,8 @@
                                onchange="updateGroupScale('${groupId}', '${img.filename}', this.value)">
                         <span class="scale-value">${parseFloat(scales[img.filename] || 1.0).toFixed(2)}x</span>
                         <button class="move-btn" ${idx === count - 1 ? 'disabled' : ''} onclick="moveGroupImage('${groupId}', ${idx}, 1)" title="Move right">&rarr;</button>
+                        <button class="btn btn-edit" style="margin-left:8px;font-size:0.75rem;padding:4px 8px;" onclick="enterCropMode('${escAttr(img.filename)}')" title="Crop">Crop</button>
+                        <button class="btn btn-warning" style="font-size:0.75rem;padding:4px 8px;" onclick="clearCrop('${escAttr(img.filename)}')" ${!img.crop ? 'disabled style="opacity:0.5"' : ''} title="Clear crop">Clear</button>
                     </div>
                 </div>
             `).join('');
