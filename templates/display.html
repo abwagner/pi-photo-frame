@@ -544,13 +544,19 @@
                     const containerW = window.innerWidth;
                     const containerH = window.innerHeight;
 
-                    const imgInfos = slide.images.map((imgData, i) => ({
-                        filename: imgData.filename,
-                        ar: (imgData.width || 1) / (imgData.height || 1),
-                        scale: imgData.scale || 1.0,
-                        effectSize: slide.images[i].bevel_width ?? settings.bevel_width ?? 4,
-                        borderEffect: slide.images[i].border_effect ?? settings.border_effect ?? 'bevel'
-                    }));
+                    const imgInfos = slide.images.map((imgData, i) => {
+                        const rawAr = (imgData.width || 1) / (imgData.height || 1);
+                        const crop = imgData.crop;
+                        const ar = crop ? rawAr * crop.w / crop.h : rawAr;
+                        return {
+                            filename: imgData.filename,
+                            ar,
+                            scale: imgData.scale || 1.0,
+                            crop,
+                            effectSize: slide.images[i].bevel_width ?? settings.bevel_width ?? 4,
+                            borderEffect: slide.images[i].border_effect ?? settings.border_effect ?? 'bevel'
+                        };
+                    });
 
                     // At base height h=1, each image width = ar * scale
                     const totalWidthAtUnitHeight = imgInfos.reduce((sum, info) => sum + info.ar * info.scale, 0);
@@ -570,18 +576,42 @@
                     const baseHeight = Math.min(usableH / maxScale, usableW / totalWidthAtUnitHeight);
 
                     imgInfos.forEach((info, i) => {
-                        const img = document.createElement('img');
-                        img.src = '/uploads/' + info.filename;
-                        img.alt = info.filename;
                         const h = baseHeight * info.scale;
                         const w = h * info.ar;
-                        img.style.width = w + 'px';
-                        img.style.height = h + 'px';
-                        img.style.maxWidth = 'none';
-                        img.style.maxHeight = 'none';
-                        img.style.flexShrink = '0';
-
-                        gridEl.appendChild(wrapInEffect(img, info.effectSize, matColor, info.borderEffect));
+                        let node;
+                        if (info.crop) {
+                            const cropContainer = document.createElement('div');
+                            cropContainer.style.width = w + 'px';
+                            cropContainer.style.height = h + 'px';
+                            cropContainer.style.overflow = 'hidden';
+                            cropContainer.style.lineHeight = '0';
+                            cropContainer.style.flexShrink = '0';
+                            const img = document.createElement('img');
+                            img.src = '/uploads/' + info.filename;
+                            img.alt = info.filename;
+                            const fullW = w / info.crop.w;
+                            const fullH = h / info.crop.h;
+                            img.style.width = fullW + 'px';
+                            img.style.height = fullH + 'px';
+                            img.style.marginLeft = (-info.crop.x * fullW) + 'px';
+                            img.style.marginTop = (-info.crop.y * fullH) + 'px';
+                            img.style.display = 'block';
+                            img.style.maxWidth = 'none';
+                            img.style.maxHeight = 'none';
+                            cropContainer.appendChild(img);
+                            node = wrapInEffect(cropContainer, info.effectSize, matColor, info.borderEffect);
+                        } else {
+                            const img = document.createElement('img');
+                            img.src = '/uploads/' + info.filename;
+                            img.alt = info.filename;
+                            img.style.width = w + 'px';
+                            img.style.height = h + 'px';
+                            img.style.maxWidth = 'none';
+                            img.style.maxHeight = 'none';
+                            img.style.flexShrink = '0';
+                            node = wrapInEffect(img, info.effectSize, matColor, info.borderEffect);
+                        }
+                        gridEl.appendChild(node);
                     });
                 } else {
                     // Grid layout
@@ -589,12 +619,34 @@
                     gridEl.style.gridTemplateColumns = `repeat(${layout.cols}, 1fr)`;
                     gridEl.style.gridTemplateRows = `repeat(${layout.rows}, 1fr)`;
                     slide.images.forEach(imgData => {
-                        const img = document.createElement('img');
-                        img.src = '/uploads/' + imgData.filename;
-                        img.alt = imgData.filename;
+                        const crop = imgData.crop;
                         const imgEffectSize = imgData.bevel_width ?? settings.bevel_width ?? 4;
                         const imgBorderEffect = imgData.border_effect ?? settings.border_effect ?? 'bevel';
-                        gridEl.appendChild(wrapInEffect(img, imgEffectSize, matColor, imgBorderEffect));
+                        let node;
+                        if (crop) {
+                            const cropContainer = document.createElement('div');
+                            cropContainer.style.width = '100%';
+                            cropContainer.style.height = '100%';
+                            cropContainer.style.overflow = 'hidden';
+                            cropContainer.style.position = 'relative';
+                            const img = document.createElement('img');
+                            img.src = '/uploads/' + imgData.filename;
+                            img.alt = imgData.filename;
+                            img.style.position = 'absolute';
+                            img.style.width = (100 / crop.w).toFixed(2) + '%';
+                            img.style.height = (100 / crop.h).toFixed(2) + '%';
+                            img.style.left = '-' + (crop.x / crop.w * 100).toFixed(2) + '%';
+                            img.style.top = '-' + (crop.y / crop.h * 100).toFixed(2) + '%';
+                            img.style.objectFit = 'none';
+                            cropContainer.appendChild(img);
+                            node = wrapInEffect(cropContainer, imgEffectSize, matColor, imgBorderEffect);
+                        } else {
+                            const img = document.createElement('img');
+                            img.src = '/uploads/' + imgData.filename;
+                            img.alt = imgData.filename;
+                            node = wrapInEffect(img, imgEffectSize, matColor, imgBorderEffect);
+                        }
+                        gridEl.appendChild(node);
                     });
                 }
                 slideEl.appendChild(gridEl);
