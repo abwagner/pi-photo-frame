@@ -5,6 +5,11 @@ frame.swagner.tech {
     reverse_proxy photo-frame:5000
 }
 
+localhost {
+	tls internal
+	reverse_proxy photo-frame:5000
+}
+
 :443 {
 	tls internal
 	reverse_proxy photo-frame:5000
