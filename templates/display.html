@@ -100,8 +100,8 @@
             background-size:
                 100% var(--bevel-w, 4px),
                 100% var(--bevel-w, 4px),
-                var(--bevel-w, 4px) 100%,
-                var(--bevel-w, 4px) 100%;
+                var(--bevel-w, 4px) calc(100% - 2 * var(--bevel-w, 4px)),
+                var(--bevel-w, 4px) calc(100% - 2 * var(--bevel-w, 4px));
             background-position: top center, bottom center, center left, center right;
             background-repeat: no-repeat;
         }
