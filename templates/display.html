@@ -93,16 +93,28 @@
             padding: var(--bevel-w, 4px);
             background-color: var(--bevel-mat, #ffffff);
             background-image:
+                /* edge strips (exclude corners) */
                 linear-gradient(to bottom, var(--bevel-outer, rgba(0,0,0,0.00)), var(--bevel-inner, rgba(0,0,0,0.20))),
                 linear-gradient(to top,    var(--bevel-outer, rgba(0,0,0,0.00)), var(--bevel-inner, rgba(0,0,0,0.20))),
                 linear-gradient(to right,  var(--bevel-outer, rgba(0,0,0,0.00)), var(--bevel-inner, rgba(0,0,0,0.20))),
-                linear-gradient(to left,   var(--bevel-outer, rgba(0,0,0,0.00)), var(--bevel-inner, rgba(0,0,0,0.20)));
+                linear-gradient(to left,   var(--bevel-outer, rgba(0,0,0,0.00)), var(--bevel-inner, rgba(0,0,0,0.20))),
+                /* corner squares: diagonal from outer corner (transparent) to inner corner (dark) */
+                linear-gradient(to bottom right, var(--bevel-outer, rgba(0,0,0,0.00)), var(--bevel-inner, rgba(0,0,0,0.20))),
+                linear-gradient(to bottom left,  var(--bevel-outer, rgba(0,0,0,0.00)), var(--bevel-inner, rgba(0,0,0,0.20))),
+                linear-gradient(to top right,    var(--bevel-outer, rgba(0,0,0,0.00)), var(--bevel-inner, rgba(0,0,0,0.20))),
+                linear-gradient(to top left,     var(--bevel-outer, rgba(0,0,0,0.00)), var(--bevel-inner, rgba(0,0,0,0.20)));
             background-size:
-                100% var(--bevel-w, 4px),
-                100% var(--bevel-w, 4px),
+                calc(100% - 2 * var(--bevel-w, 4px)) var(--bevel-w, 4px),
+                calc(100% - 2 * var(--bevel-w, 4px)) var(--bevel-w, 4px),
                 var(--bevel-w, 4px) calc(100% - 2 * var(--bevel-w, 4px)),
-                var(--bevel-w, 4px) calc(100% - 2 * var(--bevel-w, 4px));
-            background-position: top center, bottom center, center left, center right;
+                var(--bevel-w, 4px) calc(100% - 2 * var(--bevel-w, 4px)),
+                var(--bevel-w, 4px) var(--bevel-w, 4px),
+                var(--bevel-w, 4px) var(--bevel-w, 4px),
+                var(--bevel-w, 4px) var(--bevel-w, 4px),
+                var(--bevel-w, 4px) var(--bevel-w, 4px);
+            background-position:
+                top center, bottom center, center left, center right,
+                top left, top right, bottom left, bottom right;
             background-repeat: no-repeat;
         }
         /* Subtle shadow cast by bevel onto the image */
