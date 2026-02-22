@@ -92,30 +92,6 @@
             overflow: hidden;
             padding: var(--bevel-w, 4px);
             background-color: var(--bevel-mat, #ffffff);
-            background-image:
-                /* edge strips (exclude corners) */
-                linear-gradient(to bottom, var(--bevel-outer, rgba(0,0,0,0.00)), var(--bevel-inner, rgba(0,0,0,0.20))),
-                linear-gradient(to top,    var(--bevel-outer, rgba(0,0,0,0.00)), var(--bevel-inner, rgba(0,0,0,0.20))),
-                linear-gradient(to right,  var(--bevel-outer, rgba(0,0,0,0.00)), var(--bevel-inner, rgba(0,0,0,0.20))),
-                linear-gradient(to left,   var(--bevel-outer, rgba(0,0,0,0.00)), var(--bevel-inner, rgba(0,0,0,0.20))),
-                /* corner squares: diagonal from outer corner (transparent) to inner corner (dark) */
-                linear-gradient(to bottom right, var(--bevel-outer, rgba(0,0,0,0.00)), var(--bevel-inner, rgba(0,0,0,0.20))),
-                linear-gradient(to bottom left,  var(--bevel-outer, rgba(0,0,0,0.00)), var(--bevel-inner, rgba(0,0,0,0.20))),
-                linear-gradient(to top right,    var(--bevel-outer, rgba(0,0,0,0.00)), var(--bevel-inner, rgba(0,0,0,0.20))),
-                linear-gradient(to top left,     var(--bevel-outer, rgba(0,0,0,0.00)), var(--bevel-inner, rgba(0,0,0,0.20)));
-            background-size:
-                calc(100% - 2 * var(--bevel-w, 4px)) var(--bevel-w, 4px),
-                calc(100% - 2 * var(--bevel-w, 4px)) var(--bevel-w, 4px),
-                var(--bevel-w, 4px) calc(100% - 2 * var(--bevel-w, 4px)),
-                var(--bevel-w, 4px) calc(100% - 2 * var(--bevel-w, 4px)),
-                var(--bevel-w, 4px) var(--bevel-w, 4px),
-                var(--bevel-w, 4px) var(--bevel-w, 4px),
-                var(--bevel-w, 4px) var(--bevel-w, 4px),
-                var(--bevel-w, 4px) var(--bevel-w, 4px);
-            background-position:
-                top center, bottom center, center left, center right,
-                top left, top right, bottom left, bottom right;
-            background-repeat: no-repeat;
         }
         /* Subtle shadow cast by bevel onto the image */
         .mat-bevel::after {
@@ -129,7 +105,7 @@
             z-index: 3;
             box-shadow: inset 0 1px 2px rgba(0,0,0,0.08);
         }
-        .mat-bevel img {
+        .mat-bevel > img {
             box-shadow: none;
             display: block;
         }
@@ -402,28 +378,14 @@
         }
 
         function getBevelColors(matHex) {
-            // Returns outer (transparent) and inner (shadow) colors for the bevel gradient.
-            // The inner edge, adjacent to the image, is the darkest; outer fades to transparent.
             let hex = matHex.replace('#', '');
             if (hex.length === 3) hex = hex[0]+hex[0]+hex[1]+hex[1]+hex[2]+hex[2];
             const r = parseInt(hex.substring(0, 2), 16);
             const g = parseInt(hex.substring(2, 4), 16);
             const b = parseInt(hex.substring(4, 6), 16);
             const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
-            // Light mats: subtler shadow; dark mats: slightly stronger to remain visible
             const innerAlpha = luminance < 0.5 ? 0.30 : 0.20;
-            return {
-                outer: 'rgba(0,0,0,0.00)',
-                inner: `rgba(0,0,0,${innerAlpha})`
-            };
-        }
-
-        function makeMiterLine(b) {
-            // Creates a small div rotated 45deg to form a diagonal line in a bevel corner
-            const diag = Math.sqrt(2) * b;
-            const d = document.createElement('div');
-            d.style.cssText = `position:absolute;width:${diag.toFixed(1)}px;height:0;border-top:0.5px solid rgba(0,0,0,0.08);transform-origin:0 0;transform:rotate(45deg);pointer-events:none;z-index:2;`;
-            return d;
+            return { outer: 'rgba(0,0,0,0.00)', inner: `rgba(0,0,0,${innerAlpha})` };
         }
 
         function getShadowStyle(size) {
@@ -458,25 +420,19 @@
             wrapper.style.setProperty('--bevel-outer', bevelColors.outer);
             wrapper.style.setProperty('--bevel-inner', bevelColors.inner);
             wrapper.appendChild(imgEl);
-            // Mitered corner lines
-            const b = bevelWidth;
-            const corners = [
-                {top:'0',left:'0',rot:45},
-                {top:'0',right:'0',rot:-45},
-                {bottom:'0',left:'0',rot:-45},
-                {bottom:'0',right:'0',rot:45},
+            // Four gradient strips, each clipped to a trapezoid with exact 45° miter corners.
+            // No overlap between strips — corners are handled cleanly by the clip-path geometry.
+            const w = bevelWidth + 'px';
+            const strips = [
+                { pos: `top:0;left:0;right:0;height:${w}`,    clip: `polygon(0 0,100% 0,calc(100% - ${w}) 100%,${w} 100%)`,         grad: 'to bottom'  },
+                { pos: `bottom:0;left:0;right:0;height:${w}`, clip: `polygon(${w} 0,calc(100% - ${w}) 0,100% 100%,0 100%)`,         grad: 'to top'     },
+                { pos: `top:0;left:0;bottom:0;width:${w}`,    clip: `polygon(0 0,100% ${w},100% calc(100% - ${w}),0 100%)`,         grad: 'to right'   },
+                { pos: `top:0;right:0;bottom:0;width:${w}`,   clip: `polygon(0 ${w},100% 0,100% 100%,0 calc(100% - ${w}))`,         grad: 'to left'    },
             ];
-            corners.forEach(c => {
-                const diag = Math.sqrt(2) * b;
-                const line = document.createElement('div');
-                const pos = [];
-                if (c.top !== undefined) pos.push(`top:${c.top}`);
-                if (c.bottom !== undefined) pos.push(`bottom:${c.bottom}`);
-                if (c.left !== undefined) pos.push(`left:${c.left}`);
-                if (c.right !== undefined) pos.push(`right:${c.right}`);
-                const origin = `${c.left !== undefined ? '0' : '100%'} ${c.top !== undefined ? '0' : '100%'}`;
-                line.style.cssText = `position:absolute;${pos.join(';')};width:${diag.toFixed(1)}px;height:0;border-top:0.5px solid rgba(0,0,0,0.08);transform-origin:${origin};transform:rotate(${c.rot}deg);pointer-events:none;z-index:2;`;
-                wrapper.appendChild(line);
+            strips.forEach(({ pos, clip, grad }) => {
+                const el = document.createElement('div');
+                el.style.cssText = `position:absolute;${pos};clip-path:${clip};background:linear-gradient(${grad},var(--bevel-outer),var(--bevel-inner));pointer-events:none;z-index:1;`;
+                wrapper.appendChild(el);
             });
             return wrapper;
         }
