@@ -143,11 +143,6 @@ localhost {
     reverse_proxy photo-frame:5000
 }
 
-:443 {
-    tls internal
-    reverse_proxy photo-frame:5000
-}
-
 http:// {
     redir https://{host}{uri} permanent
 }
@@ -189,11 +184,6 @@ $domain {
 }
 
 localhost {
-    tls internal
-    reverse_proxy photo-frame:5000
-}
-
-:443 {
     tls internal
     reverse_proxy photo-frame:5000
 }
