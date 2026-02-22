@@ -84,14 +84,26 @@
             object-fit: cover;
         }
 
-        /* Mat bevel - uniform inset border */
+        /* Mat bevel - gradient from outer edge (open) to inner edge (shadow, near image) */
         .mat-bevel {
             position: relative;
             display: inline-flex;
             line-height: 0;
             overflow: hidden;
             padding: var(--bevel-w, 4px);
-            background: var(--bevel-color, rgba(0,0,0,0.10));
+            background-color: var(--bevel-mat, #ffffff);
+            background-image:
+                linear-gradient(to bottom, var(--bevel-outer, rgba(0,0,0,0.00)), var(--bevel-inner, rgba(0,0,0,0.20))),
+                linear-gradient(to top,    var(--bevel-outer, rgba(0,0,0,0.00)), var(--bevel-inner, rgba(0,0,0,0.20))),
+                linear-gradient(to right,  var(--bevel-outer, rgba(0,0,0,0.00)), var(--bevel-inner, rgba(0,0,0,0.20))),
+                linear-gradient(to left,   var(--bevel-outer, rgba(0,0,0,0.00)), var(--bevel-inner, rgba(0,0,0,0.20)));
+            background-size:
+                100% var(--bevel-w, 4px),
+                100% var(--bevel-w, 4px),
+                var(--bevel-w, 4px) 100%,
+                var(--bevel-w, 4px) 100%;
+            background-position: top center, bottom center, center left, center right;
+            background-repeat: no-repeat;
         }
         /* Subtle shadow cast by bevel onto the image */
         .mat-bevel::after {
@@ -373,17 +385,21 @@
             }
         }
 
-        function getBevelColor(matHex) {
-            // Parse hex color to RGB, return a slightly darker shade for the bevel
+        function getBevelColors(matHex) {
+            // Returns outer (transparent) and inner (shadow) colors for the bevel gradient.
+            // The inner edge, adjacent to the image, is the darkest; outer fades to transparent.
             let hex = matHex.replace('#', '');
             if (hex.length === 3) hex = hex[0]+hex[0]+hex[1]+hex[1]+hex[2]+hex[2];
             const r = parseInt(hex.substring(0, 2), 16);
             const g = parseInt(hex.substring(2, 4), 16);
             const b = parseInt(hex.substring(4, 6), 16);
             const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
-            // Uniform bevel: slightly darker than the mat
-            const alpha = luminance < 0.5 ? 0.18 : 0.12;
-            return `rgba(0,0,0,${alpha})`;
+            // Light mats: subtler shadow; dark mats: slightly stronger to remain visible
+            const innerAlpha = luminance < 0.5 ? 0.30 : 0.20;
+            return {
+                outer: 'rgba(0,0,0,0.00)',
+                inner: `rgba(0,0,0,${innerAlpha})`
+            };
         }
 
         function makeMiterLine(b) {
@@ -421,7 +437,10 @@
             const wrapper = document.createElement('div');
             wrapper.className = 'mat-bevel';
             wrapper.style.setProperty('--bevel-w', bevelWidth + 'px');
-            wrapper.style.setProperty('--bevel-color', getBevelColor(matColor));
+            wrapper.style.setProperty('--bevel-mat', matColor);
+            const bevelColors = getBevelColors(matColor);
+            wrapper.style.setProperty('--bevel-outer', bevelColors.outer);
+            wrapper.style.setProperty('--bevel-inner', bevelColors.inner);
             wrapper.appendChild(imgEl);
             // Mitered corner lines
             const b = bevelWidth;
@@ -666,6 +685,19 @@
                             const img = document.createElement('img');
                             img.src = '/uploads/' + imgData.filename;
                             img.alt = imgData.filename;
+                            const imgAr = (imgData.width || 1) / (imgData.height || 1);
+                            let dW, dH;
+                            if (imgAr > usableCellW / usableCellH) {
+                                dW = usableCellW;
+                                dH = dW / imgAr;
+                            } else {
+                                dH = usableCellH;
+                                dW = dH * imgAr;
+                            }
+                            img.style.width = dW + 'px';
+                            img.style.height = dH + 'px';
+                            img.style.maxWidth = 'none';
+                            img.style.maxHeight = 'none';
                             node = wrapInEffect(img, imgEffectSize, matColor, imgBorderEffect);
                         }
                         gridEl.appendChild(node);
@@ -780,18 +812,10 @@
         }
 
         function nextSlide() {
-            // Optimistic local update + server call
-            if (slides.length > 0) {
-                currentIndex = (currentIndex + 1) % slides.length;
-                showSlide(currentIndex);
-            }
+            // Rely on server response to update index so all displays stay in sync
             sendControl('next');
         }
         function previousSlide() {
-            if (slides.length > 0) {
-                currentIndex = (currentIndex - 1 + slides.length) % slides.length;
-                showSlide(currentIndex);
-            }
             sendControl('prev');
         }
         function togglePause() {
