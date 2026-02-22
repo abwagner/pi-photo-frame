@@ -138,6 +138,11 @@ $domain {
     reverse_proxy photo-frame:5000
 }
 
+localhost {
+    tls internal
+    reverse_proxy photo-frame:5000
+}
+
 :443 {
     tls internal
     reverse_proxy photo-frame:5000
@@ -180,6 +185,11 @@ $domain {
     tls {
         dns duckdns {env.DUCKDNS_TOKEN}
     }
+    reverse_proxy photo-frame:5000
+}
+
+localhost {
+    tls internal
     reverse_proxy photo-frame:5000
 }
 
