@@ -281,6 +281,10 @@
         let currentSlideEl = null;
         let previousSlideEl = null;
 
+        // Display token — present when loaded with ?token= (remote Pi kiosk).
+        // Included in control requests so the backend accepts them without a login session.
+        const displayToken = new URLSearchParams(window.location.search).get('token') || '';
+
         const imageWrapper = document.getElementById('image-wrapper');
         const loadingEl = document.getElementById('loading');
 
@@ -795,7 +799,7 @@
                         'Content-Type': 'application/json',
                         'X-CSRFToken': csrfToken
                     },
-                    body: JSON.stringify({action})
+                    body: JSON.stringify(displayToken ? {action, token: displayToken} : {action})
                 });
                 if (resp.ok) {
                     const state = await resp.json();

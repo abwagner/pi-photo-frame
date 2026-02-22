@@ -129,7 +129,7 @@ ${cf_zone_id:+CLOUDFLARE_ZONE_ID=$cf_zone_id}
 EOF
     info "Saved Cloudflare credentials to .env"
 
-    # Write Caddyfile for Let's Encrypt + localhost fallback
+    # Write Caddyfile for Let's Encrypt + any-hostname fallback
     cat > "$PROJECT_DIR/Caddyfile" <<EOF
 $domain {
     tls {
@@ -138,7 +138,7 @@ $domain {
     reverse_proxy photo-frame:5000
 }
 
-localhost {
+:443 {
     tls internal
     reverse_proxy photo-frame:5000
 }
@@ -174,7 +174,7 @@ DUCKDNS_TOKEN=$duck_token
 EOF
     info "Saved DuckDNS credentials to .env"
 
-    # Write Caddyfile for Let's Encrypt + localhost fallback
+    # Write Caddyfile for Let's Encrypt + any-hostname fallback
     cat > "$PROJECT_DIR/Caddyfile" <<EOF
 $domain {
     tls {
@@ -183,7 +183,7 @@ $domain {
     reverse_proxy photo-frame:5000
 }
 
-localhost {
+:443 {
     tls internal
     reverse_proxy photo-frame:5000
 }
@@ -403,6 +403,110 @@ setup_ddns_cron() {
     bash "$ddns_script" || warn "DDNS update failed — check .env credentials."
 }
 
+# ---------- Display-only mode ----------
+
+setup_display_only() {
+    echo ""
+    echo "  Display-only setup: this device will run Chromium pointing at a remote backend."
+    echo "  You need the backend URL and display token from the backend server."
+    echo "  (Get the token from the backend admin UI: Settings → Display token, or"
+    echo "   via the API: GET /api/display-token while logged in as admin.)"
+    echo ""
+
+    local backend_url=""
+    while [[ -z "$backend_url" ]]; do
+        read -rp "  Backend URL (e.g. https://192.168.1.100 or https://photos.example.com): " backend_url
+    done
+    # Strip trailing slash
+    backend_url="${backend_url%/}"
+
+    local display_token=""
+    while [[ -z "$display_token" ]]; do
+        read -rp "  Display token: " display_token
+    done
+
+    local chromium_pkg
+    chromium_pkg=$(detect_chromium)
+
+    info "Installing kiosk packages..."
+    sudo apt-get update -qq
+    sudo apt-get install -y -qq "$chromium_pkg" unclutter xdotool x11-xserver-utils curl
+
+    local chromium_bin
+    chromium_bin=$(detect_chromium)
+
+    info "Creating kiosk start script..."
+    cat > "$PROJECT_DIR/start_kiosk.sh" <<KIOSKEOF
+#!/bin/bash
+
+CHROMIUM="$chromium_bin"
+BACKEND_URL="$backend_url"
+DISPLAY_URL="\${BACKEND_URL}/display?token=$display_token"
+
+# Wait for the backend to be reachable
+echo "Waiting for backend server..."
+for i in {1..120}; do
+    if curl -sk "\${BACKEND_URL}" > /dev/null 2>&1; then
+        echo "Backend is ready!"
+        break
+    fi
+    sleep 1
+done
+
+# Disable screen blanking/power management
+xset s off
+xset s noblank
+xset -dpms
+
+# Hide mouse cursor
+unclutter -idle 0.5 -root &
+
+# Start Chromium in kiosk mode (restart automatically if it crashes)
+while true; do
+    \$CHROMIUM \\
+        --kiosk \\
+        --noerrdialogs \\
+        --disable-infobars \\
+        --disable-session-crashed-bubble \\
+        --disable-translate \\
+        --no-first-run \\
+        --start-fullscreen \\
+        --autoplay-policy=no-user-gesture-required \\
+        --check-for-update-interval=31536000 \\
+        --ignore-certificate-errors \\
+        --password-store=basic \\
+        "\$DISPLAY_URL"
+    echo "Chromium exited, restarting in 3 seconds..."
+    sleep 3
+done
+KIOSKEOF
+    chmod +x "$PROJECT_DIR/start_kiosk.sh"
+
+    mkdir -p ~/.config/autostart
+    cat > ~/.config/autostart/photo-frame-kiosk.desktop <<EOF
+[Desktop Entry]
+Type=Application
+Name=Photo Frame Kiosk
+Exec=$PROJECT_DIR/start_kiosk.sh
+X-GNOME-Autostart-enabled=true
+EOF
+
+    setup_chromium_cron
+
+    echo ""
+    echo "======================================"
+    info "Display-only setup complete!"
+    echo ""
+    echo "  This device will open Chromium pointing at:"
+    echo "    ${backend_url}/display"
+    echo ""
+    echo "  The kiosk will launch automatically on next login/reboot."
+    echo "  To start it now: $PROJECT_DIR/start_kiosk.sh"
+    echo ""
+    echo "  Chromium restarts daily at 4:00 AM to prevent memory leaks."
+    echo "======================================"
+}
+
 # ---------- Main ----------
 
 main() {
@@ -411,6 +515,17 @@ main() {
     echo "  Pi Photo Frame - Setup"
     echo "======================================"
     echo ""
+    echo "  Setup mode:"
+    echo "    1) Backend server  — runs the Flask app + Caddy (manages photos)"
+    echo "    2) Display only    — Chromium kiosk pointing at a remote backend"
+    echo ""
+    read -rp "Choose mode [1/2, default 1]: " setup_mode
+    echo ""
+
+    if [[ "$setup_mode" == "2" ]]; then
+        setup_display_only
+        return
+    fi
 
     install_docker
     enable_docker_on_boot

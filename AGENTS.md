@@ -70,6 +70,37 @@ pi-photo-frame/
 - Thumbnails: 400px max, JPEG unless RGBA/LA/P (PNG) for transparency.
 - Perceptual hash (pHash) for duplicate detection; Hamming distance < 10 triggers a warning.
 
+## Deployment Modes
+
+The backend and display can run on the same machine or on separate devices.
+
+### All-in-one (default)
+Backend (Flask + Caddy + Docker) and Chromium kiosk on the same Pi.
+`install.sh` mode 1 sets this up; the kiosk reads the display token from Docker.
+
+### Split: backend on any server, Pi as display only
+```
+Any machine                   Raspberry Pi (display only)
+────────────────              ──────────────────────────
+Docker (Flask + Caddy)  ←HTTP─  Chromium --kiosk
+  port 443 (all hosts)          https://<backend>/display?token=TOKEN
+```
+`install.sh` mode 2 sets up the Pi side: installs Chromium, prompts for the
+backend URL and display token, writes `start_kiosk.sh`, and adds an autostart
+entry. No Docker is installed on the Pi.
+
+**Getting the display token**: from the backend server, call
+`GET /api/display-token` as an admin (or read `/app/data/.display_token` inside
+the Docker container).
+
+**Caddyfile**: uses `:443 { tls internal }` so it responds to any hostname —
+both `localhost` connections from a local kiosk and LAN IP/domain connections
+from a remote Pi. Chromium uses `--ignore-certificate-errors` for self-signed.
+
+**Control API auth**: `/api/display/control` accepts the display token in the
+JSON body (`{action, token}`) so a remote kiosk can use prev/next/pause buttons
+without a login session.
+
 ## Testing
 
 ```bash
