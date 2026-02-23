@@ -3212,8 +3212,9 @@
 
         function makeBevelHtml(innerHtml, bevelWidth, matColor) {
             if (!bevelWidth || bevelWidth <= 0) return innerHtml;
+            const bw = Math.round(bevelWidth);
             const bevelColors = getBevelColors(matColor);
-            return `<div class="mat-bevel" style="--bevel-w:${bevelWidth}px;--bevel-mat:${matColor};--bevel-outer:${bevelColors.outer};--bevel-inner:${bevelColors.inner}">${innerHtml}${makeBevelStripHtml(bevelWidth)}</div>`;
+            return `<div class="mat-bevel" style="--bevel-w:${bw}px;--bevel-mat:${matColor};--bevel-outer:${bevelColors.outer};--bevel-inner:${bevelColors.inner}">${innerHtml}${makeBevelStripHtml(bw)}</div>`;
         }
 
         function previewScaledEffect(effectSize) {
