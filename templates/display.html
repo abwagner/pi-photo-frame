@@ -419,6 +419,11 @@
             const bevelColors = getBevelColors(matColor);
             wrapper.style.setProperty('--bevel-outer', bevelColors.outer);
             wrapper.style.setProperty('--bevel-inner', bevelColors.inner);
+            // Round element dimensions to integers so bevel strips always meet the edge cleanly
+            const elW = parseFloat(imgEl.style.width);
+            const elH = parseFloat(imgEl.style.height);
+            if (!isNaN(elW)) imgEl.style.width  = Math.round(elW) + 'px';
+            if (!isNaN(elH)) imgEl.style.height = Math.round(elH) + 'px';
             wrapper.appendChild(imgEl);
             // Four gradient strips, each clipped to a trapezoid with exact 45° miter corners.
             // No overlap between strips — corners are handled cleanly by the clip-path geometry.
