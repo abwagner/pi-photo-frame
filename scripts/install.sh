@@ -425,6 +425,21 @@ setup_display_only() {
         read -rp "  Display token: " display_token
     done
 
+    # CEC TV power control
+    local cec_enabled=false
+    echo ""
+    if [[ -e /dev/cec0 ]]; then
+        read -rp "  CEC device detected (/dev/cec0). Enable TV power control via schedules? [Y/n]: " cec_answer
+        if [[ ! "$cec_answer" =~ ^[Nn]$ ]]; then
+            cec_enabled=true
+        fi
+    else
+        read -rp "  No CEC device detected. Enable TV power control anyway? [y/N]: " cec_answer
+        if [[ "$cec_answer" =~ ^[Yy]$ ]]; then
+            cec_enabled=true
+        fi
+    fi
+
     local chromium_pkg
     chromium_pkg=$(detect_chromium)
 
@@ -432,8 +447,20 @@ setup_display_only() {
     sudo apt-get update -qq
     sudo apt-get install -y -qq "$chromium_pkg" unclutter xdotool x11-xserver-utils curl
 
+    if [[ "$cec_enabled" == true ]]; then
+        info "Installing CEC utilities..."
+        sudo apt-get install -y -qq cec-utils
+    fi
+
     local chromium_bin
     chromium_bin=$(detect_chromium)
+
+    # Build optional cec-agent launch line for the kiosk script
+    local cec_launch=""
+    if [[ "$cec_enabled" == true ]]; then
+        cec_launch="# Start CEC agent for TV power control (runs in background)
+\"$PROJECT_DIR/scripts/cec-agent.sh\" \"$backend_url\" \"$display_token\" &"
+    fi
 
     info "Creating kiosk start script..."
     cat > "$PROJECT_DIR/start_kiosk.sh" <<KIOSKEOF
@@ -460,6 +487,8 @@ xset -dpms
 
 # Hide mouse cursor
 unclutter -idle 0.5 -root &
+
+$cec_launch
 
 # Start Chromium in kiosk mode (restart automatically if it crashes)
 while true; do
@@ -503,6 +532,12 @@ EOF
     echo "  The kiosk will launch automatically on next login/reboot."
     echo "  To start it now: $PROJECT_DIR/start_kiosk.sh"
     echo ""
+    if [[ "$cec_enabled" == true ]]; then
+        echo "  CEC TV power control: enabled."
+        echo "  Configure schedules in the backend admin UI (Settings → TV Schedule)."
+        echo "  Commands execute on this Pi within ~30 seconds of their scheduled time."
+        echo ""
+    fi
     echo "  Chromium restarts daily at 4:00 AM to prevent memory leaks."
     echo "======================================"
 }

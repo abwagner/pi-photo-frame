@@ -825,8 +825,16 @@ init_scheduler()
 
 # ============ CEC TV Control ============
 
+# In split backend/display mode, cec-ctl is not available on the server.
+# Commands are queued here and picked up by the cec-agent running on the Pi.
+_cec_queue = []           # pending commands waiting for a remote display to execute
+_cec_display_has_cec = False  # True once a CEC-capable display has registered
+
+
 def is_cec_available():
-    """Check if cec-ctl is installed and a CEC device is accessible."""
+    """Check if CEC control is available — either locally or via a registered remote display."""
+    if _cec_display_has_cec:
+        return True
     try:
         result = subprocess.run(
             ['cec-ctl', '-d0', '--phys-addr'],
@@ -838,24 +846,28 @@ def is_cec_available():
 
 
 def cec_send_command(command):
-    """Send a CEC command via cec-ctl. Returns dict with success and optional error."""
+    """Send a CEC command. Runs locally if cec-ctl is available, otherwise queues
+    for a remote display running the cec-agent (split backend/display mode)."""
     cec_args = {
         'on': ['cec-ctl', '-d0', '--playback', '--image-view-on'],
         'standby': ['cec-ctl', '-d0', '--playback', '--standby'],
     }
-    cmd = cec_args.get(command)
-    if not cmd:
+    if command not in cec_args:
         return {'success': False, 'error': f'Unknown command: {command}'}
     try:
         result = subprocess.run(
-            cmd, capture_output=True, text=True, timeout=10
+            cec_args[command], capture_output=True, text=True, timeout=10
         )
         return {'success': result.returncode == 0,
                 'error': result.stderr.strip()[:200] if result.returncode != 0 else None}
     except FileNotFoundError:
-        return {'success': False, 'error': 'cec-ctl not installed'}
+        pass  # no local cec-ctl — fall through to queue
     except subprocess.TimeoutExpired:
         return {'success': False, 'error': 'CEC command timed out'}
+
+    # No local cec-ctl available — queue for remote display agent
+    _cec_queue.append(command)
+    return {'success': True, 'queued': True}
 
 
 def schedule_cec_jobs():
@@ -1760,6 +1772,28 @@ def api_get_tv_schedules():
         'schedules': settings.get('tv_schedules', []),
         'cec_available': is_cec_available()
     })
+
+
+@app.route('/api/cec/register', methods=['POST'])
+def api_cec_register():
+    """Display-only Pi announces it has a local CEC device and can execute commands.
+    Called once on cec-agent startup. Uses the display token for auth."""
+    data = request.json or {}
+    if data.get('token', '') != DISPLAY_TOKEN:
+        return jsonify({'error': 'Authentication required'}), 401
+    global _cec_display_has_cec
+    _cec_display_has_cec = True
+    return jsonify({'success': True})
+
+
+@app.route('/api/cec/pending', methods=['GET'])
+def api_cec_pending():
+    """Return and dequeue the oldest pending CEC command for a remote display agent.
+    Returns {command: 'on'|'standby'} or {command: null} if nothing is queued."""
+    if request.args.get('token', '') != DISPLAY_TOKEN:
+        return jsonify({'error': 'Authentication required'}), 401
+    command = _cec_queue.pop(0) if _cec_queue else None
+    return jsonify({'command': command})
 
 
 @app.route('/api/tv-schedules', methods=['POST'])
