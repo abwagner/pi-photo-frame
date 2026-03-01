@@ -5,12 +5,11 @@
 #
 # Usage: ./scripts/install.sh
 #
-# What this script does:
-#   1. Installs Docker and Docker Compose (if needed)
-#   2. Enables Docker to start on boot
-#   3. Builds and starts the photo frame + Caddy (HTTPS)
-#   4. Optionally sets up Chromium kiosk mode for a connected display
-#   5. Adds a daily cron job to restart Chromium (prevents memory leaks)
+# What this script does (depending on selected mode):
+#
+#   1) Backend + display — full setup: Docker, HTTPS, app, Chromium kiosk
+#   2) Backend only      — Docker, HTTPS, app (no local display)
+#   3) Display only      — Chromium kiosk pointing at a remote backend
 
 set -euo pipefail
 
@@ -85,6 +84,17 @@ allow_privileged_ports() {
 CONFIGURED_DOMAIN=""
 
 setup_https() {
+    # If a Caddyfile already exists, offer to keep it
+    if [ -f "$PROJECT_DIR/Caddyfile" ]; then
+        echo ""
+        info "Existing Caddyfile found."
+        read -rp "Keep current HTTPS configuration? [Y/n]: " keep_https
+        if [[ ! "$keep_https" =~ ^[Nn]$ ]]; then
+            info "Keeping existing HTTPS configuration."
+            return 0
+        fi
+    fi
+
     echo ""
     echo "  HTTPS mode:"
     echo "    1) Self-signed certificate (default — works immediately, browser warning)"
@@ -208,13 +218,6 @@ start_services() {
 # ---------- Kiosk mode (optional) ----------
 
 setup_kiosk() {
-    echo ""
-    read -rp "Set up Chromium kiosk mode for a connected display? [y/N]: " kiosk_answer
-    if [[ ! "$kiosk_answer" =~ ^[Yy]$ ]]; then
-        info "Skipping kiosk setup."
-        return 0
-    fi
-
     local chromium_pkg
     chromium_pkg=$(detect_chromium)
     info "Using Chromium package: $chromium_pkg"
@@ -516,27 +519,40 @@ main() {
     echo "======================================"
     echo ""
     echo "  Setup mode:"
-    echo "    1) Backend server  — runs the Flask app + Caddy (manages photos)"
-    echo "    2) Display only    — Chromium kiosk pointing at a remote backend"
+    echo "    1) Backend server + display  — full setup: app, HTTPS, and Chromium kiosk"
+    echo "    2) Backend server only       — app + HTTPS, no local display"
+    echo "    3) Display only              — Chromium kiosk pointing at a remote backend"
     echo ""
-    read -rp "Choose mode [1/2, default 1]: " setup_mode
+    read -rp "Choose mode [1/2/3, default 1]: " setup_mode
     echo ""
 
-    if [[ "$setup_mode" == "2" ]]; then
-        setup_display_only
-        return
-    fi
-
-    install_docker
-    enable_docker_on_boot
-    allow_privileged_ports
-    setup_https
-    start_services
-    setup_kiosk
-    setup_cec
-    setup_tailscale
-    setup_chromium_cron
-    setup_ddns_cron
+    case "$setup_mode" in
+        3)
+            setup_display_only
+            return
+            ;;
+        2)
+            install_docker
+            enable_docker_on_boot
+            allow_privileged_ports
+            setup_https
+            start_services
+            setup_tailscale
+            setup_ddns_cron
+            ;;
+        *)
+            install_docker
+            enable_docker_on_boot
+            allow_privileged_ports
+            setup_https
+            start_services
+            setup_kiosk
+            setup_cec
+            setup_tailscale
+            setup_chromium_cron
+            setup_ddns_cron
+            ;;
+    esac
 
     local ip
     ip=$(hostname -I 2>/dev/null | awk '{print $1}')
@@ -576,8 +592,10 @@ main() {
     echo "    View logs:  docker compose logs -f"
     echo "    Restart:    docker compose restart"
     echo "    Rebuild:    docker compose up -d --build"
-    echo ""
-    echo "  Chromium restarts daily at 4:00 AM to prevent memory leaks."
+    if [[ "$setup_mode" != "2" ]]; then
+        echo ""
+        echo "  Chromium restarts daily at 4:00 AM to prevent memory leaks."
+    fi
     echo "======================================"
 }
 
