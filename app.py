@@ -30,6 +30,16 @@ from PIL import Image, ImageOps
 from apscheduler.schedulers.background import BackgroundScheduler
 import imagehash
 
+from render_display import (
+    render_snapshot as _render_snapshot,
+    render_group_snapshot as _render_group_snapshot,
+    delete_snapshot as _delete_snapshot,
+    delete_group_snapshot as _delete_group_snapshot,
+    get_groups_containing,
+    backfill_snapshots as _backfill_snapshots,
+    regenerate_all_snapshots as _regenerate_all_snapshots,
+)
+
 app = Flask(__name__)
 csrf = CSRFProtect(app)
 
@@ -46,6 +56,7 @@ RCLONE_CONFIG_DIR = DATA_FOLDER / 'rclone'
 RCLONE_CONFIG_FILE = RCLONE_CONFIG_DIR / 'rclone.conf'
 BACKUP_LOG_FILE = DATA_FOLDER / 'backup_log.json'
 BACKUP_LOCK_FILE = DATA_FOLDER / '.backup.lock'
+SNAPSHOT_FOLDER = DATA_FOLDER / 'display_snapshots'
 
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024  # 50MB max upload
@@ -54,6 +65,7 @@ app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024  # 50MB max upload
 UPLOAD_FOLDER.mkdir(exist_ok=True)
 THUMBNAIL_FOLDER.mkdir(exist_ok=True)
 DATA_FOLDER.mkdir(exist_ok=True)
+SNAPSHOT_FOLDER.mkdir(exist_ok=True)
 
 # Generate a secret key for sessions (persisted so sessions survive restarts)
 SECRET_KEY_FILE = DATA_FOLDER / '.secret_key'
@@ -446,6 +458,35 @@ def backfill_thumbnails():
                 if generate_thumbnail(f, f.name):
                     count += 1
     return count
+
+
+def generate_display_snapshot(filename):
+    """Generate a display snapshot for a single image."""
+    try:
+        gallery = load_gallery()
+        settings = load_settings()
+        return _render_snapshot(filename, gallery, settings, UPLOAD_FOLDER, SNAPSHOT_FOLDER)
+    except Exception as e:
+        logging.warning('Snapshot render failed for %s: %s', filename, e)
+        return None
+
+
+def generate_group_display_snapshot(group_id):
+    """Generate a display snapshot for a group."""
+    try:
+        gallery = load_gallery()
+        settings = load_settings()
+        return _render_group_snapshot(group_id, gallery, settings, UPLOAD_FOLDER, SNAPSHOT_FOLDER)
+    except Exception as e:
+        logging.warning('Group snapshot render failed for %s: %s', group_id, e)
+        return None
+
+
+def regenerate_snapshots_for_groups_containing(filename):
+    """Re-render snapshots for all groups that contain the given image."""
+    gallery = load_gallery()
+    for group_id in get_groups_containing(filename, gallery):
+        generate_group_display_snapshot(group_id)
 
 
 def get_uploaded_images():
@@ -1121,6 +1162,9 @@ def api_upload():
                 height=height,
                 phash=phash
             )
+
+            # Generate display snapshot with default settings
+            generate_display_snapshot(unique_name)
         else:
             errors.append(f"Invalid file type: {file.filename}")
 
@@ -1217,6 +1261,16 @@ def api_backfill_hashes():
 
     save_gallery(gallery)
     return jsonify({'success': True, 'updated': updated})
+
+
+@app.route('/api/gallery/backfill-snapshots', methods=['POST'])
+@api_admin_required
+def api_backfill_snapshots():
+    """Generate display snapshots for images and groups that don't have one."""
+    gallery = load_gallery()
+    settings = load_settings()
+    count = _backfill_snapshots(gallery, settings, UPLOAD_FOLDER, SNAPSHOT_FOLDER)
+    return jsonify({'success': True, 'generated': count})
 
 
 def _build_slides():
@@ -1321,6 +1375,13 @@ def api_update_image(filename):
     updates = {k: v for k, v in data.items() if k in allowed_fields}
 
     update_image_metadata(filename, **updates)
+
+    # Re-render display snapshot if any display-affecting field changed
+    display_fields = {'mat_color', 'scale', 'mat_finish', 'bevel_width', 'border_effect', 'crop'}
+    if display_fields & updates.keys():
+        generate_display_snapshot(filename)
+        regenerate_snapshots_for_groups_containing(filename)
+
     return jsonify({'success': True})
 
 
@@ -1331,13 +1392,29 @@ def api_delete_image(filename):
     filepath = UPLOAD_FOLDER / secure_filename(filename)
 
     if filepath.exists():
+        # Re-render group snapshots before removing from groups
+        gallery = load_gallery()
+        affected_groups = get_groups_containing(filename, gallery)
+
         filepath.unlink()
         # Clean up thumbnail (try both original extension and .jpg)
         thumb = THUMBNAIL_FOLDER / secure_filename(filename)
         thumb.unlink(missing_ok=True)
         thumb.with_suffix('.jpg').unlink(missing_ok=True)
+        # Clean up display snapshot
+        _delete_snapshot(filename, SNAPSHOT_FOLDER)
         remove_image_metadata(filename)
         remove_filename_from_groups(filename)
+
+        # Re-render or delete affected group snapshots
+        for group_id in affected_groups:
+            gallery = load_gallery()
+            group = gallery.get('groups', {}).get(group_id)
+            if group and len(group.get('images', [])) >= 2:
+                generate_group_display_snapshot(group_id)
+            else:
+                _delete_group_snapshot(group_id, SNAPSHOT_FOLDER)
+
         return jsonify({'success': True})
 
     return jsonify({'error': 'File not found'}), 404
@@ -1373,6 +1450,7 @@ def api_bulk_action():
                 thumb = THUMBNAIL_FOLDER / secure_filename(f)
                 thumb.unlink(missing_ok=True)
                 thumb.with_suffix('.jpg').unlink(missing_ok=True)
+                _delete_snapshot(f, SNAPSHOT_FOLDER)
                 remove_image_metadata(f)
                 remove_filename_from_groups(f)
                 deleted += 1
@@ -1410,6 +1488,7 @@ def api_create_group():
         'created_at': datetime.now().isoformat()
     }
     save_gallery(gallery)
+    generate_group_display_snapshot(group_id)
 
     return jsonify({'success': True, 'group_id': group_id})
 
@@ -1439,6 +1518,7 @@ def api_update_group(group_id):
         gallery['groups'][group_id]['scales'] = data['scales']
 
     save_gallery(gallery)
+    generate_group_display_snapshot(group_id)
     return jsonify({'success': True})
 
 
@@ -1452,6 +1532,7 @@ def api_delete_group(group_id):
 
     del gallery['groups'][group_id]
     save_gallery(gallery)
+    _delete_group_snapshot(group_id, SNAPSHOT_FOLDER)
     return jsonify({'success': True})
 
 
@@ -1476,6 +1557,18 @@ def api_settings():
             settings[field] = data[field]
 
     save_settings(settings)
+
+    # If display-affecting global settings changed, re-render all snapshots in background
+    display_settings = {'mat_color', 'mat_finish', 'bevel_width', 'border_effect',
+                        'fit_mode', 'target_aspect_ratio'}
+    if display_settings & data.keys():
+        def _rerender_all():
+            gallery = load_gallery()
+            new_settings = load_settings()
+            _regenerate_all_snapshots(gallery, new_settings, UPLOAD_FOLDER, SNAPSHOT_FOLDER)
+        thread = threading.Thread(target=_rerender_all, daemon=True)
+        thread.start()
+
     return jsonify(settings)
 
 
