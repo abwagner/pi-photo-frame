@@ -1,9 +1,9 @@
 flask==3.1.2
 werkzeug==3.1.5
-Pillow==12.1.1
+Pillow==12.2.0
 APScheduler==3.11.2
 bcrypt==5.0.0
 Flask-WTF==1.2.2
 imagehash==4.3.2
-pytest==9.0.2
+pytest==9.0.3
 gunicorn==25.1.0
