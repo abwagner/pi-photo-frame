@@ -1,0 +1,204 @@
+# Migration Guide: Single-Pi → Split Backend/Display
+
+This guide covers migrating from a single Raspberry Pi running both the backend
+(Flask + Caddy) and a Chromium kiosk display, to a split architecture where the
+backend runs on a separate server and the Pi runs in display-only mode.
+
+## Why split?
+
+- Run the backend on a more powerful machine (server, NAS, VPS)
+- Dedicate the Pi purely to displaying photos
+- Access the admin UI from the server's domain with a proper TLS certificate
+- Multiple display Pis pointing at one backend
+
+## Architecture after migration
+
+```
+your-domain.com  (DNS A record, kept updated by Cloudflare DDNS)
+       ↓
+  Backend Server  ←────────────────────  Pi (display-only)
+  Flask + Caddy                           Chromium kiosk
+  Docker volumes                          points at your-domain.com?token=xxx
+  (photos, settings, users)               optional: CEC agent for TV control
+```
+
+## Prerequisites
+
+- The backend server must be reachable from the internet (or your local network,
+  depending on where the Pi lives)
+- Docker installed on the backend server (the install script handles this)
+- If using Cloudflare for DNS: an API token with `Zone:DNS:Edit` permission and
+  your zone ID (both available from the Cloudflare dashboard)
+
+---
+
+## Phase 1 — Stand up the backend server
+
+> The Pi keeps running as normal during this phase. No downtime yet.
+
+**1. Clone or copy the project to the server**
+
+```bash
+git clone https://github.com/your-repo/pi-photo-frame.git
+cd pi-photo-frame
+```
+
+**2. Create your `.env` file**
+
+```bash
+cp .env.example .env
+```
+
+Edit `.env` with your values:
+
+```
+DOMAIN=photos.yourdomain.com
+CLOUDFLARE_API_TOKEN=your-cloudflare-api-token
+CLOUDFLARE_ZONE_ID=your-cloudflare-zone-id
+```
+
+If you are not using Cloudflare, omit `CLOUDFLARE_ZONE_ID` and point your DNS
+A record at the server manually.
+
+**3. Run the install script**
+
+```bash
+./scripts/install.sh
+# Choose mode 1: Backend server
+# Choose HTTPS mode 2: Let's Encrypt via Cloudflare (or 3 for DuckDNS)
+```
+
+The script will install Docker, build the containers, configure Caddy with a
+trusted TLS certificate, and set up a Cloudflare DDNS cron job if a zone ID
+was provided.
+
+**4. Verify the backend is reachable**
+
+Open `https://photos.yourdomain.com` in a browser. You should see the login
+page. Default credentials: `admin` / `password`.
+
+---
+
+## Phase 2 — Migrate data from the Pi
+
+> This phase causes a brief outage (roughly 5–10 minutes) while data is
+> transferred. Do it during a time when the display being off is acceptable.
+
+**On the Pi — stop the backend and export volumes**
+
+```bash
+cd ~/pi-photo-frame
+docker compose stop
+
+docker run --rm \
+  -v photoframe_uploads:/uploads \
+  -v photoframe_data:/data \
+  -v /tmp:/out \
+  alpine tar czf /out/photoframe-backup.tar.gz uploads data
+```
+
+**Copy the archive to the server**
+
+```bash
+scp /tmp/photoframe-backup.tar.gz user@your-server:/tmp/
+```
+
+**On the server — restore into the new volumes**
+
+```bash
+cd /path/to/pi-photo-frame
+docker compose stop
+
+docker run --rm \
+  -v photoframe_uploads:/uploads \
+  -v photoframe_data:/data \
+  -v /tmp:/out \
+  alpine sh -c "cd / && tar xzf /out/photoframe-backup.tar.gz"
+
+docker compose start
+```
+
+This transfers all photos, settings, user accounts, and the display token.
+Because the display token is preserved, the Pi can reconnect to the new backend
+without re-pairing.
+
+**Verify the migration**
+
+Log in to `https://photos.yourdomain.com` and confirm your photos and settings
+are intact.
+
+---
+
+## Phase 3 — Switch the Pi to display-only mode
+
+**Get the display token from the server**
+
+```bash
+docker exec pi-photo-frame cat /app/data/.display_token
+```
+
+**On the Pi — run the install script in display-only mode**
+
+```bash
+cd ~/pi-photo-frame
+./scripts/install.sh
+# Choose mode 2: Display only
+# Backend URL: https://photos.yourdomain.com
+# Token: <token from above>
+```
+
+The script configures Chromium to launch in kiosk mode pointing at the new
+backend. The display resumes showing photos from the server.
+
+---
+
+## Phase 4 — Clean up the Pi
+
+Remove the old backend containers to free resources. The kiosk setup is kept.
+
+```bash
+cd ~/pi-photo-frame
+docker compose down --rmi all --volumes
+```
+
+> **Note:** `--volumes` removes the local Docker volumes on the Pi. The data
+> now lives on the server. Only do this after verifying the migration succeeded.
+
+---
+
+## Notes
+
+### CEC TV power control
+
+If you use the TV schedule feature (auto on/off via HDMI-CEC), be aware that
+`/dev/cec0` is physically attached to the Pi, not the server. After migration,
+the CEC agent runs on the Pi in display-only mode and polls the backend for
+scheduled commands to execute locally. See the display-only install prompts
+for setup — it will ask whether this Pi has CEC support and configure the agent
+automatically.
+
+### Multiple display Pis
+
+Each Pi runs `install.sh` in display-only mode pointing at the same backend
+URL. All displays share one display token. Only one Pi should have CEC enabled
+(the one physically connected to the TV you want to control).
+
+### Maintenance window (deploy.sh)
+
+The `deploy.sh` script checks `/api/maintenance-window` to avoid deploying
+while the TV is on. This continues to work correctly — schedule data lives on
+the backend and the endpoint is time-based.
+
+### DNS
+
+If you provided `CLOUDFLARE_ZONE_ID` in `.env`, the install script added a
+cron job on the server that updates the Cloudflare A record every 6 hours.
+You can also run it immediately:
+
+```bash
+./scripts/cloudflare-ddns.sh
+```
+
+If you want additional subdomains (e.g. `frigate.yourdomain.com`) to resolve
+to the same server, add CNAME records in Cloudflare pointing at your main
+domain — they will follow the DDNS-updated A record automatically.
