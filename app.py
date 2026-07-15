@@ -259,6 +259,20 @@ def is_authenticated():
     return session.get('authenticated', False)
 
 
+def display_access_ok():
+    """True if the request may read display data: an authenticated session, localhost,
+    or a valid display token. The token is read from the query string (GET) or the JSON
+    body (POST), matching how the kiosk sends it. This lets a headless remote display
+    reach the read/photo endpoints with its token while keeping the admin UI (session
+    auth) and localhost access working unchanged."""
+    is_localhost = (request.remote_addr in ['127.0.0.1', '::1']
+                    or request.host.split(':')[0] == 'localhost')
+    token = request.args.get('token', '')
+    if not token and request.is_json:
+        token = (request.get_json(silent=True) or {}).get('token', '')
+    return is_localhost or token == DISPLAY_TOKEN or is_authenticated()
+
+
 def is_admin():
     """Check if current user is admin"""
     if not is_authenticated():
@@ -1355,6 +1369,8 @@ def _build_slides():
 @app.route('/api/images', methods=['GET'])
 def api_get_images():
     """Get slides for display (singles + groups)"""
+    if not display_access_ok():
+        return jsonify({'error': 'Authentication required'}), 401
     slides, all_images, settings = _build_slides()
     filenames = [img['filename'] for img in all_images]
 
@@ -1552,6 +1568,8 @@ def api_delete_group(group_id):
 def api_settings():
     """Get or update settings"""
     if request.method == 'GET':
+        if not display_access_ok():
+            return jsonify({'error': 'Authentication required'}), 401
         return jsonify(load_settings())
 
     if not is_authenticated():
@@ -1602,6 +1620,8 @@ def api_reorder():
 @app.route('/uploads/<filename>')
 def serve_upload(filename):
     """Serve uploaded images (only files tracked in gallery metadata)"""
+    if not display_access_ok():
+        return jsonify({'error': 'Authentication required'}), 401
     gallery = load_gallery()
     if filename not in gallery.get('images', {}):
         return jsonify({'error': 'Not found'}), 404
@@ -1611,6 +1631,8 @@ def serve_upload(filename):
 @app.route('/thumbnails/<filename>')
 def serve_thumbnail(filename):
     """Serve image thumbnails (falls back to full image if no thumbnail)."""
+    if not display_access_ok():
+        return jsonify({'error': 'Authentication required'}), 401
     # Try exact filename first, then .jpg variant
     thumb_path = THUMBNAIL_FOLDER / filename
     if thumb_path.exists():
@@ -1636,6 +1658,8 @@ def api_display_token():
 @app.route('/api/display/state')
 def api_display_state():
     """Get current slideshow state (index, paused, total slides)."""
+    if not display_access_ok():
+        return jsonify({'error': 'Authentication required'}), 401
     slides, _, _ = _build_slides()
     total = len(slides)
     return jsonify({
