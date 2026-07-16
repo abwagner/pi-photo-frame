@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="csrf-token" content="{{ csrf_token() }}">
+    <title>Verify MFA</title>
+</head>
+<body>
+<main>
+    <h1>Verify your identity</h1>
+    {% if 'totp' in methods %}
+    <label>Authenticator or recovery code <input id="challenge-code" autocomplete="one-time-code"></label>
+    <button id="challenge-totp" type="button">Verify code</button>
+    {% endif %}
+    {% if 'passkey' in methods and passkeys_available %}
+    <button id="challenge-passkey" type="button">Use a passkey</button>
+    {% endif %}
+    <p id="challenge-error"></p>
+</main>
+<script src="{{ url_for('static', filename='js/mfa.js') }}" defer></script>
+</body>
+</html>

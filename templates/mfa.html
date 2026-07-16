@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="csrf-token" content="{{ csrf_token() }}">
+    <title>MFA Settings</title>
+</head>
+<body data-passkeys-available="{{ 'true' if passkeys_available else 'false' }}">
+<main>
+    <h1>Multi-factor authentication</h1>
+    {% if required %}<p>MFA enrollment is required before continuing.</p>{% endif %}
+    <p>Enrolled methods: {{ methods|join(', ') if methods else 'none' }}</p>
+    {% if settings.mfa_methods in ('totp', 'either') %}
+    <section>
+        <h2>Authenticator app</h2>
+        <button id="totp-start" type="button">Start TOTP enrollment</button>
+        <div id="totp-details" hidden>
+            <p>Secret (shown only during enrollment): <code id="totp-secret"></code></p>
+            <p><code id="totp-uri"></code></p>
+            <label>Verification code <input id="totp-code" inputmode="numeric" autocomplete="one-time-code"></label>
+            <button id="totp-verify" type="button">Verify and enroll</button>
+        </div>
+    </section>
+    {% endif %}
+    {% if settings.mfa_methods in ('passkey', 'either') %}
+    <section>
+        <h2>Passkeys</h2>
+        {% if passkeys_available %}
+        <label>Name <input id="passkey-name" maxlength="80" value="My passkey"></label>
+        <button id="passkey-register" type="button">Add passkey</button>
+        {% else %}
+        <p>Passkeys require an administrator-configured stable HTTPS origin and matching relying-party ID.</p>
+        {% endif %}
+    </section>
+    {% endif %}
+    <pre id="mfa-output"></pre>
+    <p><a href="{{ url_for('upload_page') }}">Continue</a></p>
+</main>
+<script src="{{ url_for('static', filename='js/mfa.js') }}" defer></script>
+</body>
+</html>

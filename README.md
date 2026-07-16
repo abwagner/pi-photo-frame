@@ -489,6 +489,27 @@ the kiosk service user and mode `0600`. The agent reads it from that file and pa
 it to curl through standard input, so the value is absent from URLs and process
 arguments. Set `CEC_AGENT_TOKEN_FILE` only when using a different protected path.
 
+### Multi-factor authentication
+
+MFA defaults to disabled for upgrade compatibility. Administrators configure it
+through `GET/POST /api/admin/security-settings` with these values:
+
+- `mfa_mode`: `disabled`, `optional`, `required_admins`, or `required_all`.
+- `mfa_methods`: `totp`, `passkey`, or `either`.
+- `webauthn_rp_id`: the stable HTTPS hostname, such as `frame.example.com`.
+- `webauthn_origin`: the exact canonical origin, such as `https://frame.example.com`.
+
+Users enroll at `/mfa`. TOTP secrets are encrypted with a protected local Fernet
+key, verified before enrollment, and guarded against timestep replay. Recovery
+codes are displayed once and only their hashes are stored. Passkeys support multiple
+named credentials and last-used tracking. Passkey enrollment is disabled unless the
+RP ID and canonical origin form a matching, stable HTTPS deployment; raw IP,
+localhost, HTTP, and self-signed-warning workflows should use TOTP instead.
+
+When both methods are enrolled and allowed, either TOTP/recovery or a passkey can
+satisfy the second factor. Administrators can reset MFA with the CSRF-protected
+`DELETE /api/admin/users/<username>/mfa` endpoint; existing secrets are never returned.
+
 ## Troubleshooting
 
 ### Forgot admin password?
