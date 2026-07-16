@@ -1,4 +1,4 @@
-"""Tests for display page, display token, display control, uploads serving, reorder, settings edge cases, 413, and auth edge cases."""
+"""Tests for display enrollment, control, uploads, reorder, settings, 413, and auth edges."""
 
 import json
 import hashlib
@@ -9,6 +9,7 @@ import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 import app as photo_app
+from werkzeug.middleware.proxy_fix import ProxyFix
 
 from tests.conftest import make_test_image
 
@@ -18,12 +19,16 @@ from tests.conftest import make_test_image
 class TestDisplayPage:
     """Tests for /display access control."""
 
-    def test_display_with_valid_token(self, client, app):
-        """Display page with valid token returns 200."""
-        token = photo_app.DISPLAY_TOKEN
-        resp = client.get(f'/display?token={token}')
-        assert resp.status_code == 200
-        assert b'Photo Frame Display' in resp.data
+    def test_display_rejects_query_token(self, client, app):
+        """The enrollment secret is never accepted from a display URL."""
+        resp = client.get(
+            f'/display?token={photo_app.DISPLAY_TOKEN}',
+            headers={'Host': 'example.com'},
+            environ_base={'REMOTE_ADDR': '192.0.2.10'},
+        )
+        assert resp.status_code == 302
+        assert '/display/enroll' in resp.headers['Location']
+        assert photo_app.DISPLAY_TOKEN not in resp.headers['Location']
 
     def test_display_without_token_or_session_redirects(self, client):
         """Display page without token or session from non-localhost redirects to login."""
@@ -31,19 +36,139 @@ class TestDisplayPage:
         resp = client.get('/display', headers={'Host': 'example.com'},
                           environ_base={'REMOTE_ADDR': '192.168.1.100'})
         assert resp.status_code == 302
-        assert '/login' in resp.headers['Location']
+        assert '/display/enroll' in resp.headers['Location']
 
     def test_display_with_invalid_token_redirects(self, client):
         """Display page with bad token from non-localhost redirects to login."""
         resp = client.get('/display?token=bad-token', headers={'Host': 'example.com'},
                           environ_base={'REMOTE_ADDR': '192.168.1.100'})
         assert resp.status_code == 302
-        assert '/login' in resp.headers['Location']
+        assert '/display/enroll' in resp.headers['Location']
+
+    def test_external_source_cannot_spoof_localhost_host(self, client):
+        resp = client.get('/display', headers={'Host': 'localhost'},
+                          environ_base={'REMOTE_ADDR': '192.0.2.10'})
+        assert resp.status_code == 302
+        assert '/display/enroll' in resp.headers['Location']
+
+    def test_external_source_cannot_spoof_forwarded_host(self, client):
+        resp = client.get('/display', headers={
+            'Host': 'example.com',
+            'X-Forwarded-Host': 'localhost',
+        }, environ_base={'REMOTE_ADDR': '192.0.2.10'})
+        assert resp.status_code == 302
+        assert '/display/enroll' in resp.headers['Location']
 
     def test_display_with_session(self, auth_client):
         """Display page with authenticated session returns 200."""
-        resp = auth_client.get('/display')
+        resp = auth_client.get('/display', environ_base={'REMOTE_ADDR': '192.0.2.10'})
         assert resp.status_code == 200
+
+
+class TestDisplayEnrollment:
+    """Tests for POST-only display enrollment and session rotation."""
+
+    @staticmethod
+    def _external_enroll(client, secret=None, base_url='https://frame.example'):
+        return client.post(
+            '/api/display/enroll',
+            json={'enrollment_secret': secret or photo_app.DISPLAY_TOKEN},
+            base_url=base_url,
+            environ_base={'REMOTE_ADDR': '192.0.2.10'},
+        )
+
+    def test_enrollment_accepts_post_body_and_sets_protected_cookie(self, client):
+        resp = self._external_enroll(client)
+        assert resp.status_code == 200
+        assert resp.get_json() == {'success': True, 'display_url': '/display'}
+        cookie = resp.headers['Set-Cookie']
+        assert 'HttpOnly' in cookie
+        assert 'SameSite=Lax' in cookie
+        assert 'Secure' in cookie
+        assert photo_app.DISPLAY_TOKEN not in cookie
+        assert resp.headers['Cache-Control'] == 'no-store, private'
+
+    def test_forwarded_host_does_not_authorize_when_proxyfix_enabled(self, app):
+        original_wsgi = app.wsgi_app
+        app.wsgi_app = ProxyFix(original_wsgi, x_for=1, x_proto=1, x_host=1)
+        try:
+            proxy_client = app.test_client()
+            resp = proxy_client.get('/display', headers={
+                'Host': 'frame.example',
+                'X-Forwarded-For': '192.0.2.10',
+                'X-Forwarded-Host': 'localhost',
+                'X-Forwarded-Proto': 'https',
+            }, environ_base={'REMOTE_ADDR': '10.0.0.2'})
+            assert resp.status_code == 302
+            assert '/display/enroll' in resp.headers['Location']
+        finally:
+            app.wsgi_app = original_wsgi
+
+    def test_enrollment_rejects_query_parameter(self, client):
+        resp = client.post(
+            f'/api/display/enroll?token={photo_app.DISPLAY_TOKEN}',
+            base_url='https://frame.example',
+            environ_base={'REMOTE_ADDR': '192.0.2.10'},
+        )
+        assert resp.status_code == 400
+
+    def test_enrolled_external_display_can_access_page_apis_and_images(self, client, auth_client):
+        buf = make_test_image(100, 100, 'red')
+        upload = auth_client.post('/api/upload', data={'files': (buf, 'test.png')},
+                                  content_type='multipart/form-data')
+        filename = upload.get_json()['uploaded'][0]
+
+        self._external_enroll(client)
+        request_args = {
+            'base_url': 'https://frame.example',
+            'environ_base': {'REMOTE_ADDR': '192.0.2.10'},
+        }
+        assert client.get('/display', **request_args).status_code == 200
+        assert client.get('/api/images', **request_args).status_code == 200
+        assert client.get('/api/settings', **request_args).status_code == 200
+        assert client.get('/api/display/state', **request_args).status_code == 200
+        assert client.get(f'/uploads/{filename}', **request_args).status_code == 200
+
+    def test_protected_apis_reject_external_unauthenticated_client(self, client):
+        args = {
+            'headers': {'Host': 'localhost'},
+            'environ_base': {'REMOTE_ADDR': '192.0.2.10'},
+        }
+        for path in ('/api/images', '/api/settings', '/api/display/state', '/uploads/x.png'):
+            assert client.get(path, **args).status_code == 401
+
+    def test_display_html_and_response_never_contain_secret(self, client):
+        self._external_enroll(client)
+        resp = client.get('/display', base_url='https://frame.example',
+                          environ_base={'REMOTE_ADDR': '192.0.2.10'})
+        assert photo_app.DISPLAY_TOKEN.encode() not in resp.data
+        assert b'?token=' not in resp.data
+
+    def test_rotation_invalidates_existing_display_session(self, app, auth_client):
+        display_client = app.test_client()
+        self._external_enroll(display_client)
+        args = {
+            'base_url': 'https://frame.example',
+            'environ_base': {'REMOTE_ADDR': '192.0.2.10'},
+        }
+        assert display_client.get('/api/images', **args).status_code == 200
+
+        old_secret = photo_app.DISPLAY_TOKEN
+        rotated = auth_client.post('/api/display/rotate-secret')
+        assert rotated.status_code == 200
+        data = rotated.get_json()
+        assert data['existing_display_sessions_invalidated'] is True
+        assert data['enrollment_secret'] != old_secret
+        assert old_secret.encode() not in rotated.data
+        assert display_client.get('/api/images', **args).status_code == 401
+
+    def test_expired_display_session_is_rejected(self, client, app):
+        self._external_enroll(client)
+        with client.session_transaction(base_url='https://frame.example') as display_session:
+            display_session['display_authenticated_at'] = 0
+        resp = client.get('/api/images', base_url='https://frame.example',
+                          environ_base={'REMOTE_ADDR': '192.0.2.10'})
+        assert resp.status_code == 401
 
     def test_display_from_localhost(self, client, app):
         """Display page from localhost returns 200."""
@@ -53,23 +178,21 @@ class TestDisplayPage:
         assert resp.status_code == 200
 
 
-# ===== Display Token API =====
+# ===== Display Enrollment Secret API =====
 
-class TestDisplayToken:
-    """Tests for /api/display-token."""
+class TestDisplayEnrollmentSecret:
+    """Tests for the administrator enrollment-secret endpoint."""
 
-    def test_display_token_requires_admin(self, client):
-        """GET /api/display-token without auth returns 401."""
-        resp = client.get('/api/display-token')
+    def test_display_secret_requires_admin(self, client):
+        resp = client.get('/api/display/enrollment-secret')
         assert resp.status_code == 401
 
-    def test_display_token_returns_token(self, auth_client):
-        """GET /api/display-token returns the display token."""
-        resp = auth_client.get('/api/display-token')
+    def test_display_secret_returns_secret_without_caching(self, auth_client):
+        resp = auth_client.get('/api/display/enrollment-secret')
         assert resp.status_code == 200
         data = resp.get_json()
-        assert 'token' in data
-        assert len(data['token']) > 0
+        assert data['enrollment_secret'] == photo_app.DISPLAY_TOKEN
+        assert resp.headers['Cache-Control'] == 'no-store, private'
 
 
 # ===== Serving Uploads =====

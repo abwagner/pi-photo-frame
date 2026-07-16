@@ -247,15 +247,7 @@ for i in {1..60}; do
     sleep 1
 done
 
-# Get the display token from the Docker container
 DISPLAY_URL="https://localhost/display"
-TOKEN=\$(docker exec pi-photo-frame cat /app/data/.display_token 2>/dev/null)
-if [ -n "\$TOKEN" ]; then
-    DISPLAY_URL="https://localhost/display?token=\$TOKEN"
-    echo "Display token loaded."
-else
-    echo "Warning: Could not read display token. Display may require login."
-fi
 
 # Disable screen blanking/power management
 xset s off
@@ -411,9 +403,9 @@ setup_ddns_cron() {
 setup_display_only() {
     echo ""
     echo "  Display-only setup: this device will run Chromium pointing at a remote backend."
-    echo "  You need the backend URL and display token from the backend server."
-    echo "  (Get the token from the backend admin UI: Settings → Display token, or"
-    echo "   via the API: GET /api/display-token while logged in as admin.)"
+    echo "  You need the backend URL. Chromium will always start with a clean /display URL."
+    echo "  On first launch, enter the enrollment secret from the backend admin UI once."
+    echo "  The browser stores only a protected display session cookie."
     echo ""
 
     local backend_url=""
@@ -422,11 +414,6 @@ setup_display_only() {
     done
     # Strip trailing slash
     backend_url="${backend_url%/}"
-
-    local display_token=""
-    while [[ -z "$display_token" ]]; do
-        read -rp "  Display token: " display_token
-    done
 
     # CEC TV power control
     local cec_enabled=false
@@ -458,11 +445,10 @@ setup_display_only() {
     local chromium_bin
     chromium_bin=$(detect_chromium)
 
-    # Build optional cec-agent launch line for the kiosk script
+    # CEC receives a separate bearer credential; never reuse display enrollment.
     local cec_launch=""
     if [[ "$cec_enabled" == true ]]; then
-        cec_launch="# Start CEC agent for TV power control (runs in background)
-\"$PROJECT_DIR/scripts/cec-agent.sh\" \"$backend_url\" \"$display_token\" &"
+        warn "CEC agent setup requires a separate CEC agent token and will be configured after backend enrollment."
     fi
 
     info "Creating kiosk start script..."
@@ -471,7 +457,7 @@ setup_display_only() {
 
 CHROMIUM="$chromium_bin"
 BACKEND_URL="$backend_url"
-DISPLAY_URL="\${BACKEND_URL}/display?token=$display_token"
+DISPLAY_URL="\${BACKEND_URL}/display"
 
 # Wait for the backend to be reachable
 echo "Waiting for backend server..."
@@ -534,11 +520,10 @@ EOF
     echo ""
     echo "  The kiosk will launch automatically on next login/reboot."
     echo "  To start it now: $PROJECT_DIR/start_kiosk.sh"
+    echo "  First launch will prompt once for the display enrollment secret."
     echo ""
     if [[ "$cec_enabled" == true ]]; then
-        echo "  CEC TV power control: enabled."
-        echo "  Configure schedules in the backend admin UI (Settings → TV Schedule)."
-        echo "  Commands execute on this Pi within ~30 seconds of their scheduled time."
+        echo "  CEC TV power control was requested; install its separate agent token before starting it."
         echo ""
     fi
     echo "  Chromium restarts daily at 4:00 AM to prevent memory leaks."

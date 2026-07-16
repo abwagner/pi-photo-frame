@@ -37,6 +37,10 @@ def app(tmp_dirs):
     original_settings = photo_app.SETTINGS_FILE
     original_users = photo_app.USERS_FILE
     original_gallery = photo_app.GALLERY_FILE
+    original_display_token_file = photo_app.DISPLAY_TOKEN_FILE
+    original_display_generation_file = photo_app.DISPLAY_SESSION_GENERATION_FILE
+    original_display_token = photo_app.DISPLAY_TOKEN
+    original_display_generation = photo_app.DISPLAY_SESSION_GENERATION
 
     thumb_dir = upload_dir / "thumbnails"
     thumb_dir.mkdir()
@@ -47,6 +51,12 @@ def app(tmp_dirs):
     photo_app.SETTINGS_FILE = data_dir / "settings.json"
     photo_app.USERS_FILE = data_dir / "users.json"
     photo_app.GALLERY_FILE = data_dir / "gallery.json"
+    photo_app.DISPLAY_TOKEN_FILE = data_dir / ".display_token"
+    photo_app.DISPLAY_SESSION_GENERATION_FILE = data_dir / ".display_session_generation"
+    photo_app.DISPLAY_TOKEN = "test-display-enrollment-secret"
+    photo_app.DISPLAY_SESSION_GENERATION = 1
+    photo_app.DISPLAY_TOKEN_FILE.write_text(photo_app.DISPLAY_TOKEN)
+    photo_app.DISPLAY_SESSION_GENERATION_FILE.write_text("1")
     photo_app.app.config['UPLOAD_FOLDER'] = upload_dir
 
     photo_app.app.config['TESTING'] = True
@@ -62,6 +72,10 @@ def app(tmp_dirs):
     photo_app.SETTINGS_FILE = original_settings
     photo_app.USERS_FILE = original_users
     photo_app.GALLERY_FILE = original_gallery
+    photo_app.DISPLAY_TOKEN_FILE = original_display_token_file
+    photo_app.DISPLAY_SESSION_GENERATION_FILE = original_display_generation_file
+    photo_app.DISPLAY_TOKEN = original_display_token
+    photo_app.DISPLAY_SESSION_GENERATION = original_display_generation
 
 
 @pytest.fixture

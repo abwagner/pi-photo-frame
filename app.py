@@ -16,6 +16,7 @@ import time
 import subprocess
 import threading
 import logging
+from ipaddress import ip_address
 from datetime import datetime
 from pathlib import Path
 from functools import wraps
@@ -23,6 +24,7 @@ from flask import Flask, render_template, request, jsonify, send_from_directory,
 
 import bcrypt
 from flask_wtf.csrf import CSRFProtect
+from flask.sessions import SecureCookieSessionInterface
 from werkzeug.utils import secure_filename
 import tempfile
 
@@ -42,6 +44,16 @@ from render_display import (
 
 app = Flask(__name__)
 csrf = CSRFProtect(app)
+
+
+class RequestAwareSecureCookieSessionInterface(SecureCookieSessionInterface):
+    """Set Secure on session cookies whenever Flask sees an HTTPS request."""
+
+    def get_cookie_secure(self, app):
+        return super().get_cookie_secure(app) or request.is_secure
+
+
+app.session_interface = RequestAwareSecureCookieSessionInterface()
 
 # Configuration
 UPLOAD_FOLDER = Path(__file__).parent / 'uploads'
@@ -76,7 +88,7 @@ else:
     SECRET_KEY_FILE.write_text(app.secret_key)
     os.chmod(SECRET_KEY_FILE, 0o600)
 
-# Display token for kiosk mode
+# Display enrollment secret (legacy filename retained for migration compatibility)
 DISPLAY_TOKEN_FILE = DATA_FOLDER / '.display_token'
 if DISPLAY_TOKEN_FILE.exists():
     DISPLAY_TOKEN = DISPLAY_TOKEN_FILE.read_text().strip()
@@ -88,12 +100,29 @@ try:
 except OSError:
     pass
 
+DISPLAY_SESSION_GENERATION_FILE = DATA_FOLDER / '.display_session_generation'
+if DISPLAY_SESSION_GENERATION_FILE.exists():
+    try:
+        DISPLAY_SESSION_GENERATION = int(DISPLAY_SESSION_GENERATION_FILE.read_text().strip())
+    except (OSError, ValueError):
+        DISPLAY_SESSION_GENERATION = 1
+else:
+    DISPLAY_SESSION_GENERATION = 1
+    DISPLAY_SESSION_GENERATION_FILE.write_text(str(DISPLAY_SESSION_GENERATION))
+try:
+    os.chmod(DISPLAY_SESSION_GENERATION_FILE, 0o600)
+except OSError:
+    pass
+
 # Session cookie security
 app.config['SESSION_COOKIE_HTTPONLY'] = True
 app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
 # Enable Secure flag when behind HTTPS (set env var SECURE_COOKIES=1)
 if os.environ.get('SECURE_COOKIES', '').lower() in ('1', 'true'):
     app.config['SESSION_COOKIE_SECURE'] = True
+app.config['DISPLAY_SESSION_LIFETIME'] = int(
+    os.environ.get('DISPLAY_SESSION_LIFETIME_SECONDS', 30 * 24 * 60 * 60)
+)
 
 # Reverse proxy support — enable with BEHIND_PROXY=1
 if os.environ.get('BEHIND_PROXY', '').lower() in ('1', 'true'):
@@ -259,18 +288,40 @@ def is_authenticated():
     return session.get('authenticated', False)
 
 
+def request_is_loopback():
+    """Return whether the actual request source is a loopback IP address."""
+    try:
+        return ip_address(request.remote_addr).is_loopback
+    except (ValueError, TypeError):
+        return False
+
+
+def has_valid_display_session():
+    """Validate the signed display session, including expiry and rotation."""
+    if not session.get('display_authenticated'):
+        return False
+    if session.get('display_session_generation') != DISPLAY_SESSION_GENERATION:
+        return False
+    authenticated_at = session.get('display_authenticated_at')
+    if not isinstance(authenticated_at, (int, float)):
+        return False
+    lifetime = app.config['DISPLAY_SESSION_LIFETIME']
+    return 0 <= time.time() - authenticated_at <= lifetime
+
+
 def display_access_ok():
-    """True if the request may read display data: an authenticated session, localhost,
-    or a valid display token. The token is read from the query string (GET) or the JSON
-    body (POST), matching how the kiosk sends it. This lets a headless remote display
-    reach the read/photo endpoints with its token while keeping the admin UI (session
-    auth) and localhost access working unchanged."""
-    is_localhost = (request.remote_addr in ['127.0.0.1', '::1']
-                    or request.host.split(':')[0] == 'localhost')
-    token = request.args.get('token', '')
-    if not token and request.is_json:
-        token = (request.get_json(silent=True) or {}).get('token', '')
-    return is_localhost or token == DISPLAY_TOKEN or is_authenticated()
+    """Authorize display reads without trusting hostnames or URL credentials."""
+    return request_is_loopback() or has_valid_display_session() or is_authenticated()
+
+
+def display_api_required(f):
+    """Require a user/display session or an intentionally supported loopback source."""
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if not display_access_ok():
+            return jsonify({'error': 'Authentication required'}), 401
+        return f(*args, **kwargs)
+    return decorated_function
 
 
 def is_admin():
@@ -1120,23 +1171,52 @@ def gallery_page():
 @app.route('/display')
 def display_page():
     """Render the TV display page"""
-    # Allow access if:
-    # 1. Request is from localhost (the Pi itself)
-    # 2. Valid token is provided
-    # 3. User is authenticated via session
-
-    # Check remote_addr (direct) and request.host (works behind Docker/Caddy proxy
-    # where remote_addr becomes the Docker bridge IP instead of 127.0.0.1)
-    is_localhost = (request.remote_addr in ['127.0.0.1', '::1']
-                    or request.host.split(':')[0] == 'localhost')
-    token = request.args.get('token', '')
-    valid_token = token == DISPLAY_TOKEN
-
-    if is_localhost or valid_token or is_authenticated():
+    if display_access_ok():
         settings = load_settings()
         return render_template('display.html', settings=settings)
 
-    return redirect(url_for('login'))
+    return redirect(url_for('display_enroll_page'))
+
+
+@app.get('/display/enroll')
+def display_enroll_page():
+    """Render the one-time display enrollment form without exposing a secret."""
+    if display_access_ok():
+        return redirect(url_for('display_page'))
+    response = app.make_response(render_template('display_enroll.html'))
+    response.headers['Cache-Control'] = 'no-store, private'
+    return response
+
+
+@app.post('/api/display/enroll')
+@csrf.exempt
+def api_display_enroll():
+    """Exchange an enrollment secret from a POST body for a display session."""
+    if request.args.get('token') is not None or request.args.get('secret') is not None:
+        response = jsonify({'error': 'Credentials are not accepted in query parameters'})
+        response.status_code = 400
+        response.headers['Cache-Control'] = 'no-store, private'
+        return response
+
+    data = request.get_json(silent=True) if request.is_json else request.form
+    submitted_secret = (data or {}).get('enrollment_secret', '')
+    if not submitted_secret or not secrets.compare_digest(submitted_secret, DISPLAY_TOKEN):
+        response = jsonify({'error': 'Invalid enrollment secret'})
+        response.status_code = 401
+        response.headers['Cache-Control'] = 'no-store, private'
+        return response
+
+    session['display_authenticated'] = True
+    session['display_authenticated_at'] = int(time.time())
+    session['display_session_generation'] = DISPLAY_SESSION_GENERATION
+    session.permanent = True
+
+    if request.is_json:
+        response = jsonify({'success': True, 'display_url': url_for('display_page')})
+    else:
+        response = redirect(url_for('display_page'))
+    response.headers['Cache-Control'] = 'no-store, private'
+    return response
 
 
 # --- API Routes ---
@@ -1367,10 +1447,9 @@ def _build_slides():
 
 
 @app.route('/api/images', methods=['GET'])
+@display_api_required
 def api_get_images():
     """Get slides for display (singles + groups)"""
-    if not display_access_ok():
-        return jsonify({'error': 'Authentication required'}), 401
     slides, all_images, settings = _build_slides()
     filenames = [img['filename'] for img in all_images]
 
@@ -1618,10 +1697,9 @@ def api_reorder():
 
 
 @app.route('/uploads/<filename>')
+@display_api_required
 def serve_upload(filename):
     """Serve uploaded images (only files tracked in gallery metadata)"""
-    if not display_access_ok():
-        return jsonify({'error': 'Authentication required'}), 401
     gallery = load_gallery()
     if filename not in gallery.get('images', {}):
         return jsonify({'error': 'Not found'}), 404
@@ -1629,10 +1707,9 @@ def serve_upload(filename):
 
 
 @app.route('/thumbnails/<filename>')
+@display_api_required
 def serve_thumbnail(filename):
     """Serve image thumbnails (falls back to full image if no thumbnail)."""
-    if not display_access_ok():
-        return jsonify({'error': 'Authentication required'}), 401
     # Try exact filename first, then .jpg variant
     thumb_path = THUMBNAIL_FOLDER / filename
     if thumb_path.exists():
@@ -1648,18 +1725,39 @@ def serve_thumbnail(filename):
     return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
 
 
-@app.route('/api/display-token')
+@app.get('/api/display/enrollment-secret')
 @api_admin_required
-def api_display_token():
-    """Get the display token (admin only)"""
-    return jsonify({'token': DISPLAY_TOKEN})
+def api_display_enrollment_secret():
+    """Return the enrollment secret to an administrator for device setup."""
+    response = jsonify({'enrollment_secret': DISPLAY_TOKEN})
+    response.headers['Cache-Control'] = 'no-store, private'
+    return response
+
+
+@app.post('/api/display/rotate-secret')
+@api_admin_required
+def api_rotate_display_secret():
+    """Rotate enrollment access and immediately invalidate display sessions."""
+    global DISPLAY_TOKEN, DISPLAY_SESSION_GENERATION
+    DISPLAY_TOKEN = secrets.token_urlsafe(32)
+    DISPLAY_TOKEN_FILE.write_text(DISPLAY_TOKEN)
+    os.chmod(DISPLAY_TOKEN_FILE, 0o600)
+    DISPLAY_SESSION_GENERATION += 1
+    DISPLAY_SESSION_GENERATION_FILE.write_text(str(DISPLAY_SESSION_GENERATION))
+    os.chmod(DISPLAY_SESSION_GENERATION_FILE, 0o600)
+    response = jsonify({
+        'success': True,
+        'enrollment_secret': DISPLAY_TOKEN,
+        'existing_display_sessions_invalidated': True,
+    })
+    response.headers['Cache-Control'] = 'no-store, private'
+    return response
 
 
 @app.route('/api/display/state')
+@display_api_required
 def api_display_state():
     """Get current slideshow state (index, paused, total slides)."""
-    if not display_access_ok():
-        return jsonify({'error': 'Authentication required'}), 401
     slides, _, _ = _build_slides()
     total = len(slides)
     return jsonify({
@@ -1670,16 +1768,10 @@ def api_display_state():
 
 
 @app.route('/api/display/control', methods=['POST'])
+@display_api_required
 def api_display_control():
     """Control the slideshow: next, prev, pause, play."""
-    # Allow control from authenticated users, localhost, or a valid display token
-    # (the token lets a remote Pi kiosk use prev/next/pause without a login session)
-    is_localhost = (request.remote_addr in ['127.0.0.1', '::1']
-                    or request.host.split(':')[0] == 'localhost')
     data = request.json or {}
-    valid_token = data.get('token', '') == DISPLAY_TOKEN
-    if not (is_localhost or is_authenticated() or valid_token):
-        return jsonify({'error': 'Authentication required'}), 401
     action = data.get('action')
     if action not in ('next', 'prev', 'pause', 'play'):
         return jsonify({'error': 'Invalid action. Use next, prev, pause, or play.'}), 400

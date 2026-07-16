@@ -146,6 +146,13 @@ Set these in `docker-compose.yml` or pass via `-e` flag:
 | Variable | Description | Default |
 |----------|-------------|---------|
 | `TZ` | Timezone | `UTC` |
+| `DISPLAY_SESSION_LIFETIME_SECONDS` | Display session lifetime | `2592000` |
+| `BEHIND_PROXY` | Trust one proxy hop; only safe when Flask is exclusively behind a trusted proxy | unset |
+| `SECURE_COOKIES` | Always mark session cookies Secure | unset |
+
+The bundled Compose configuration enables `BEHIND_PROXY=1` safely because the Flask
+container does not publish a host port and is reachable externally only through Caddy.
+Do not enable it for a directly exposed Flask process or container.
 
 ### Volumes
 
