@@ -1,4 +1,4 @@
-"""Shared fixtures for pi-photo-frame tests."""
+"""Shared fixtures for OpenFotoFrame tests."""
 
 import io
 import json

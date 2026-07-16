@@ -1,6 +1,6 @@
 # 🐳 Docker Deployment Guide
 
-This guide explains how to run Pi Photo Frame in a Docker container.
+This guide explains how to run OpenFotoFrame in a Docker container.
 
 ## Prerequisites
 
@@ -14,7 +14,7 @@ This guide explains how to run Pi Photo Frame in a Docker container.
 
 ```bash
 # Clone or copy the files to your server
-cd pi-photo-frame
+cd off
 
 # Start the container
 docker compose up -d
@@ -30,16 +30,16 @@ docker compose down
 
 ```bash
 # Build the image
-docker build -t pi-photo-frame .
+docker build -t openfotoframe .
 
 # Run the container
 docker run -d \
-  --name pi-photo-frame \
+  --name openfotoframe \
   --restart unless-stopped \
   -p 5000:5000 \
   -v photoframe_uploads:/app/uploads \
   -v photoframe_data:/app/data \
-  pi-photo-frame
+  openfotoframe
 ```
 
 ## Access the Application
@@ -86,13 +86,13 @@ sudo apt-get install docker-compose-plugin
 
 ```bash
 # Copy files to Pi (from your computer)
-scp -r pi-photo-frame pi@raspberrypi.local:~/
+scp -r off pi@raspberrypi.local:~/
 
 # SSH into Pi
 ssh pi@raspberrypi.local
 
 # Start the container
-cd pi-photo-frame
+cd off
 docker compose up -d
 ```
 
@@ -108,7 +108,7 @@ mkdir -p ~/.config/autostart
 cat > ~/.config/autostart/photo-frame-kiosk.desktop << 'EOF'
 [Desktop Entry]
 Type=Application
-Name=Photo Frame Kiosk
+Name=OpenFotoFrame Kiosk
 Exec=/home/pi/start-kiosk.sh
 X-GNOME-Autostart-enabled=true
 EOF

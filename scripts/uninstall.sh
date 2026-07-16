@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ============================================================
-# Pi Photo Frame - Uninstall
+# OpenFotoFrame - Uninstall
 # ============================================================
 #
 # Usage: ./scripts/uninstall.sh
@@ -24,7 +24,7 @@ error() { echo -e "${RED}[ERROR]${NC} $1"; }
 
 echo ""
 echo "======================================"
-echo "  Pi Photo Frame - Uninstall"
+echo "  OpenFotoFrame - Uninstall"
 echo "======================================"
 echo ""
 warn "This will stop and remove all containers, images, and volumes."

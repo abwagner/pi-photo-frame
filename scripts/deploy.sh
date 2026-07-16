@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ============================================================
-# Pi Photo Frame - Manual Deploy
+# OpenFotoFrame - Manual Deploy
 # ============================================================
 # Usage: ./scripts/deploy.sh
 # Pulls latest code from main and rebuilds containers.
