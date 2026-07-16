@@ -2654,7 +2654,7 @@ def too_large(e):
 def apply_browser_security_headers(response):
     """Apply browser protections even when no external proxy is present."""
     response.headers['X-Content-Type-Options'] = 'nosniff'
-    response.headers['Referrer-Policy'] = 'no-referrer'
+    response.headers['Referrer-Policy'] = 'same-origin'
     response.headers['X-Frame-Options'] = 'DENY'
     response.headers['Permissions-Policy'] = 'camera=(), microphone=(), geolocation=()'
     response.headers['Content-Security-Policy'] = (

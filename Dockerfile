@@ -32,6 +32,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY app.py .
 COPY render_display.py .
 COPY templates templates/
+COPY static static/
 
 # Create directories for persistent data
 RUN mkdir -p /app/uploads /app/uploads/thumbnails /app/data /app/data/rclone && \
