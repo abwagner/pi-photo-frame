@@ -453,6 +453,9 @@ requirement because only Caddy publishes host ports.
 | `/api/tv-schedules` | GET/POST | User/Admin | Get or save TV power schedules |
 | `/api/cec/status` | GET | User | Check if CEC is available |
 | `/api/cec/test` | POST | Admin | Send test CEC command (on/standby) |
+| `/api/cec/register` | POST | CEC Bearer | Register a display-side CEC agent |
+| `/api/cec/pending` | GET | CEC Bearer | Dequeue an `on` or `standby` command |
+| `/api/cec/agent-token` | GET | Admin | Retrieve the separate CEC agent token (`no-store`) |
 | `/api/network-info` | GET | Admin | Get local and Tailscale IP addresses |
 | `/api/maintenance-window` | GET | None | Check if deploy is safe (TV off) |
 | `/api/reorder` | POST | User | Reorder images |
@@ -472,6 +475,15 @@ requirement because only Caddy publishes host ports.
 | `/api/admin/users` | POST | Admin | Create user |
 | `/api/admin/users/<user>` | DELETE | Admin | Delete user |
 | `/api/admin/users/<user>/password` | POST | Admin | Reset password |
+
+### Display-side CEC agent
+
+The CEC agent does not use the display enrollment secret or browser session. It
+authenticates only with `Authorization: Bearer <CEC_AGENT_TOKEN>`. In display-only
+installations, place the token in `/etc/pi-photo-frame/cec-agent-token`, owned by
+the kiosk service user and mode `0600`. The agent reads it from that file and passes
+it to curl through standard input, so the value is absent from URLs and process
+arguments. Set `CEC_AGENT_TOKEN_FILE` only when using a different protected path.
 
 ## Troubleshooting
 

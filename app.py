@@ -114,6 +114,21 @@ try:
 except OSError:
     pass
 
+# Separate machine credential for the display-side CEC scheduling agent.
+CEC_AGENT_TOKEN_FILE = DATA_FOLDER / '.cec_agent_token'
+CEC_AGENT_TOKEN = os.environ.get('CEC_AGENT_TOKEN', '').strip()
+if not CEC_AGENT_TOKEN:
+    if CEC_AGENT_TOKEN_FILE.exists():
+        CEC_AGENT_TOKEN = CEC_AGENT_TOKEN_FILE.read_text().strip()
+    else:
+        CEC_AGENT_TOKEN = secrets.token_urlsafe(32)
+        CEC_AGENT_TOKEN_FILE.write_text(CEC_AGENT_TOKEN)
+try:
+    if CEC_AGENT_TOKEN_FILE.exists():
+        os.chmod(CEC_AGENT_TOKEN_FILE, 0o600)
+except OSError:
+    pass
+
 # Session cookie security
 app.config['SESSION_COOKIE_HTTPONLY'] = True
 app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
@@ -319,6 +334,25 @@ def display_api_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
         if not display_access_ok():
+            return jsonify({'error': 'Authentication required'}), 401
+        return f(*args, **kwargs)
+    return decorated_function
+
+
+def cec_agent_authenticated():
+    """Authenticate the CEC machine agent exclusively with a Bearer token."""
+    authorization = request.headers.get('Authorization', '')
+    scheme, separator, credential = authorization.partition(' ')
+    if separator != ' ' or scheme != 'Bearer' or not credential or ' ' in credential:
+        return False
+    return secrets.compare_digest(credential, CEC_AGENT_TOKEN)
+
+
+def cec_agent_required(f):
+    """Return 401 unless the request has the dedicated CEC bearer credential."""
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if not cec_agent_authenticated():
             return jsonify({'error': 'Authentication required'}), 401
         return f(*args, **kwargs)
     return decorated_function
@@ -1984,25 +2018,33 @@ def api_get_tv_schedules():
 
 
 @app.route('/api/cec/register', methods=['POST'])
+@csrf.exempt
+@cec_agent_required
 def api_cec_register():
-    """Display-only Pi announces it has a local CEC device and can execute commands.
-    Called once on cec-agent startup. Uses the display token for auth."""
-    data = request.json or {}
-    if data.get('token', '') != DISPLAY_TOKEN:
-        return jsonify({'error': 'Authentication required'}), 401
+    """Allow the authenticated display-side agent to register availability."""
     global _cec_display_has_cec
     _cec_display_has_cec = True
     return jsonify({'success': True})
 
 
 @app.route('/api/cec/pending', methods=['GET'])
+@cec_agent_required
 def api_cec_pending():
     """Return and dequeue the oldest pending CEC command for a remote display agent.
     Returns {command: 'on'|'standby'} or {command: null} if nothing is queued."""
-    if request.args.get('token', '') != DISPLAY_TOKEN:
-        return jsonify({'error': 'Authentication required'}), 401
     command = _cec_queue.pop(0) if _cec_queue else None
+    if command not in (None, 'on', 'standby'):
+        command = None
     return jsonify({'command': command})
+
+
+@app.get('/api/cec/agent-token')
+@api_admin_required
+def api_cec_agent_token():
+    """Return the separate CEC token to an administrator for agent installation."""
+    response = jsonify({'cec_agent_token': CEC_AGENT_TOKEN})
+    response.headers['Cache-Control'] = 'no-store, private'
+    return response
 
 
 @app.route('/api/tv-schedules', methods=['POST'])

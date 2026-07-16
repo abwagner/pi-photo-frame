@@ -7,7 +7,8 @@
 # capability with the backend, then polls for queued commands
 # and executes them locally via cec-ctl.
 #
-# Usage: ./scripts/cec-agent.sh <backend-url> <display-token>
+# Usage: ./scripts/cec-agent.sh <backend-url>
+# Token: /etc/pi-photo-frame/cec-agent-token (0600), or CEC_AGENT_TOKEN_FILE
 #
 # Started automatically by start_kiosk.sh when CEC is enabled.
 # Requires: cec-utils (apt install cec-utils)
@@ -15,12 +16,25 @@
 set -euo pipefail
 
 BACKEND_URL="${1:-}"
-TOKEN="${2:-}"
+TOKEN_FILE="${CEC_AGENT_TOKEN_FILE:-/etc/pi-photo-frame/cec-agent-token}"
 POLL_INTERVAL=30   # seconds between polls
 CEC_DEVICE="/dev/cec0"
 
-if [[ -z "$BACKEND_URL" || -z "$TOKEN" ]]; then
-    echo "[CEC] Usage: $0 <backend-url> <display-token>"
+if [[ -z "$BACKEND_URL" ]]; then
+    echo "[CEC] Usage: $0 <backend-url>"
+    exit 1
+fi
+if [[ ! -f "$TOKEN_FILE" ]]; then
+    echo "[CEC] CEC agent token file is missing."
+    exit 1
+fi
+if [[ "$(stat -c '%a' "$TOKEN_FILE" 2>/dev/null || stat -f '%Lp' "$TOKEN_FILE")" != "600" ]]; then
+    echo "[CEC] CEC agent token file must have mode 0600."
+    exit 1
+fi
+IFS= read -r CEC_AGENT_TOKEN < "$TOKEN_FILE"
+if [[ -z "$CEC_AGENT_TOKEN" ]]; then
+    echo "[CEC] CEC agent token file is empty."
     exit 1
 fi
 
@@ -50,12 +64,15 @@ fi
 
 log "CEC device found at $CEC_DEVICE."
 
+# Supply the secret through curl's stdin config so it never appears in argv.
+authenticated_curl() {
+    printf 'header = "Authorization: Bearer %s"\n' "$CEC_AGENT_TOKEN" | curl --config - "$@"
+}
+
 # Register with backend — tells it a CEC-capable display is available
 register() {
     local response
-    response=$(curl -sf -X POST \
-        -H "Content-Type: application/json" \
-        -d "{\"token\": \"$TOKEN\"}" \
+    response=$(authenticated_curl -sf -X POST \
         --max-time 10 \
         "$BACKEND_URL/api/cec/register" 2>/dev/null) || true
 
@@ -69,9 +86,9 @@ register() {
 
 # Fetch and dequeue the oldest pending command from the backend
 fetch_pending() {
-    curl -sf \
+    authenticated_curl -sf \
         --max-time 10 \
-        "$BACKEND_URL/api/cec/pending?token=$TOKEN" 2>/dev/null || echo ""
+        "$BACKEND_URL/api/cec/pending" 2>/dev/null || echo ""
 }
 
 # Execute a CEC command locally

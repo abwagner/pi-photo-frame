@@ -178,8 +178,10 @@ If you use the TV schedule feature (auto on/off via HDMI-CEC), be aware that
 `/dev/cec0` is physically attached to the Pi, not the server. After migration,
 the CEC agent runs on the Pi in display-only mode and polls the backend for
 scheduled commands to execute locally. See the display-only install prompts
-for setup — it will ask whether this Pi has CEC support and configure the agent
-automatically.
+for setup. Retrieve the dedicated token from `GET /api/cec/agent-token` as an
+administrator. The installer stores it in `/etc/pi-photo-frame/cec-agent-token`,
+owned by the kiosk user with mode `0600`; it is never shared with display enrollment
+or included in URLs, generated scripts, logs, or process arguments.
 
 ### Multiple display Pis
 
