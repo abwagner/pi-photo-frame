@@ -1,7 +1,10 @@
 """Tests for TV schedule and CEC control API endpoints."""
 
 import json
+from pathlib import Path
 from unittest.mock import patch
+
+import app as photo_app
 
 
 def test_get_tv_schedules_requires_auth(client):
@@ -125,6 +128,88 @@ def test_cec_test_invalid_command(auth_client):
                             data=json.dumps({'command': 'reboot'}),
                             content_type='application/json')
     assert resp.status_code == 400
+
+
+# ===== Remote CEC agent authentication =====
+
+def _cec_headers(token=None):
+    return {'Authorization': f'Bearer {token or photo_app.CEC_AGENT_TOKEN}'}
+
+
+def _external_request_args():
+    return {'environ_base': {'REMOTE_ADDR': '192.0.2.10'}, 'headers': {'Host': 'frame.example'}}
+
+
+def test_cec_register_accepts_dedicated_bearer_without_csrf(client, app):
+    app.config['WTF_CSRF_ENABLED'] = True
+    resp = client.post('/api/cec/register', headers={
+        **_external_request_args()['headers'],
+        **_cec_headers(),
+    }, environ_base=_external_request_args()['environ_base'])
+    assert resp.status_code == 200
+    assert resp.get_json()['success'] is True
+
+
+def test_cec_auth_missing_malformed_and_incorrect_return_401(client):
+    auth_values = (None, 'Basic abc', 'Bearer', 'bearer test-cec-agent-token', 'Bearer wrong')
+    for authorization in auth_values:
+        headers = {'Host': 'frame.example'}
+        if authorization:
+            headers['Authorization'] = authorization
+        resp = client.post('/api/cec/register', headers=headers,
+                           environ_base={'REMOTE_ADDR': '192.0.2.10'})
+        assert resp.status_code == 401
+
+
+def test_display_credential_cannot_call_cec_endpoint(client):
+    client.post('/api/display/enroll', json={
+        'enrollment_secret': photo_app.DISPLAY_TOKEN,
+    }, base_url='https://frame.example', environ_base={'REMOTE_ADDR': '192.0.2.10'})
+    resp = client.post('/api/cec/register', base_url='https://frame.example',
+                       environ_base={'REMOTE_ADDR': '192.0.2.10'})
+    assert resp.status_code == 401
+
+
+def test_cec_credential_cannot_access_display_api(client):
+    resp = client.get('/api/images', headers={
+        'Host': 'frame.example',
+        **_cec_headers(),
+    }, environ_base={'REMOTE_ADDR': '192.0.2.10'})
+    assert resp.status_code == 401
+
+
+def test_cec_token_is_not_accepted_from_query_or_json(client):
+    external = _external_request_args()
+    query_resp = client.get(f'/api/cec/pending?token={photo_app.CEC_AGENT_TOKEN}', **external)
+    json_resp = client.post('/api/cec/register', json={'token': photo_app.CEC_AGENT_TOKEN}, **external)
+    assert query_resp.status_code == 401
+    assert json_resp.status_code == 401
+
+
+def test_cec_pending_only_returns_safe_commands(client):
+    photo_app._cec_queue[:] = ['reboot', 'on', 'standby']
+    headers = {'Host': 'frame.example', **_cec_headers()}
+    kwargs = {'headers': headers, 'environ_base': {'REMOTE_ADDR': '192.0.2.10'}}
+    assert client.get('/api/cec/pending', **kwargs).get_json() == {'command': None}
+    assert client.get('/api/cec/pending', **kwargs).get_json() == {'command': 'on'}
+    assert client.get('/api/cec/pending', **kwargs).get_json() == {'command': 'standby'}
+
+
+def test_cec_agent_token_endpoint_requires_admin_and_is_no_store(client, auth_client):
+    assert client.get('/api/cec/agent-token').status_code == 401
+    resp = auth_client.get('/api/cec/agent-token')
+    assert resp.status_code == 200
+    assert resp.get_json()['cec_agent_token'] == photo_app.CEC_AGENT_TOKEN
+    assert resp.headers['Cache-Control'] == 'no-store, private'
+
+
+def test_cec_agent_script_keeps_token_out_of_urls_and_arguments():
+    script = (Path(__file__).parent.parent / 'scripts' / 'cec-agent.sh').read_text()
+    assert '?token=' not in script
+    assert '<display-token>' not in script
+    assert 'Authorization: Bearer %s' in script
+    assert 'curl --config -' in script
+    assert 'CEC_AGENT_TOKEN_FILE' in script
 
 
 # ===== cec-ctl integration unit tests =====

@@ -41,6 +41,10 @@ def app(tmp_dirs):
     original_display_generation_file = photo_app.DISPLAY_SESSION_GENERATION_FILE
     original_display_token = photo_app.DISPLAY_TOKEN
     original_display_generation = photo_app.DISPLAY_SESSION_GENERATION
+    original_cec_token_file = photo_app.CEC_AGENT_TOKEN_FILE
+    original_cec_token = photo_app.CEC_AGENT_TOKEN
+    original_cec_registered = photo_app._cec_display_has_cec
+    original_cec_queue = list(photo_app._cec_queue)
 
     thumb_dir = upload_dir / "thumbnails"
     thumb_dir.mkdir()
@@ -55,6 +59,10 @@ def app(tmp_dirs):
     photo_app.DISPLAY_SESSION_GENERATION_FILE = data_dir / ".display_session_generation"
     photo_app.DISPLAY_TOKEN = "test-display-enrollment-secret"
     photo_app.DISPLAY_SESSION_GENERATION = 1
+    photo_app.CEC_AGENT_TOKEN_FILE = data_dir / ".cec_agent_token"
+    photo_app.CEC_AGENT_TOKEN = "test-cec-agent-token"
+    photo_app._cec_display_has_cec = False
+    photo_app._cec_queue.clear()
     photo_app.DISPLAY_TOKEN_FILE.write_text(photo_app.DISPLAY_TOKEN)
     photo_app.DISPLAY_SESSION_GENERATION_FILE.write_text("1")
     photo_app.app.config['UPLOAD_FOLDER'] = upload_dir
@@ -76,6 +84,10 @@ def app(tmp_dirs):
     photo_app.DISPLAY_SESSION_GENERATION_FILE = original_display_generation_file
     photo_app.DISPLAY_TOKEN = original_display_token
     photo_app.DISPLAY_SESSION_GENERATION = original_display_generation
+    photo_app.CEC_AGENT_TOKEN_FILE = original_cec_token_file
+    photo_app.CEC_AGENT_TOKEN = original_cec_token
+    photo_app._cec_display_has_cec = original_cec_registered
+    photo_app._cec_queue[:] = original_cec_queue
 
 
 @pytest.fixture

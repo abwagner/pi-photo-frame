@@ -448,7 +448,21 @@ setup_display_only() {
     # CEC receives a separate bearer credential; never reuse display enrollment.
     local cec_launch=""
     if [[ "$cec_enabled" == true ]]; then
-        warn "CEC agent setup requires a separate CEC agent token and will be configured after backend enrollment."
+        echo ""
+        echo "  Get the CEC agent token from the backend administrator endpoint:"
+        echo "    GET /api/cec/agent-token"
+        local cec_agent_token=""
+        while [[ -z "$cec_agent_token" ]]; do
+            read -rsp "  CEC agent token: " cec_agent_token
+            echo ""
+        done
+        sudo mkdir -p /etc/pi-photo-frame
+        printf '%s\n' "$cec_agent_token" | sudo tee /etc/pi-photo-frame/cec-agent-token >/dev/null
+        sudo chmod 0600 /etc/pi-photo-frame/cec-agent-token
+        sudo chown "$USER:$(id -gn)" /etc/pi-photo-frame/cec-agent-token
+        unset cec_agent_token
+        cec_launch="# Start CEC agent for TV power control (runs in background)
+\"$PROJECT_DIR/scripts/cec-agent.sh\" \"$backend_url\" &"
     fi
 
     info "Creating kiosk start script..."
@@ -523,7 +537,9 @@ EOF
     echo "  First launch will prompt once for the display enrollment secret."
     echo ""
     if [[ "$cec_enabled" == true ]]; then
-        echo "  CEC TV power control was requested; install its separate agent token before starting it."
+        echo "  CEC TV power control: enabled with a separate protected agent token."
+        echo "  Configure schedules in the backend admin UI (Settings → TV Schedule)."
+        echo "  Commands execute on this Pi within ~30 seconds of their scheduled time."
         echo ""
     fi
     echo "  Chromium restarts daily at 4:00 AM to prevent memory leaks."

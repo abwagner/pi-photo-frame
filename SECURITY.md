@@ -34,3 +34,9 @@ Rotating the enrollment secret immediately invalidates every existing display se
 Set `BEHIND_PROXY=1` only when the application is reachable exclusively through a
 trusted reverse proxy that overwrites forwarded headers. When Flask is directly
 exposed, leave it disabled so client-supplied forwarded addresses are ignored.
+
+The display-side CEC scheduling agent has a separate `CEC_AGENT_TOKEN`; display
+enrollment credentials and browser sessions cannot register an agent or dequeue
+commands. Store the agent token in a mode-`0600` file and send it only in the
+`Authorization: Bearer` header. Never place it in JSON, query strings, service
+arguments, or logs.
