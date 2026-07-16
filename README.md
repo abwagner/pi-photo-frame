@@ -524,6 +524,15 @@ HSTS is off by default. Enable `ENABLE_HSTS=1` only together with
 publicly trusted certificate. Do not enable it for raw IPs, localhost, or self-signed
 certificate modes.
 
+### Image decoding limits
+
+Uploads retain the 50 MB request cap and are fully decoded and verified before
+perceptual hashing, thumbnailing, snapshots, or metadata changes. Pillow
+decompression-bomb warnings, corrupt data, decoded images over 80 million pixels,
+or either dimension over 20,000 pixels return a friendly 400 and leave no partial
+file. The limits can be adjusted with `MAX_IMAGE_PIXELS` and `MAX_IMAGE_DIMENSION`;
+the defaults accommodate ordinary modern phone photos.
+
 ## Troubleshooting
 
 ### Forgot admin password?

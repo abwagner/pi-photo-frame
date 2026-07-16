@@ -153,6 +153,8 @@ Set these in `docker-compose.yml` or pass via `-e` flag:
 | `BEHIND_PROXY` | Trust one proxy hop; only safe when Flask is exclusively behind a trusted proxy | unset |
 | `SECURE_COOKIES` | Always mark session cookies Secure | unset |
 | `CEC_AGENT_TOKEN` | Dedicated display-side CEC bearer token; generated in the data volume when unset | generated |
+| `MAX_IMAGE_PIXELS` | Maximum decoded pixels per uploaded image | `80000000` |
+| `MAX_IMAGE_DIMENSION` | Maximum decoded width or height | `20000` |
 
 The bundled Compose configuration enables `BEHIND_PROXY=1` safely because the Flask
 container does not publish a host port and is reachable externally only through Caddy.

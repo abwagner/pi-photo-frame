@@ -1,6 +1,12 @@
 """Tests for the upload endpoint."""
 
+import io
+from unittest.mock import patch
+
+from PIL import Image
+
 from tests.conftest import make_test_image
+import app as photo_app
 
 
 def test_upload_requires_auth(client):
@@ -83,3 +89,47 @@ def test_upload_stores_scale_default(auth_client):
     images = gallery_resp.get_json()['images']
     img = next(i for i in images if i['filename'] == fname)
     assert img.get('scale', 1.0) == 1.0
+
+
+def test_invalid_image_returns_friendly_400_before_hashing(auth_client):
+    with patch('app.compute_phash') as compute_hash:
+        resp = auth_client.post('/api/upload',
+                                data={'files': (io.BytesIO(b'not really png'), 'bad.png')},
+                                content_type='multipart/form-data')
+    assert resp.status_code == 400
+    assert 'valid supported image' in resp.get_json()['errors'][0]
+    compute_hash.assert_not_called()
+    assert list(photo_app.UPLOAD_FOLDER.glob('*.upload')) == []
+    assert [path for path in photo_app.UPLOAD_FOLDER.iterdir()
+            if path.is_file() and path.name != 'thumbnails'] == []
+
+
+def test_excessive_dimension_is_rejected_without_partial_file(auth_client):
+    image = Image.new('RGB', (photo_app.MAX_IMAGE_DIMENSION + 1, 1), 'red')
+    buffer = io.BytesIO()
+    image.save(buffer, format='PNG')
+    buffer.seek(0)
+    resp = auth_client.post('/api/upload', data={'files': (buffer, 'wide.png')},
+                            content_type='multipart/form-data')
+    assert resp.status_code == 400
+    assert 'dimensions exceed' in resp.get_json()['errors'][0]
+    assert list(photo_app.UPLOAD_FOLDER.glob('*.upload')) == []
+
+
+def test_decompression_bomb_warning_is_converted_to_validation_error(tmp_path):
+    candidate = tmp_path / 'bomb.png'
+    candidate.write_bytes(b'placeholder')
+    with patch('app.Image.open', side_effect=Image.DecompressionBombWarning('bomb')):
+        try:
+            photo_app.validate_image(candidate)
+            assert False, 'expected validation error'
+        except ValueError as error:
+            assert 'too large' in str(error)
+
+
+def test_duplicate_check_rejects_invalid_decode_and_cleans_temp(auth_client):
+    resp = auth_client.post('/api/check-duplicates',
+                            data={'files': (io.BytesIO(b'bad'), 'bad.png')},
+                            content_type='multipart/form-data')
+    assert resp.status_code == 400
+    assert 'valid supported image' in resp.get_json()['errors'][0]

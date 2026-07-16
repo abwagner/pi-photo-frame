@@ -4,6 +4,31 @@ This guide covers migrating from a single Raspberry Pi running both the backend
 (Flask + Caddy) and a Chromium kiosk display, to a split architecture where the
 backend runs on a separate server and the Pi runs in display-only mode.
 
+## Security release checklist
+
+For upgrades from tokenized kiosk releases:
+
+1. Back up the data and uploads volumes. The existing `.display_token` is retained
+   only as the one-time enrollment secret.
+2. Rebuild the backend, then update every kiosk to launch the clean `/display` URL.
+3. Enter the display enrollment secret once on each remote display. Rotate it after
+   all displays are migrated; rotation immediately invalidates earlier sessions.
+4. Retrieve the separate CEC agent token, install it at
+   `/etc/pi-photo-frame/cec-agent-token` with mode `0600`, and remove old display-token
+   arguments from services and scripts.
+5. Remove tokenized URLs from browser/shell history, generated scripts, service files,
+   and retained proxy logs.
+6. Consume the random one-time administrator password locally on new installations;
+   all new and reset passwords must contain at least 12 characters.
+7. Review MFA mode/method settings. Passkeys require a stable, matching trusted HTTPS
+   RP ID and origin; TOTP remains available for self-signed and raw-IP deployments.
+8. Leave HSTS disabled unless the configured exact hostname has a stable publicly
+   trusted certificate. Enable `BEHIND_PROXY` only when Flask is exclusively behind
+   a trusted proxy that overwrites forwarded headers.
+
+Query-string display and CEC credentials are rejected; there is no indefinite
+compatibility mode.
+
 ## Why split?
 
 - Run the backend on a more powerful machine (server, NAS, VPS)
