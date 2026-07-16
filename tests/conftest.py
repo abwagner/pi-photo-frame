@@ -41,6 +41,7 @@ def app(tmp_dirs):
     original_gallery = photo_app.GALLERY_FILE
     original_initial_password = photo_app.INITIAL_ADMIN_PASSWORD_FILE
     original_security_log = photo_app.SECURITY_LOG_FILE
+    original_mfa_key = photo_app.MFA_ENCRYPTION_KEY_FILE
     original_display_token_file = photo_app.DISPLAY_TOKEN_FILE
     original_display_generation_file = photo_app.DISPLAY_SESSION_GENERATION_FILE
     original_display_token = photo_app.DISPLAY_TOKEN
@@ -61,6 +62,7 @@ def app(tmp_dirs):
     photo_app.GALLERY_FILE = data_dir / "gallery.json"
     photo_app.INITIAL_ADMIN_PASSWORD_FILE = data_dir / ".initial_admin_password"
     photo_app.SECURITY_LOG_FILE = data_dir / "security-events.jsonl"
+    photo_app.MFA_ENCRYPTION_KEY_FILE = data_dir / ".mfa_key"
     photo_app.DISPLAY_TOKEN_FILE = data_dir / ".display_token"
     photo_app.DISPLAY_SESSION_GENERATION_FILE = data_dir / ".display_session_generation"
     photo_app.DISPLAY_TOKEN = "test-display-enrollment-secret"
@@ -88,6 +90,7 @@ def app(tmp_dirs):
     photo_app.GALLERY_FILE = original_gallery
     photo_app.INITIAL_ADMIN_PASSWORD_FILE = original_initial_password
     photo_app.SECURITY_LOG_FILE = original_security_log
+    photo_app.MFA_ENCRYPTION_KEY_FILE = original_mfa_key
     photo_app.DISPLAY_TOKEN_FILE = original_display_token_file
     photo_app.DISPLAY_SESSION_GENERATION_FILE = original_display_generation_file
     photo_app.DISPLAY_TOKEN = original_display_token

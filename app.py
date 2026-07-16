@@ -16,7 +16,9 @@ import time
 import subprocess
 import threading
 import logging
+import base64
 from ipaddress import ip_address
+from urllib.parse import urlparse
 from datetime import datetime
 from pathlib import Path
 from functools import wraps
@@ -31,6 +33,15 @@ import tempfile
 from PIL import Image, ImageOps
 from apscheduler.schedulers.background import BackgroundScheduler
 import imagehash
+import pyotp
+from cryptography.fernet import Fernet, InvalidToken
+from webauthn import (
+    generate_registration_options, verify_registration_response,
+    generate_authentication_options, verify_authentication_response, options_to_json,
+)
+from webauthn.helpers.structs import (
+    PublicKeyCredentialDescriptor, UserVerificationRequirement,
+)
 
 from render_display import (
     render_snapshot as _render_snapshot,
@@ -62,6 +73,7 @@ SETTINGS_FILE = DATA_FOLDER / 'settings.json'
 USERS_FILE = DATA_FOLDER / 'users.json'
 INITIAL_ADMIN_PASSWORD_FILE = DATA_FOLDER / '.initial_admin_password'
 SECURITY_LOG_FILE = DATA_FOLDER / 'security-events.jsonl'
+MFA_ENCRYPTION_KEY_FILE = DATA_FOLDER / '.mfa_key'
 GALLERY_FILE = DATA_FOLDER / 'gallery.json'
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp'}
 THUMBNAIL_FOLDER = UPLOAD_FOLDER / 'thumbnails'
@@ -181,6 +193,78 @@ def validate_password(password):
     if not isinstance(password, str) or len(password) < MIN_PASSWORD_LENGTH:
         return False, f'Password must be at least {MIN_PASSWORD_LENGTH} characters'
     return True, None
+
+
+def _mfa_cipher():
+    if not MFA_ENCRYPTION_KEY_FILE.exists():
+        MFA_ENCRYPTION_KEY_FILE.write_bytes(Fernet.generate_key())
+        os.chmod(MFA_ENCRYPTION_KEY_FILE, 0o600)
+    return Fernet(MFA_ENCRYPTION_KEY_FILE.read_bytes().strip())
+
+
+def _encrypt_mfa_secret(secret):
+    return _mfa_cipher().encrypt(secret.encode()).decode()
+
+
+def _decrypt_mfa_secret(encrypted):
+    try:
+        return _mfa_cipher().decrypt(encrypted.encode()).decode()
+    except (InvalidToken, ValueError, TypeError):
+        return None
+
+
+def _b64url(value):
+    return base64.urlsafe_b64encode(value).rstrip(b'=').decode()
+
+
+def _b64url_bytes(value):
+    return base64.urlsafe_b64decode(value + '=' * (-len(value) % 4))
+
+
+def _user_mfa(user):
+    return user.setdefault('mfa', {'passkeys': [], 'recovery_code_hashes': []})
+
+
+def user_mfa_methods(username):
+    user = load_users().get(username, {})
+    mfa = user.get('mfa', {})
+    methods = []
+    if mfa.get('totp_secret'):
+        methods.append('totp')
+    if mfa.get('passkeys'):
+        methods.append('passkey')
+    return methods
+
+
+def mfa_required_for(username):
+    settings = load_settings()
+    mode = settings.get('mfa_mode', 'disabled')
+    role = get_user_role(username)
+    return mode == 'required_all' or (mode == 'required_admins' and role == 'admin')
+
+
+def mfa_challenge_required(username):
+    settings = load_settings()
+    if settings.get('mfa_mode', 'disabled') == 'disabled':
+        return False
+    allowed = settings.get('mfa_methods', 'either')
+    methods = user_mfa_methods(username)
+    return any(method in methods for method in (
+        ['totp'] if allowed == 'totp' else ['passkey'] if allowed == 'passkey' else ['totp', 'passkey']
+    ))
+
+
+def passkeys_available():
+    settings = load_settings()
+    origin = settings.get('webauthn_origin', '').strip()
+    rp_id = settings.get('webauthn_rp_id', '').strip()
+    parsed = urlparse(origin)
+    if parsed.scheme != 'https' or not parsed.hostname or parsed.hostname != rp_id:
+        return False
+    try:
+        return not ip_address(rp_id).is_unspecified
+    except ValueError:
+        return rp_id != 'localhost' and '.' in rp_id
 
 def hash_password(password: str, salt: str = None) -> tuple:
     """Hash a password using bcrypt.
@@ -430,6 +514,8 @@ def login_required(f):
             return redirect(url_for('login'))
         if has_default_password(session.get('username')) and request.path != '/change-password':
             return redirect(url_for('change_password', forced=1))
+        if session.get('mfa_enrollment_required') and not request.path.startswith('/mfa'):
+            return redirect(url_for('mfa_page'))
         return f(*args, **kwargs)
     return decorated_function
 
@@ -697,7 +783,11 @@ DEFAULT_SETTINGS = {
     'shuffle': False,
     'image_order': [],
     'target_aspect_ratio': '16:9',
-    'tv_schedules': []
+    'tv_schedules': [],
+    'mfa_mode': 'disabled',
+    'mfa_methods': 'either',
+    'webauthn_rp_id': '',
+    'webauthn_origin': '',
 }
 
 
@@ -1125,12 +1215,23 @@ def login():
         password = request.form.get('password', '')
 
         if verify_user(username, password):
+            session.permanent = True
+            if user_requires_password_change(username):
+                session['authenticated'] = True
+                session['username'] = username
+                log_security_event('login', True, username=username)
+                return redirect(url_for('change_password', forced=1))
+            if mfa_challenge_required(username):
+                session.clear()
+                session['mfa_pending_username'] = username
+                session.permanent = True
+                return redirect(url_for('mfa_challenge_page'))
             session['authenticated'] = True
             session['username'] = username
-            session.permanent = True
             log_security_event('login', True, username=username)
-            if user_requires_password_change(username):
-                return redirect(url_for('change_password', forced=1))
+            if mfa_required_for(username):
+                session['mfa_enrollment_required'] = True
+                return redirect(url_for('mfa_page'))
             return redirect(url_for('upload_page'))
 
         log_security_event('login', False, username=username or None)
@@ -1174,6 +1275,9 @@ def change_password():
         if success:
             log_security_event('password_change', True, username=username)
             if forced:
+                if mfa_required_for(username) and not user_mfa_methods(username):
+                    session['mfa_enrollment_required'] = True
+                    return redirect(url_for('mfa_page'))
                 return redirect(url_for('upload_page'))
             return render_template('change_password.html', success=message,
                                    is_admin=is_admin(), username=username, forced=False)
@@ -1183,6 +1287,300 @@ def change_password():
 
     return render_template('change_password.html', is_admin=is_admin(),
                            username=username, forced=forced)
+
+
+# --- Multi-factor authentication ---
+
+def _generate_recovery_codes(user):
+    codes = [f'{secrets.token_hex(3)}-{secrets.token_hex(3)}' for _ in range(10)]
+    _user_mfa(user)['recovery_code_hashes'] = [hashlib.sha256(c.encode()).hexdigest() for c in codes]
+    return codes
+
+
+def _verify_totp_or_recovery(username, code):
+    users = load_users()
+    user = users.get(username)
+    if not user:
+        return False, None
+    mfa = _user_mfa(user)
+    code_hash = hashlib.sha256(code.strip().lower().encode()).hexdigest()
+    for stored in list(mfa.get('recovery_code_hashes', [])):
+        if secrets.compare_digest(code_hash, stored):
+            mfa['recovery_code_hashes'].remove(stored)
+            save_users(users)
+            return True, 'recovery'
+    secret = _decrypt_mfa_secret(mfa.get('totp_secret', ''))
+    if not secret:
+        return False, None
+    totp = pyotp.TOTP(secret)
+    current = totp.timecode(datetime.now())
+    last = mfa.get('last_totp_counter', -1)
+    for counter in range(current - 1, current + 2):
+        if counter > last and secrets.compare_digest(totp.at(counter * totp.interval), code.strip()):
+            mfa['last_totp_counter'] = counter
+            save_users(users)
+            return True, 'totp'
+    return False, None
+
+
+def _complete_mfa_login(username, method):
+    session.clear()
+    session['authenticated'] = True
+    session['username'] = username
+    session.permanent = True
+    log_security_event('mfa_challenge', True, username=username, method=method)
+    log_security_event('login', True, username=username, mfa_method=method)
+
+
+@app.get('/mfa')
+@login_required
+def mfa_page():
+    username = session.get('username')
+    response = app.make_response(render_template(
+        'mfa.html', methods=user_mfa_methods(username), required=mfa_required_for(username),
+        passkeys_available=passkeys_available(), settings=load_settings(),
+    ))
+    response.headers['Cache-Control'] = 'no-store, private'
+    return response
+
+
+@app.get('/mfa/challenge')
+def mfa_challenge_page():
+    username = session.get('mfa_pending_username')
+    if not username:
+        return redirect(url_for('login'))
+    response = app.make_response(render_template(
+        'mfa_challenge.html', methods=user_mfa_methods(username),
+        passkeys_available=passkeys_available(),
+    ))
+    response.headers['Cache-Control'] = 'no-store, private'
+    return response
+
+
+@app.post('/api/mfa/challenge/totp')
+def api_mfa_challenge_totp():
+    username = session.get('mfa_pending_username')
+    if not username:
+        return jsonify({'error': 'MFA login is not pending'}), 401
+    ok, method = _verify_totp_or_recovery(username, (request.json or {}).get('code', ''))
+    if not ok:
+        log_security_event('mfa_challenge', False, username=username, method='totp_or_recovery')
+        return jsonify({'error': 'Invalid or previously used code'}), 401
+    _complete_mfa_login(username, method)
+    return jsonify({'success': True, 'redirect': url_for('upload_page')})
+
+
+@app.post('/api/mfa/totp/start')
+@api_login_required
+def api_mfa_totp_start():
+    if load_settings().get('mfa_methods') == 'passkey':
+        return jsonify({'error': 'TOTP is disabled by policy'}), 403
+    users = load_users()
+    username = session['username']
+    secret = pyotp.random_base32()
+    _user_mfa(users[username])['pending_totp_secret'] = _encrypt_mfa_secret(secret)
+    save_users(users)
+    uri = pyotp.TOTP(secret).provisioning_uri(name=username, issuer_name='OpenFotoFrame')
+    response = jsonify({'secret': secret, 'provisioning_uri': uri})
+    response.headers['Cache-Control'] = 'no-store, private'
+    return response
+
+
+@app.post('/api/mfa/totp/verify')
+@api_login_required
+def api_mfa_totp_verify():
+    users = load_users()
+    username = session['username']
+    mfa = _user_mfa(users[username])
+    secret = _decrypt_mfa_secret(mfa.get('pending_totp_secret', ''))
+    code = (request.json or {}).get('code', '')
+    if not secret or not pyotp.TOTP(secret).verify(code, valid_window=1):
+        log_security_event('mfa_enrollment', False, username=username, method='totp')
+        return jsonify({'error': 'Invalid verification code'}), 400
+    mfa['totp_secret'] = _encrypt_mfa_secret(secret)
+    mfa['last_totp_counter'] = pyotp.TOTP(secret).timecode(datetime.now())
+    mfa.pop('pending_totp_secret', None)
+    codes = _generate_recovery_codes(users[username])
+    save_users(users)
+    session.pop('mfa_enrollment_required', None)
+    log_security_event('mfa_enrollment', True, username=username, method='totp')
+    response = jsonify({'success': True, 'recovery_codes': codes})
+    response.headers['Cache-Control'] = 'no-store, private'
+    return response
+
+
+@app.delete('/api/mfa/totp')
+@api_login_required
+def api_mfa_totp_remove():
+    users = load_users()
+    username = session['username']
+    mfa = _user_mfa(users[username])
+    if not mfa.get('totp_secret'):
+        return jsonify({'error': 'TOTP is not enrolled'}), 404
+    mfa.pop('totp_secret', None)
+    mfa.pop('last_totp_counter', None)
+    if not mfa.get('passkeys'):
+        mfa['recovery_code_hashes'] = []
+        if mfa_required_for(username):
+            session['mfa_enrollment_required'] = True
+    save_users(users)
+    log_security_event('mfa_removal', True, username=username, method='totp')
+    return jsonify({'success': True})
+
+
+def _webauthn_settings():
+    settings = load_settings()
+    if not passkeys_available():
+        return None
+    return settings['webauthn_rp_id'], settings['webauthn_origin']
+
+
+@app.post('/api/mfa/passkeys/register/options')
+@api_login_required
+def api_passkey_register_options():
+    config = _webauthn_settings()
+    if not config or load_settings().get('mfa_methods') == 'totp':
+        return jsonify({'error': 'Passkey enrollment requires a configured stable HTTPS origin'}), 400
+    username = session['username']
+    user = load_users()[username]
+    credentials = [PublicKeyCredentialDescriptor(id=_b64url_bytes(p['credential_id']))
+                   for p in _user_mfa(user).get('passkeys', [])]
+    options = generate_registration_options(
+        rp_id=config[0], rp_name='OpenFotoFrame',
+        user_id=hashlib.sha256(username.encode()).digest(), user_name=username,
+        exclude_credentials=credentials,
+    )
+    session['webauthn_registration_challenge'] = _b64url(options.challenge)
+    return jsonify(json.loads(options_to_json(options)))
+
+
+@app.post('/api/mfa/passkeys/register/verify')
+@api_login_required
+def api_passkey_register_verify():
+    config = _webauthn_settings()
+    challenge = session.pop('webauthn_registration_challenge', None)
+    if not config or not challenge:
+        return jsonify({'error': 'Passkey registration is not pending'}), 400
+    data = request.json or {}
+    try:
+        verified = verify_registration_response(
+            credential=data.get('credential'), expected_challenge=_b64url_bytes(challenge),
+            expected_rp_id=config[0], expected_origin=config[1], require_user_verification=True,
+        )
+    except Exception:
+        log_security_event('mfa_enrollment', False, username=session['username'], method='passkey')
+        return jsonify({'error': 'Passkey verification failed'}), 400
+    users = load_users()
+    user = users[session['username']]
+    mfa = _user_mfa(user)
+    mfa.setdefault('passkeys', []).append({
+        'credential_id': _b64url(verified.credential_id),
+        'public_key': _b64url(verified.credential_public_key),
+        'sign_count': verified.sign_count,
+        'name': (data.get('name') or 'Passkey')[:80],
+        'created_at': datetime.now().astimezone().isoformat(),
+        'last_used': None,
+    })
+    codes = _generate_recovery_codes(user) if not mfa.get('recovery_code_hashes') else None
+    save_users(users)
+    session.pop('mfa_enrollment_required', None)
+    log_security_event('mfa_enrollment', True, username=session['username'], method='passkey')
+    response = jsonify({'success': True, 'recovery_codes': codes})
+    response.headers['Cache-Control'] = 'no-store, private'
+    return response
+
+
+@app.post('/api/mfa/passkeys/authenticate/options')
+def api_passkey_authenticate_options():
+    username = session.get('mfa_pending_username')
+    config = _webauthn_settings()
+    if not username or not config:
+        return jsonify({'error': 'Passkey login is unavailable'}), 400
+    passkeys = _user_mfa(load_users()[username]).get('passkeys', [])
+    options = generate_authentication_options(
+        rp_id=config[0],
+        allow_credentials=[PublicKeyCredentialDescriptor(id=_b64url_bytes(p['credential_id'])) for p in passkeys],
+        user_verification=UserVerificationRequirement.REQUIRED,
+    )
+    session['webauthn_authentication_challenge'] = _b64url(options.challenge)
+    return jsonify(json.loads(options_to_json(options)))
+
+
+@app.post('/api/mfa/passkeys/authenticate/verify')
+def api_passkey_authenticate_verify():
+    username = session.get('mfa_pending_username')
+    challenge = session.pop('webauthn_authentication_challenge', None)
+    config = _webauthn_settings()
+    data = request.json or {}
+    users = load_users()
+    passkey = next((p for p in _user_mfa(users.get(username, {})).get('passkeys', [])
+                    if p['credential_id'] == data.get('credential', {}).get('id')), None)
+    if not username or not challenge or not config or not passkey:
+        return jsonify({'error': 'Passkey authentication is not pending'}), 400
+    try:
+        verified = verify_authentication_response(
+            credential=data['credential'], expected_challenge=_b64url_bytes(challenge),
+            expected_rp_id=config[0], expected_origin=config[1],
+            credential_public_key=_b64url_bytes(passkey['public_key']),
+            credential_current_sign_count=passkey['sign_count'], require_user_verification=True,
+        )
+    except Exception:
+        log_security_event('mfa_challenge', False, username=username, method='passkey')
+        return jsonify({'error': 'Passkey verification failed'}), 401
+    passkey['sign_count'] = verified.new_sign_count
+    passkey['last_used'] = datetime.now().astimezone().isoformat()
+    save_users(users)
+    _complete_mfa_login(username, 'passkey')
+    return jsonify({'success': True, 'redirect': url_for('upload_page')})
+
+
+@app.delete('/api/mfa/passkeys/<credential_id>')
+@api_login_required
+def api_remove_passkey(credential_id):
+    users = load_users()
+    username = session['username']
+    passkeys = _user_mfa(users[username]).get('passkeys', [])
+    remaining = [p for p in passkeys if p['credential_id'] != credential_id]
+    if len(remaining) == len(passkeys):
+        return jsonify({'error': 'Passkey not found'}), 404
+    users[username]['mfa']['passkeys'] = remaining
+    save_users(users)
+    log_security_event('mfa_removal', True, username=username, method='passkey')
+    return jsonify({'success': True})
+
+
+@app.delete('/api/admin/users/<username>/mfa')
+@api_admin_required
+def api_admin_reset_mfa(username):
+    users = load_users()
+    if username not in users:
+        return jsonify({'error': 'User not found'}), 404
+    users[username].pop('mfa', None)
+    save_users(users)
+    log_security_event('mfa_admin_reset', True, username=session['username'], target_username=username)
+    return jsonify({'success': True})
+
+
+@app.route('/api/admin/security-settings', methods=['GET', 'POST'])
+@api_admin_required
+def api_security_settings():
+    settings = load_settings()
+    fields = ('mfa_mode', 'mfa_methods', 'webauthn_rp_id', 'webauthn_origin')
+    if request.method == 'GET':
+        return jsonify({field: settings.get(field) for field in fields} |
+                       {'passkeys_available': passkeys_available()})
+    data = request.json or {}
+    if data.get('mfa_mode', settings['mfa_mode']) not in ('disabled', 'optional', 'required_admins', 'required_all'):
+        return jsonify({'error': 'Invalid MFA mode'}), 400
+    if data.get('mfa_methods', settings['mfa_methods']) not in ('totp', 'passkey', 'either'):
+        return jsonify({'error': 'Invalid MFA method policy'}), 400
+    for field in fields:
+        if field in data:
+            settings[field] = data[field].strip() if isinstance(data[field], str) else data[field]
+    save_settings(settings)
+    log_security_event('security_settings_change', True, username=session['username'])
+    return jsonify({field: settings.get(field) for field in fields} |
+                   {'passkeys_available': passkeys_available()})
 
 
 # --- Admin Routes ---

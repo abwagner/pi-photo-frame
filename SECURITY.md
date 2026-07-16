@@ -46,3 +46,9 @@ Structured security events are stored in the protected data volume and contain a
 timestamp, event type, username when known, source IP, and outcome. They must never
 contain passwords, MFA/recovery secrets, display or CEC credentials, cookies, or
 CSRF values.
+
+MFA is configurable as disabled, optional, required for administrators, or required
+for all users. Deployments may allow TOTP, passkeys, or either. Passkeys require a
+stable trusted HTTPS origin whose hostname exactly matches the configured relying-
+party ID. TOTP secrets are encrypted at rest using the mode-`0600` `.mfa_key`; only
+hashes of one-time recovery codes are stored.

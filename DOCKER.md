@@ -158,6 +158,10 @@ The bundled Compose configuration enables `BEHIND_PROXY=1` safely because the Fl
 container does not publish a host port and is reachable externally only through Caddy.
 Do not enable it for a directly exposed Flask process or container.
 
+MFA policy is managed by the administrator security-settings API. Passkeys require
+a stable publicly trusted HTTPS hostname and matching canonical origin. Self-signed,
+raw-IP, and localhost deployments can use TOTP but intentionally cannot enroll passkeys.
+
 ### Volumes
 
 | Volume | Purpose |
