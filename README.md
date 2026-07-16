@@ -4,6 +4,9 @@ A beautiful, web-based digital photo frame with user management, gallery control
 
 ## Features
 
+The proposed multi-display allocator and aspect-aware rendering architecture is
+documented in [docs/MULTI_DISPLAY_DESIGN.md](docs/MULTI_DISPLAY_DESIGN.md).
+
 - **Web Upload Interface** - Upload photos from any device on your network
 - **Multi-User Support** - Admin can create user accounts
 - **Gallery Management** - Show/hide photos, bulk actions, delete
