@@ -510,6 +510,20 @@ When both methods are enrolled and allowed, either TOTP/recovery or a passkey ca
 satisfy the second factor. Administrators can reset MFA with the CSRF-protected
 `DELETE /api/admin/users/<username>/mfa` endpoint; existing secrets are never returned.
 
+### Browser security policy
+
+Flask sets `nosniff`, `no-referrer`, deny-framing, restricted permissions, private
+no-store caching for sensitive responses, and an enforced self-only Content Security
+Policy. Page scripts and stylesheet blocks are versioned static assets; executable
+inline event attributes are not used. Dynamic photo sizing/cropping requires the
+narrow `style-src-attr` exception, while style elements and scripts remain self-only
+and script attributes are disabled.
+
+HSTS is off by default. Enable `ENABLE_HSTS=1` only together with
+`TRUSTED_HTTPS_HOSTNAME=photos.example.com` when that exact stable hostname uses a
+publicly trusted certificate. Do not enable it for raw IPs, localhost, or self-signed
+certificate modes.
+
 ## Troubleshooting
 
 ### Forgot admin password?

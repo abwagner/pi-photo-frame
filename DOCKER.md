@@ -162,6 +162,10 @@ MFA policy is managed by the administrator security-settings API. Passkeys requi
 a stable publicly trusted HTTPS hostname and matching canonical origin. Self-signed,
 raw-IP, and localhost deployments can use TOTP but intentionally cannot enroll passkeys.
 
+Set `ENABLE_HSTS=1` and `TRUSTED_HTTPS_HOSTNAME` only for a stable hostname with a
+publicly trusted certificate. Leave HSTS disabled in the default self-signed mode and
+for raw-IP or localhost access.
+
 ### Volumes
 
 | Volume | Purpose |

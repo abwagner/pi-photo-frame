@@ -52,3 +52,7 @@ for all users. Deployments may allow TOTP, passkeys, or either. Passkeys require
 stable trusted HTTPS origin whose hostname exactly matches the configured relying-
 party ID. TOTP secrets are encrypted at rest using the mode-`0600` `.mfa_key`; only
 hashes of one-time recovery codes are stored.
+
+Browser security headers and CSP are emitted by Flask so they remain active without
+Caddy. HSTS remains disabled unless explicitly enabled for an exact trusted HTTPS
+hostname; it is never emitted for HTTP, localhost, raw IP, or mismatched hosts.

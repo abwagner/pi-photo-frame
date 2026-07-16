@@ -1,0 +1,235 @@
+* {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        html, body {
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            cursor: none;
+        }
+
+        body {
+            background-color: var(--mat-color, #ffffff);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: background-color 0.5s ease;
+        }
+
+        .frame-container {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            /* Dynamic mat sizing via CSS variables */
+            padding-top: var(--mat-padding-vertical, 5%);
+            padding-bottom: var(--mat-padding-vertical, 5%);
+            padding-left: var(--mat-padding-horizontal, 5%);
+            padding-right: var(--mat-padding-horizontal, 5%);
+        }
+
+        .image-wrapper {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        /* Single photo or slide container */
+        .slide {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            opacity: 0;
+            transition: opacity var(--transition-duration, 1s) ease-in-out;
+        }
+
+        .slide.active {
+            opacity: 1;
+            z-index: 1;
+        }
+
+        .slide.previous {
+            opacity: 0;
+            z-index: 0;
+        }
+
+        .slide img {
+            max-width: 100%;
+            max-height: 100%;
+            object-fit: contain;
+        }
+
+        .slide img.cover {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        /* Mat bevel - gradient from outer edge (open) to inner edge (shadow, near image) */
+        .mat-bevel {
+            position: relative;
+            display: inline-flex;
+            line-height: 0;
+            overflow: hidden;
+            padding: var(--bevel-w, 4px);
+            background-color: var(--bevel-mat, #ffffff);
+        }
+        /* Subtle shadow cast by bevel onto the image */
+        .mat-bevel::after {
+            content: '';
+            position: absolute;
+            top: var(--bevel-w, 4px);
+            left: var(--bevel-w, 4px);
+            right: var(--bevel-w, 4px);
+            bottom: var(--bevel-w, 4px);
+            pointer-events: none;
+            z-index: 3;
+            box-shadow: inset 0 1px 2px rgba(0,0,0,0.08);
+        }
+        .mat-bevel > img {
+            box-shadow: none;
+            display: block;
+        }
+
+        /* Shadow effect wrapper */
+        .mat-shadow img {
+            display: block;
+        }
+
+        /* Texture overlays on body */
+        body::before {
+            content: '';
+            position: fixed;
+            inset: 0;
+            pointer-events: none;
+            z-index: 0;
+            opacity: 0;
+        }
+        body.mat-eggshell::before {
+            background-image: url("data:image/svg+xml,%3Csvg width='4' height='4' xmlns='http://www.w3.org/2000/svg'%3E%3Ccircle cx='1' cy='1' r='0.3' fill='%23888'/%3E%3Ccircle cx='3' cy='3' r='0.25' fill='%23888'/%3E%3Ccircle cx='3' cy='0.5' r='0.2' fill='%23888'/%3E%3Ccircle cx='0.5' cy='2.5' r='0.15' fill='%23888'/%3E%3C/svg%3E");
+            background-size: 4px 4px;
+            opacity: 0.05;
+        }
+        body.mat-linen::before {
+            background-image: url("data:image/svg+xml,%3Csvg width='8' height='8' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M0 0h8M0 4h8M0 0v8M4 0v8' stroke='%23888' stroke-width='0.3' fill='none'/%3E%3C/svg%3E");
+            background-size: 8px 8px;
+            opacity: 0.08;
+        }
+        body.mat-suede::before {
+            background-image: url("data:image/svg+xml,%3Csvg width='6' height='6' xmlns='http://www.w3.org/2000/svg'%3E%3Ccircle cx='1' cy='1' r='0.6' fill='%23888'/%3E%3Ccircle cx='4' cy='3' r='0.4' fill='%23888'/%3E%3Ccircle cx='2' cy='5' r='0.5' fill='%23888'/%3E%3Ccircle cx='5' cy='1' r='0.3' fill='%23888'/%3E%3C/svg%3E");
+            background-size: 6px 6px;
+            opacity: 0.06;
+        }
+        body.mat-silk::before {
+            background-image: url("data:image/svg+xml,%3Csvg width='10' height='10' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M0 10L10 0' stroke='%23888' stroke-width='0.4' fill='none'/%3E%3Cpath d='M-2 2L2 -2M8 12L12 8' stroke='%23888' stroke-width='0.3' fill='none'/%3E%3C/svg%3E");
+            background-size: 10px 10px;
+            opacity: 0.06;
+        }
+
+        /* Grid layout for group slides */
+        .slide-grid {
+            display: flex;
+            align-items: center;
+            justify-content: space-evenly;
+            width: 100%;
+            height: 100%;
+        }
+
+        .slide-grid.grid-layout {
+            display: grid;
+            align-items: center;
+            justify-items: center;
+            justify-content: space-evenly;
+            align-content: space-evenly;
+        }
+
+        .slide-grid img {
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+        }
+        .slide-grid .mat-bevel img {
+            box-shadow: none;
+        }
+
+        /* Loading state */
+        .loading {
+            color: rgba(255, 255, 255, 0.3);
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            font-size: 1.5rem;
+            text-align: center;
+        }
+
+        .loading-spinner {
+            width: 40px;
+            height: 40px;
+            border: 3px solid rgba(255, 255, 255, 0.1);
+            border-top-color: rgba(255, 255, 255, 0.4);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 20px;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        /* No images state */
+        .no-images {
+            color: rgba(255, 255, 255, 0.4);
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            text-align: center;
+        }
+
+        .no-images h2 {
+            font-size: 2rem;
+            margin-bottom: 10px;
+        }
+
+        .no-images p {
+            font-size: 1rem;
+            opacity: 0.7;
+        }
+
+        /* Hidden controls that appear on mouse move */
+        .controls {
+            position: fixed;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            gap: 10px;
+            opacity: 0;
+            transition: opacity 0.3s;
+            z-index: 200;
+            pointer-events: none;
+        }
+
+        .controls.visible {
+            opacity: 1;
+            pointer-events: auto;
+        }
+
+        .control-btn {
+            padding: 10px 20px;
+            background: rgba(0, 0, 0, 0.5);
+            color: white;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 25px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: background 0.2s;
+        }
+
+        .control-btn:hover {
+            background: rgba(0, 0, 0, 0.7);
+        }
