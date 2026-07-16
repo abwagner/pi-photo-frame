@@ -23,6 +23,8 @@ services:
       - DISPLAY_SESSION_LIFETIME_SECONDS=${DISPLAY_SESSION_LIFETIME_SECONDS:-2592000}
       # Optional; otherwise a dedicated token is generated in the data volume.
       - CEC_AGENT_TOKEN=${CEC_AGENT_TOKEN:-}
+      - ENABLE_HSTS=${ENABLE_HSTS:-0}
+      - TRUSTED_HTTPS_HOSTNAME=${TRUSTED_HTTPS_HOSTNAME:-}
     # Healthcheck is defined in Dockerfile
 
     # Resource limits (optional, good for Pi)

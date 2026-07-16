@@ -152,6 +152,8 @@ if os.environ.get('SECURE_COOKIES', '').lower() in ('1', 'true'):
 app.config['DISPLAY_SESSION_LIFETIME'] = int(
     os.environ.get('DISPLAY_SESSION_LIFETIME_SECONDS', 30 * 24 * 60 * 60)
 )
+app.config['HSTS_ENABLED'] = os.environ.get('ENABLE_HSTS', '').lower() in ('1', 'true')
+app.config['TRUSTED_HTTPS_HOSTNAME'] = os.environ.get('TRUSTED_HTTPS_HOSTNAME', '').lower()
 
 # Reverse proxy support — enable with BEHIND_PROXY=1
 if os.environ.get('BEHIND_PROXY', '').lower() in ('1', 'true'):
@@ -2617,6 +2619,41 @@ def api_maintenance_window():
 @app.errorhandler(413)
 def too_large(e):
     return jsonify({'error': 'File too large. Maximum size is 50MB.'}), 413
+
+
+@app.after_request
+def apply_browser_security_headers(response):
+    """Apply browser protections even when no external proxy is present."""
+    response.headers['X-Content-Type-Options'] = 'nosniff'
+    response.headers['Referrer-Policy'] = 'no-referrer'
+    response.headers['X-Frame-Options'] = 'DENY'
+    response.headers['Permissions-Policy'] = 'camera=(), microphone=(), geolocation=()'
+    response.headers['Content-Security-Policy'] = (
+        "default-src 'self'; "
+        "script-src 'self'; script-src-attr 'none'; "
+        # Dynamic photo layout uses element.style for dimensions/crops. Keep the
+        # exception narrowly scoped to style attributes; style elements remain self-only.
+        "style-src 'self'; style-src-attr 'unsafe-inline'; "
+        "img-src 'self' data: blob:; connect-src 'self'; font-src 'self'; "
+        "object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'"
+    )
+    sensitive_paths = (
+        '/login', '/change-password', '/mfa', '/admin/users',
+        '/api/display/enroll', '/api/display/enrollment-secret', '/api/display/rotate-secret',
+        '/api/display/state', '/api/settings', '/api/admin/', '/api/mfa/', '/api/cec/agent-token',
+    )
+    if any(request.path == path or (path.endswith('/') and request.path.startswith(path))
+           for path in sensitive_paths):
+        response.headers['Cache-Control'] = 'no-store, private'
+    hostname = (request.host.split(':', 1)[0] or '').lower()
+    if (app.config['HSTS_ENABLED'] and request.is_secure
+            and hostname == app.config['TRUSTED_HTTPS_HOSTNAME']
+            and hostname not in ('localhost', '127.0.0.1', '::1')):
+        try:
+            ip_address(hostname)
+        except ValueError:
+            response.headers['Strict-Transport-Security'] = 'max-age=31536000'
+    return response
 
 
 # ============ Startup ============
