@@ -17,6 +17,7 @@ import subprocess
 import threading
 import logging
 import base64
+import warnings
 from ipaddress import ip_address
 from urllib.parse import urlparse
 from datetime import datetime
@@ -30,7 +31,7 @@ from flask.sessions import SecureCookieSessionInterface
 from werkzeug.utils import secure_filename
 import tempfile
 
-from PIL import Image, ImageOps
+from PIL import Image, ImageOps, UnidentifiedImageError
 from apscheduler.schedulers.background import BackgroundScheduler
 import imagehash
 import pyotp
@@ -78,6 +79,9 @@ GALLERY_FILE = DATA_FOLDER / 'gallery.json'
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp'}
 THUMBNAIL_FOLDER = UPLOAD_FOLDER / 'thumbnails'
 THUMBNAIL_MAX_SIZE = (400, 400)
+MAX_IMAGE_PIXELS = int(os.environ.get('MAX_IMAGE_PIXELS', 80_000_000))
+MAX_IMAGE_DIMENSION = int(os.environ.get('MAX_IMAGE_DIMENSION', 20_000))
+Image.MAX_IMAGE_PIXELS = MAX_IMAGE_PIXELS
 RCLONE_CONFIG_DIR = DATA_FOLDER / 'rclone'
 RCLONE_CONFIG_FILE = RCLONE_CONFIG_DIR / 'rclone.conf'
 BACKUP_LOG_FILE = DATA_FOLDER / 'backup_log.json'
@@ -653,6 +657,29 @@ def remove_filename_from_groups(filename):
 def allowed_file(filename):
     """Check if file extension is allowed"""
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+
+
+def validate_image(filepath):
+    """Fully decode an image before hashing or any other transformation."""
+    try:
+        with warnings.catch_warnings():
+            warnings.simplefilter('error', Image.DecompressionBombWarning)
+            with Image.open(filepath) as image:
+                image.verify()
+            with Image.open(filepath) as image:
+                image.load()
+                width, height = ImageOps.exif_transpose(image).size
+        if (width > MAX_IMAGE_DIMENSION or height > MAX_IMAGE_DIMENSION
+                or width * height > MAX_IMAGE_PIXELS):
+            raise ValueError(
+                f'Image dimensions exceed the {MAX_IMAGE_DIMENSION}px / '
+                f'{MAX_IMAGE_PIXELS:,}-pixel safety limit'
+            )
+        return width, height
+    except (Image.DecompressionBombWarning, Image.DecompressionBombError):
+        raise ValueError('Image is too large to decode safely') from None
+    except (UnidentifiedImageError, OSError, SyntaxError):
+        raise ValueError('File is not a valid supported image') from None
 
 
 def compute_phash(filepath):
@@ -1743,21 +1770,20 @@ def api_upload():
             continue
 
         if file and allowed_file(file.filename):
-            ext = file.filename.rsplit('.', 1)[1].lower()
             unique_name = f"{uuid.uuid4().hex[:8]}_{secure_filename(file.filename)}"
             filepath = UPLOAD_FOLDER / unique_name
-            file.save(filepath)
+            with tempfile.NamedTemporaryFile(delete=False, dir=UPLOAD_FOLDER, suffix='.upload') as tmp:
+                file.save(tmp.name)
+                tmp_path = Path(tmp.name)
+            try:
+                width, height = validate_image(tmp_path)
+                os.replace(tmp_path, filepath)
+            except ValueError as error:
+                tmp_path.unlink(missing_ok=True)
+                errors.append(f'{file.filename}: {error}')
+                continue
             generate_thumbnail(filepath, unique_name)
             uploaded.append(unique_name)
-
-            # Extract image dimensions (after applying EXIF rotation)
-            width, height = None, None
-            try:
-                with Image.open(filepath) as img:
-                    oriented = ImageOps.exif_transpose(img)
-                    width, height = oriented.size
-            except Exception:
-                pass
 
             # Compute perceptual hash for duplicate detection
             phash = compute_phash(filepath)
@@ -1778,11 +1804,14 @@ def api_upload():
         else:
             errors.append(f"Invalid file type: {file.filename}")
 
-    return jsonify({
+    response = jsonify({
         'uploaded': uploaded,
         'errors': errors,
         'total_images': len(get_uploaded_images())
     })
+    if errors and not uploaded:
+        response.status_code = 400
+    return response
 
 
 @app.route('/api/check-duplicates', methods=['POST'])
@@ -1801,6 +1830,7 @@ def api_check_duplicates():
     gallery = load_gallery()
 
     results = {}
+    validation_errors = []
 
     for file in files:
         if file.filename == '' or not allowed_file(file.filename):
@@ -1812,16 +1842,12 @@ def api_check_duplicates():
             tmp_path = tmp.name
 
         try:
-            new_hash_str = compute_phash(tmp_path)
-
-            # Extract dimensions
-            width, height = None, None
             try:
-                with Image.open(tmp_path) as img:
-                    oriented = ImageOps.exif_transpose(img)
-                    width, height = oriented.size
-            except Exception:
-                pass
+                width, height = validate_image(tmp_path)
+            except ValueError as error:
+                validation_errors.append(f'{file.filename}: {error}')
+                continue
+            new_hash_str = compute_phash(tmp_path)
 
             matches = []
             if new_hash_str:
@@ -1848,7 +1874,10 @@ def api_check_duplicates():
         finally:
             os.unlink(tmp_path)
 
-    return jsonify({'results': results})
+    response = jsonify({'results': results, 'errors': validation_errors})
+    if validation_errors:
+        response.status_code = 400
+    return response
 
 
 @app.route('/api/gallery/backfill-hashes', methods=['POST'])

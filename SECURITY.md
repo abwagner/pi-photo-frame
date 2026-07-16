@@ -56,3 +56,7 @@ hashes of one-time recovery codes are stored.
 Browser security headers and CSP are emitted by Flask so they remain active without
 Caddy. HSTS remains disabled unless explicitly enabled for an exact trusted HTTPS
 hostname; it is never emitted for HTTP, localhost, raw IP, or mismatched hosts.
+
+Image files are fully decoded and verified before hashing or transformation.
+Decompression-bomb warnings, corrupt images, and configured decoded size/dimension
+limits are rejected without retaining partial uploads.
