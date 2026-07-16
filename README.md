@@ -416,24 +416,33 @@ pi-photo-frame/
 - Session keys are randomly generated
 - HTTPS via Caddy (self-signed, Cloudflare, or DuckDNS Let's Encrypt)
 - Secure cookies enabled behind the reverse proxy
-- Display page accessible via token or localhost
+- Display access uses an expiring HttpOnly browser session established by one-time enrollment
 - Non-root user in Docker container
 
 ### Display Access
 
 The display (`/display`) is accessible:
 - From localhost (the machine itself)
-- With a valid display token
+- With a valid display session cookie established at `/display/enroll`
 - When logged in
 
-This allows the display to show photos without login while protecting upload/management.
+The enrollment secret is submitted once in a POST body. It is never accepted in a
+query string and is not stored in browser history, image URLs, kiosk scripts, or
+Chromium arguments. Rotating it from the administrator API immediately invalidates
+existing display sessions. Display sessions default to 30 days and can be configured
+with `DISPLAY_SESSION_LIFETIME_SECONDS`.
+
+`BEHIND_PROXY=1` is safe only when Flask is reachable exclusively through a trusted
+reverse proxy that overwrites forwarded headers. Do not enable it when Flask is
+directly exposed to untrusted clients. The bundled Caddy/Compose layout meets this
+requirement because only Caddy publishes host ports.
 
 ## API Endpoints
 
 | Endpoint | Method | Auth | Description |
 |----------|--------|------|-------------|
 | `/api/upload` | POST | User | Upload images |
-| `/api/images` | GET | None | Get enabled images (for display) |
+| `/api/images` | GET | Display/User | Get enabled images (for display) |
 | `/api/gallery` | GET | User | Get all images with metadata |
 | `/api/gallery/<file>` | PATCH | User | Update image metadata (scale, etc.) |
 | `/api/gallery/<file>` | DELETE | User | Delete an image |
@@ -447,9 +456,11 @@ This allows the display to show photos without login while protecting upload/man
 | `/api/network-info` | GET | Admin | Get local and Tailscale IP addresses |
 | `/api/maintenance-window` | GET | None | Check if deploy is safe (TV off) |
 | `/api/reorder` | POST | User | Reorder images |
-| `/api/display-token` | GET | Admin | Get display access token |
-| `/api/display/state` | GET | None | Get current slideshow state (index, paused) |
-| `/api/display/control` | POST | User | Control slideshow (next, prev, pause, play) |
+| `/api/display/enroll` | POST | Enrollment secret | Establish a display session |
+| `/api/display/enrollment-secret` | GET | Admin | Get the enrollment secret (`no-store`) |
+| `/api/display/rotate-secret` | POST | Admin | Rotate enrollment and invalidate sessions |
+| `/api/display/state` | GET | Display/User | Get current slideshow state (index, paused) |
+| `/api/display/control` | POST | Display/User | Control slideshow (next, prev, pause, play) |
 | `/api/groups` | GET/POST | User | List or create image groups |
 | `/api/groups/<id>` | PATCH/DELETE | User | Update or delete an image group |
 | `/api/backup/status` | GET | Admin | Get backup configuration status |

@@ -269,14 +269,6 @@
         let currentSlideEl = null;
         let previousSlideEl = null;
 
-        // Display token — present when loaded with ?token= (remote Pi kiosk).
-        // Included in control requests so the backend accepts them without a login session.
-        const displayToken = new URLSearchParams(window.location.search).get('token') || '';
-        // Query suffix appended to read requests (images, state, settings, photos) so a
-        // remote kiosk authenticates to the backend with its token. Empty when the page is
-        // opened by an authenticated admin or from localhost, where no token is needed.
-        const tokenParam = displayToken ? ('?token=' + encodeURIComponent(displayToken)) : '';
-
         const imageWrapper = document.getElementById('image-wrapper');
         const loadingEl = document.getElementById('loading');
 
@@ -291,7 +283,7 @@
 
         async function loadData() {
             try {
-                const response = await fetch('/api/images' + tokenParam);
+                const response = await fetch('/api/images');
                 const data = await response.json();
 
                 settings = data.settings;
@@ -302,7 +294,7 @@
                 if (slides.length > 0) {
                     loadingEl.style.display = 'none';
                     // Get initial index from server state
-                    const stateResp = await fetch('/api/display/state' + tokenParam);
+                    const stateResp = await fetch('/api/display/state');
                     const state = await stateResp.json();
                     currentIndex = state.index;
                     lastServerIndex = state.index;
@@ -319,7 +311,7 @@
 
         async function pollDisplayState() {
             try {
-                const resp = await fetch('/api/display/state' + tokenParam);
+                const resp = await fetch('/api/display/state');
                 const state = await resp.json();
                 isPaused = state.paused;
                 if (state.index !== lastServerIndex && state.total > 0) {
@@ -334,7 +326,7 @@
 
         async function checkForUpdates() {
             try {
-                const response = await fetch('/api/settings' + tokenParam);
+                const response = await fetch('/api/settings');
                 const newSettings = await response.json();
 
                 if (JSON.stringify(newSettings) !== JSON.stringify(settings)) {
@@ -343,7 +335,7 @@
                 }
 
                 // Check for slide list changes (new uploads, deletes, reorder)
-                const imgResponse = await fetch('/api/images' + tokenParam);
+                const imgResponse = await fetch('/api/images');
                 const imgData = await imgResponse.json();
                 const newSlides = imgData.slides || [];
                 const newSlidesJson = JSON.stringify(newSlides);
@@ -495,7 +487,7 @@
 
                 if (settings.fit_mode === 'cover') {
                     const img = document.createElement('img');
-                    img.src = '/uploads/' + imgData.filename + tokenParam;
+                    img.src = '/uploads/' + imgData.filename;
                     img.alt = imgData.filename;
                     img.className = 'cover';
                     slideEl.appendChild(wrapInEffect(img, slideEffectSize, matColor, slideBorderEffect));
@@ -508,7 +500,7 @@
                     cropContainer.style.lineHeight = '0';
 
                     const img = document.createElement('img');
-                    img.src = '/uploads/' + imgData.filename + tokenParam;
+                    img.src = '/uploads/' + imgData.filename;
                     img.alt = imgData.filename;
                     const fullW = photoW / crop.w;
                     const fullH = photoH / crop.h;
@@ -524,7 +516,7 @@
                     slideEl.appendChild(wrapInEffect(cropContainer, slideEffectSize, matColor, slideBorderEffect));
                 } else {
                     const img = document.createElement('img');
-                    img.src = '/uploads/' + imgData.filename + tokenParam;
+                    img.src = '/uploads/' + imgData.filename;
                     img.alt = imgData.filename;
                     if (photoW > 0 && photoH > 0) {
                         img.style.width = photoW + 'px';
@@ -587,7 +579,7 @@
                             cropContainer.style.lineHeight = '0';
                             cropContainer.style.flexShrink = '0';
                             const img = document.createElement('img');
-                            img.src = '/uploads/' + info.filename + tokenParam;
+                            img.src = '/uploads/' + info.filename;
                             img.alt = info.filename;
                             const fullW = w / info.crop.w;
                             const fullH = h / info.crop.h;
@@ -602,7 +594,7 @@
                             node = wrapInEffect(cropContainer, info.effectSize, matColor, info.borderEffect);
                         } else {
                             const img = document.createElement('img');
-                            img.src = '/uploads/' + info.filename + tokenParam;
+                            img.src = '/uploads/' + info.filename;
                             img.alt = info.filename;
                             img.style.width = w + 'px';
                             img.style.height = h + 'px';
@@ -649,7 +641,7 @@
                             cropContainer.style.overflow = 'hidden';
                             cropContainer.style.lineHeight = '0';
                             const img = document.createElement('img');
-                            img.src = '/uploads/' + imgData.filename + tokenParam;
+                            img.src = '/uploads/' + imgData.filename;
                             img.alt = imgData.filename;
                             const fullW = dW / crop.w;
                             const fullH = dH / crop.h;
@@ -664,7 +656,7 @@
                             node = wrapInEffect(cropContainer, imgEffectSize, matColor, imgBorderEffect);
                         } else {
                             const img = document.createElement('img');
-                            img.src = '/uploads/' + imgData.filename + tokenParam;
+                            img.src = '/uploads/' + imgData.filename;
                             img.alt = imgData.filename;
                             const imgAr = (imgData.width || 1) / (imgData.height || 1);
                             let dW, dH;
@@ -776,7 +768,7 @@
                         'Content-Type': 'application/json',
                         'X-CSRFToken': csrfToken
                     },
-                    body: JSON.stringify(displayToken ? {action, token: displayToken} : {action})
+                    body: JSON.stringify({action})
                 });
                 if (resp.ok) {
                     const state = await resp.json();

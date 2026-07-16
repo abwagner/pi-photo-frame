@@ -18,7 +18,7 @@ your-domain.com  (DNS A record, kept updated by Cloudflare DDNS)
        ↓
   Backend Server  ←────────────────────  Pi (display-only)
   Flask + Caddy                           Chromium kiosk
-  Docker volumes                          points at your-domain.com?token=xxx
+  Docker volumes                          points at your-domain.com/display
   (photos, settings, users)               optional: CEC agent for TV control
 ```
 
@@ -118,9 +118,9 @@ docker run --rm \
 docker compose start
 ```
 
-This transfers all photos, settings, user accounts, and the display token.
-Because the display token is preserved, the Pi can reconnect to the new backend
-without re-pairing.
+This transfers all photos, settings, user accounts, and the display enrollment
+secret. Existing tokenized display URLs are intentionally no longer accepted; each
+remote display must enroll once to receive its new browser session.
 
 **Verify the migration**
 
@@ -131,7 +131,7 @@ are intact.
 
 ## Phase 3 — Switch the Pi to display-only mode
 
-**Get the display token from the server**
+**Get the display enrollment secret from the server**
 
 ```bash
 docker exec pi-photo-frame cat /app/data/.display_token
@@ -144,11 +144,15 @@ cd ~/pi-photo-frame
 ./scripts/install.sh
 # Choose mode 2: Display only
 # Backend URL: https://photos.yourdomain.com
-# Token: <token from above>
+# Chromium opens a clean /display URL and prompts for the secret once.
 ```
 
-The script configures Chromium to launch in kiosk mode pointing at the new
-backend. The display resumes showing photos from the server.
+The script configures Chromium to launch a clean `/display` URL. Enter the secret
+on the first-launch enrollment page; it is exchanged through POST and is not stored
+in the generated script or Chromium process arguments.
+
+Remove any old `?token=...` URLs from browser history, generated kiosk scripts,
+desktop/service files, shell history, and retained reverse-proxy access logs.
 
 ---
 
@@ -180,7 +184,7 @@ automatically.
 ### Multiple display Pis
 
 Each Pi runs `install.sh` in display-only mode pointing at the same backend
-URL. All displays share one display token. Only one Pi should have CEC enabled
+URL. Each display enrolls into its own signed session. Only one Pi should have CEC enabled
 (the one physically connected to the TV you want to control).
 
 ### Maintenance window (deploy.sh)

@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Enroll Display</title>
+</head>
+<body>
+    <main>
+        <h1>Enroll this display</h1>
+        <p>Enter the display enrollment secret once. It will be exchanged for a protected browser session and will not be added to the URL.</p>
+        <form method="post" action="{{ url_for('api_display_enroll') }}">
+            <label for="enrollment-secret">Enrollment secret</label>
+            <input id="enrollment-secret" name="enrollment_secret" type="password" autocomplete="off" required>
+            <button type="submit">Enroll display</button>
+        </form>
+    </main>
+</body>
+</html>

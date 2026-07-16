@@ -20,6 +20,7 @@ services:
       - BACKUP_TIME=03:00    # Daily backup time (HH:MM, 24h format)
       - BEHIND_PROXY=1
       - SECURE_COOKIES=1
+      - DISPLAY_SESSION_LIFETIME_SECONDS=${DISPLAY_SESSION_LIFETIME_SECONDS:-2592000}
     # Healthcheck is defined in Dockerfile
 
     # Resource limits (optional, good for Pi)

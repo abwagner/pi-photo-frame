@@ -23,3 +23,14 @@ We appreciate responsible disclosure and will credit reporters when we publish a
 - Keep dependencies updated (e.g. `pip install -U -r requirements.txt`).
 - Run the app behind HTTPS in production when possible.
 - Do not expose the app to the internet unless you need to; prefer local/VPN access.
+
+## Display enrollment and proxy trust
+
+Display enrollment secrets are accepted only by `POST /api/display/enroll`. Never
+put the secret in a URL, kiosk command, service argument, or proxy configuration.
+After enrollment the browser uses an expiring HttpOnly, SameSite session cookie.
+Rotating the enrollment secret immediately invalidates every existing display session.
+
+Set `BEHIND_PROXY=1` only when the application is reachable exclusively through a
+trusted reverse proxy that overwrites forwarded headers. When Flask is directly
+exposed, leave it disabled so client-supplied forwarded addresses are ignored.
