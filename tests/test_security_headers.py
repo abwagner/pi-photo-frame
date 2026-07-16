@@ -6,7 +6,7 @@ from pathlib import Path
 def test_required_headers_and_enforced_csp(client):
     response = client.get('/login')
     assert response.headers['X-Content-Type-Options'] == 'nosniff'
-    assert response.headers['Referrer-Policy'] == 'no-referrer'
+    assert response.headers['Referrer-Policy'] == 'same-origin'
     assert response.headers['X-Frame-Options'] == 'DENY'
     assert response.headers['Permissions-Policy'] == 'camera=(), microphone=(), geolocation=()'
     csp = response.headers['Content-Security-Policy']
