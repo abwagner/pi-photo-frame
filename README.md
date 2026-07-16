@@ -72,8 +72,8 @@ sudo reboot
 From any device on your network (phone, laptop, etc.):
 
 1. Open `https://<your-ip>/upload` (or `https://<your-domain>/upload` if using Let's Encrypt)
-2. Log in with `admin` / `password`
-3. You'll be prompted to set a new password before continuing
+2. Log in as `admin` with the random one-time password printed by the installer
+3. You'll be required to set a password of at least 12 characters before continuing
 4. Upload photos — they appear on the display automatically
 
 ### Managing the Frame
@@ -93,14 +93,18 @@ These commands are run via SSH on the host machine:
 
 Once kiosk mode is set up, you never need to touch the machine again. Everything is managed through the web interface from your phone or laptop. It just needs power and an HDMI connection to your display.
 
-## Default Login
+## First Login
 
-```
-Username: admin
-Password: password
-```
+New installations generate a cryptographically random one-time administrator
+password. `scripts/install.sh` consumes it from the protected data volume, deletes
+the plaintext file, and prints it once to the local terminal. The username is
+`admin`. You must replace the one-time password with one of at least 12 characters
+before accessing application features.
 
-On first login, you'll be redirected to a password change page. You must set a new password before accessing any other features. This prevents the default credentials from being left active.
+Every user creation, password change, and administrator reset uses the same
+12-character minimum without composition rules. Security events are appended as
+structured JSON to `/app/data/security-events.jsonl` (mode `0600`); passwords,
+tokens, cookies, recovery material, and CSRF values are never included.
 
 ## Pages
 
@@ -489,12 +493,15 @@ arguments. Set `CEC_AGENT_TOKEN_FILE` only when using a different protected path
 
 ### Forgot admin password?
 
-Delete the users file to reset to default:
+Delete the users file and restart to generate a new random one-time credential:
 
 ```bash
 docker compose exec photo-frame rm /app/data/users.json
 docker compose restart
+docker compose exec photo-frame sh -c 'cat /app/data/.initial_admin_password; rm /app/data/.initial_admin_password'
 ```
+
+The final command consumes and displays the credential once on the local terminal.
 
 ### Photos not showing on display?
 

@@ -297,7 +297,7 @@
                 </div>
                 <div class="form-group">
                     <label>Password</label>
-                    <input type="password" id="new-password" required minlength="4" placeholder="Min 4 characters">
+                    <input type="password" id="new-password" required minlength="12" placeholder="Min 12 characters">
                 </div>
                 <div class="form-group">
                     <label>Role</label>
@@ -353,7 +353,7 @@
             <p style="color: #888; margin-bottom: 15px;">Enter new password for <strong id="reset-username"></strong></p>
             <div class="form-group">
                 <label>New Password</label>
-                <input type="password" id="reset-password" minlength="4" placeholder="Min 4 characters">
+                <input type="password" id="reset-password" minlength="12" placeholder="Min 12 characters">
             </div>
             <div class="modal-actions">
                 <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
@@ -443,8 +443,8 @@
         async function resetPassword() {
             const password = document.getElementById('reset-password').value;
             
-            if (password.length < 4) {
-                showMessage('Password must be at least 4 characters', 'error');
+            if (password.length < 12) {
+                showMessage('Password must be at least 12 characters', 'error');
                 return;
             }
 

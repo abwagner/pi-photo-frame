@@ -13,14 +13,26 @@ import app as photo_app
 
 
 class TestForcedPasswordChange:
-    """Tests for the forced password change on default credentials."""
+    """Tests for the random one-time administrator credential."""
 
-    def test_login_with_default_password_redirects(self, client):
-        """Login with default creds should redirect to change-password."""
+    @staticmethod
+    def _bootstrap_password():
         photo_app.load_users()
+        return photo_app.INITIAL_ADMIN_PASSWORD_FILE.read_text()
+
+    def test_bootstrap_password_is_random_protected_and_not_fixed(self, app):
+        password = self._bootstrap_password()
+        assert password != 'password'
+        assert len(password) >= 12
+        assert photo_app.INITIAL_ADMIN_PASSWORD_FILE.stat().st_mode & 0o777 == 0o600
+        assert photo_app.verify_user('admin', password)
+        assert photo_app.user_requires_password_change('admin') is True
+
+    def test_login_with_bootstrap_password_redirects(self, client):
+        password = self._bootstrap_password()
         resp = client.post('/login', data={
             'username': 'admin',
-            'password': 'password'
+            'password': password,
         })
         assert resp.status_code == 302
         assert '/change-password' in resp.headers['Location']
@@ -28,23 +40,23 @@ class TestForcedPasswordChange:
 
     def test_login_after_password_change_goes_to_upload(self, client):
         """After changing password, login should go to /upload."""
-        photo_app.load_users()
-        photo_app.change_user_password('admin', 'newpass123')
+        self._bootstrap_password()
+        photo_app.change_user_password('admin', 'new-password-123')
 
         resp = client.post('/login', data={
             'username': 'admin',
-            'password': 'newpass123'
+            'password': 'new-password-123'
         })
         assert resp.status_code == 302
         assert '/upload' in resp.headers['Location']
 
     def test_forced_change_blocks_navigation(self, client):
-        """With default password, accessing /upload should redirect to change-password."""
-        photo_app.load_users()
+        """With the bootstrap password, navigation is restricted to changing it."""
+        password = self._bootstrap_password()
         # Log in (will be redirected, but session is set)
         client.post('/login', data={
             'username': 'admin',
-            'password': 'password'
+            'password': password,
         })
         # Try to access upload page
         resp = client.get('/upload')
@@ -53,46 +65,104 @@ class TestForcedPasswordChange:
 
     def test_forced_change_skips_current_password(self, client):
         """Forced mode should not require current password field."""
-        photo_app.load_users()
+        password = self._bootstrap_password()
         client.post('/login', data={
             'username': 'admin',
-            'password': 'password'
+            'password': password,
         })
         # Submit forced password change without current password
         resp = client.post('/change-password?forced=1', data={
             'forced': '1',
-            'new_password': 'newpass123',
-            'confirm': 'newpass123'
+            'new_password': 'new-password-123',
+            'confirm': 'new-password-123'
         })
         assert resp.status_code == 302
         assert '/upload' in resp.headers['Location']
 
         # Verify new password works
-        assert photo_app.verify_user('admin', 'newpass123')
+        assert photo_app.verify_user('admin', 'new-password-123')
 
     def test_change_password_page_accessible_with_default(self, client):
-        """Change password page should be accessible even with default password."""
-        photo_app.load_users()
+        """Change password page is accessible with the bootstrap credential."""
+        password = self._bootstrap_password()
         client.post('/login', data={
             'username': 'admin',
-            'password': 'password'
+            'password': password,
         })
         resp = client.get('/change-password?forced=1')
         assert resp.status_code == 200
         assert b'Set New Password' in resp.data
         assert b'Please set a new password' in resp.data
 
-    def test_has_default_password_helper(self, app):
-        """has_default_password should correctly detect default credentials."""
+    def test_password_change_marker_clears_after_change(self, app):
+        self._bootstrap_password()
+        assert photo_app.user_requires_password_change('admin') is True
+
+        photo_app.change_user_password('admin', 'new-password-123')
+        assert photo_app.user_requires_password_change('admin') is False
+
+    def test_password_change_marker_nonexistent_user(self, app):
+        assert photo_app.user_requires_password_change('nobody') is False
+
+    def test_forced_flag_cannot_bypass_current_password(self, client):
+        self._bootstrap_password()
+        photo_app.change_user_password('admin', 'current-password-123')
+        client.post('/login', data={'username': 'admin', 'password': 'current-password-123'})
+        resp = client.post('/change-password?forced=1', data={
+            'forced': '1',
+            'new_password': 'different-password-123',
+            'confirm': 'different-password-123',
+        })
+        assert resp.status_code == 200
+        assert b'Current password is incorrect' in resp.data
+
+
+class TestPasswordPolicy:
+    def test_central_policy_requires_twelve_characters(self, app):
+        assert photo_app.validate_password('short')[0] is False
+        assert photo_app.validate_password('twelve-chars')[0] is True
+
+    def test_create_and_change_use_same_policy(self, app):
         photo_app.load_users()
-        assert photo_app.has_default_password('admin') is True
+        assert photo_app.create_user('person', 'too-short')[0] is False
+        assert photo_app.create_user('person', 'long-enough-password')[0] is True
+        assert photo_app.change_user_password('person', 'short')[0] is False
 
-        photo_app.change_user_password('admin', 'newpass123')
-        assert photo_app.has_default_password('admin') is False
+    def test_admin_reset_requires_policy_and_forces_change(self, auth_client):
+        assert photo_app.create_user('person', 'long-enough-password')[0] is True
+        short = auth_client.post('/api/admin/users/person/password', json={'password': 'short'})
+        assert short.status_code == 400
+        reset = auth_client.post('/api/admin/users/person/password',
+                                 json={'password': 'replacement-password'})
+        assert reset.status_code == 200
+        assert photo_app.user_requires_password_change('person') is True
 
-    def test_has_default_password_nonexistent_user(self, app):
-        """has_default_password should return False for nonexistent users."""
-        assert photo_app.has_default_password('nobody') is False
+
+class TestSecurityEvents:
+    @staticmethod
+    def _events():
+        return [json.loads(line) for line in photo_app.SECURITY_LOG_FILE.read_text().splitlines()]
+
+    def test_successful_and_failed_logins_are_structured_without_passwords(self, client):
+        password = TestForcedPasswordChange._bootstrap_password()
+        client.post('/login', data={'username': 'admin', 'password': 'wrong-password'})
+        client.post('/login', data={'username': 'admin', 'password': password})
+        events = [event for event in self._events() if event['event_type'] == 'login']
+        assert [event['status'] for event in events] == ['failure', 'success']
+        assert all({'timestamp', 'event_type', 'username', 'source_ip', 'status'} <= event.keys()
+                   for event in events)
+        serialized = photo_app.SECURITY_LOG_FILE.read_text()
+        assert password not in serialized
+        assert 'wrong-password' not in serialized
+
+    def test_account_and_display_events_are_recorded(self, auth_client):
+        auth_client.post('/api/admin/users', json={
+            'username': 'person', 'password': 'long-enough-password', 'role': 'user',
+        })
+        auth_client.delete('/api/admin/users/person')
+        auth_client.post('/api/display/rotate-secret')
+        event_types = {event['event_type'] for event in self._events()}
+        assert {'user_creation', 'user_deletion', 'display_credential_rotation'} <= event_types
 
 
 class TestNetworkInfo:
@@ -101,10 +171,10 @@ class TestNetworkInfo:
     def _get_auth_client_with_changed_password(self, client):
         """Get an authenticated client with a non-default password."""
         photo_app.load_users()
-        photo_app.change_user_password('admin', 'newpass123')
+        photo_app.change_user_password('admin', 'new-password-123')
         client.post('/login', data={
             'username': 'admin',
-            'password': 'newpass123'
+            'password': 'new-password-123'
         })
         return client
 

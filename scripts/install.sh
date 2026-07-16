@@ -15,6 +15,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+INITIAL_ADMIN_PASSWORD=""
 
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
@@ -212,6 +213,19 @@ start_services() {
     info "Building and starting services (this may take a while on first run)..."
     cd "$PROJECT_DIR"
     docker compose up -d --build
+    # The app creates a random one-time credential in its protected data volume.
+    # Consume it locally and delete the plaintext file before showing it once below.
+    for _ in {1..60}; do
+        if docker exec pi-photo-frame test -f /app/data/.initial_admin_password 2>/dev/null; then
+            INITIAL_ADMIN_PASSWORD=$(docker exec pi-photo-frame sh -c \
+                'password=$(cat /app/data/.initial_admin_password) && rm /app/data/.initial_admin_password && printf %s "$password"')
+            break
+        fi
+        if docker exec pi-photo-frame test -f /app/data/users.json 2>/dev/null; then
+            break
+        fi
+        sleep 1
+    done
     info "Services started."
 }
 
@@ -621,8 +635,17 @@ main() {
         echo "  To switch to trusted certs later, run: ./scripts/install.sh"
     fi
     echo ""
-    echo "  Default login:  admin / password"
-    echo "  You will be prompted to change the password on first login."
+    if [[ -n "$INITIAL_ADMIN_PASSWORD" ]]; then
+        echo "  One-time administrator login (shown only now):"
+        echo "    Username: admin"
+        echo "    Password: $INITIAL_ADMIN_PASSWORD"
+        echo "  You must change this password on first login."
+        unset INITIAL_ADMIN_PASSWORD
+    else
+        echo "  Administrator credentials already initialized."
+        echo "  If this is a fresh manual deployment, consume the protected"
+        echo "  /app/data/.initial_admin_password file locally before login."
+    fi
     echo ""
     echo "  Useful commands:"
     echo "    View logs:  docker compose logs -f"

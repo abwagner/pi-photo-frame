@@ -20,7 +20,7 @@ from ipaddress import ip_address
 from datetime import datetime
 from pathlib import Path
 from functools import wraps
-from flask import Flask, render_template, request, jsonify, send_from_directory, redirect, url_for, session
+from flask import Flask, render_template, request, jsonify, send_from_directory, redirect, url_for, session, has_request_context
 
 import bcrypt
 from flask_wtf.csrf import CSRFProtect
@@ -60,6 +60,8 @@ UPLOAD_FOLDER = Path(__file__).parent / 'uploads'
 DATA_FOLDER = Path(__file__).parent / 'data'
 SETTINGS_FILE = DATA_FOLDER / 'settings.json'
 USERS_FILE = DATA_FOLDER / 'users.json'
+INITIAL_ADMIN_PASSWORD_FILE = DATA_FOLDER / '.initial_admin_password'
+SECURITY_LOG_FILE = DATA_FOLDER / 'security-events.jsonl'
 GALLERY_FILE = DATA_FOLDER / 'gallery.json'
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp'}
 THUMBNAIL_FOLDER = UPLOAD_FOLDER / 'thumbnails'
@@ -147,6 +149,39 @@ if os.environ.get('BEHIND_PROXY', '').lower() in ('1', 'true'):
 
 # ============ User Management ============
 
+MIN_PASSWORD_LENGTH = 12
+
+
+def log_security_event(event_type, success, username=None, **details):
+    """Append a structured security event without accepting secret fields."""
+    forbidden = {'password', 'secret', 'token', 'cookie', 'csrf', 'recovery_code'}
+    safe_details = {
+        key: value for key, value in details.items()
+        if not any(word in key.lower() for word in forbidden)
+    }
+    event = {
+        'timestamp': datetime.now().astimezone().isoformat(),
+        'event_type': event_type,
+        'username': username,
+        'source_ip': request.remote_addr if has_request_context() else None,
+        'status': 'success' if success else 'failure',
+        **safe_details,
+    }
+    SECURITY_LOG_FILE.parent.mkdir(exist_ok=True)
+    with open(SECURITY_LOG_FILE, 'a') as log_file:
+        fcntl.flock(log_file.fileno(), fcntl.LOCK_EX)
+        log_file.write(json.dumps(event, separators=(',', ':')) + '\n')
+        log_file.flush()
+        fcntl.flock(log_file.fileno(), fcntl.LOCK_UN)
+    os.chmod(SECURITY_LOG_FILE, 0o600)
+
+
+def validate_password(password):
+    """Apply the single password policy used by every password-changing path."""
+    if not isinstance(password, str) or len(password) < MIN_PASSWORD_LENGTH:
+        return False, f'Password must be at least {MIN_PASSWORD_LENGTH} characters'
+    return True, None
+
 def hash_password(password: str, salt: str = None) -> tuple:
     """Hash a password using bcrypt.
 
@@ -169,22 +204,33 @@ def _is_bcrypt_hash(stored_hash: str) -> bool:
 
 
 def load_users():
-    """Load users from JSON file, create default admin if none exist"""
+    """Load users, generating a random one-time administrator credential if needed."""
     if USERS_FILE.exists():
         with open(USERS_FILE, 'r') as f:
-            return json.load(f)
+            users = json.load(f)
+        # Safely migrate installations that still have the former fixed credential.
+        admin = users.get('admin')
+        if admin and 'must_change_password' not in admin:
+            if (_is_bcrypt_hash(admin['password_hash'])
+                    and bcrypt.checkpw(b'password', admin['password_hash'].encode())):
+                admin['must_change_password'] = True
+                save_users(users)
+        return users
 
-    # Create default admin user
-    hashed, salt = hash_password('password')
+    initial_password = secrets.token_urlsafe(18)
+    hashed, salt = hash_password(initial_password)
     users = {
         'admin': {
             'password_hash': hashed,
             'salt': salt,
             'role': 'admin',
-            'created': datetime.now().isoformat()
+            'created': datetime.now().isoformat(),
+            'must_change_password': True,
         }
     }
     save_users(users)
+    INITIAL_ADMIN_PASSWORD_FILE.write_text(initial_password)
+    os.chmod(INITIAL_ADMIN_PASSWORD_FILE, 0o600)
     return users
 
 
@@ -218,15 +264,16 @@ def verify_user(username: str, password: str) -> bool:
     return True
 
 
-def has_default_password(username):
-    """Check if user still has the default password."""
+def user_requires_password_change(username):
+    """Check the explicit one-time/reset password-change marker."""
     users = load_users()
     if username not in users:
         return False
-    user = users[username]
-    if _is_bcrypt_hash(user['password_hash']):
-        return bcrypt.checkpw(b'password', user['password_hash'].encode())
-    return _verify_legacy_sha256('password', user['password_hash'], user.get('salt', ''))
+    return users[username].get('must_change_password', False)
+
+
+# Backwards-compatible helper name for extensions; authorization uses the marker.
+has_default_password = user_requires_password_change
 
 
 def get_user_role(username: str) -> str:
@@ -247,8 +294,9 @@ def create_user(username: str, password: str, role: str = 'user') -> tuple:
     if len(username) < 3:
         return False, 'Username must be at least 3 characters'
 
-    if len(password) < 4:
-        return False, 'Password must be at least 4 characters'
+    valid, message = validate_password(password)
+    if not valid:
+        return False, message
 
     if role not in ['admin', 'user']:
         return False, 'Invalid role'
@@ -258,7 +306,8 @@ def create_user(username: str, password: str, role: str = 'user') -> tuple:
         'password_hash': hashed,
         'salt': salt,
         'role': role,
-        'created': datetime.now().isoformat()
+        'created': datetime.now().isoformat(),
+        'must_change_password': False,
     }
     save_users(users)
     return True, 'User created successfully'
@@ -279,21 +328,27 @@ def delete_user(username: str) -> tuple:
     return True, 'User deleted successfully'
 
 
-def change_user_password(username: str, new_password: str) -> tuple:
+def change_user_password(username: str, new_password: str, require_change=False) -> tuple:
     """Change a user's password. Returns (success, message)"""
     users = load_users()
 
     if username not in users:
         return False, 'User not found'
 
-    if len(new_password) < 4:
-        return False, 'Password must be at least 4 characters'
+    valid, message = validate_password(new_password)
+    if not valid:
+        return False, message
 
     hashed, salt = hash_password(new_password)
     users[username]['password_hash'] = hashed
     users[username]['salt'] = salt
+    users[username]['must_change_password'] = require_change
     save_users(users)
     return True, 'Password changed successfully'
+
+
+# Ensure gunicorn/import-based startup creates the one-time bootstrap credential.
+load_users()
 
 
 # ============ Authentication Decorators ============
@@ -353,6 +408,7 @@ def cec_agent_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
         if not cec_agent_authenticated():
+            log_security_event('cec_authentication', False)
             return jsonify({'error': 'Authentication required'}), 401
         return f(*args, **kwargs)
     return decorated_function
@@ -1072,10 +1128,12 @@ def login():
             session['authenticated'] = True
             session['username'] = username
             session.permanent = True
-            if has_default_password(username):
+            log_security_event('login', True, username=username)
+            if user_requires_password_change(username):
                 return redirect(url_for('change_password', forced=1))
             return redirect(url_for('upload_page'))
 
+        log_security_event('login', False, username=username or None)
         return render_template('login.html', error='Invalid username or password')
 
     return render_template('login.html')
@@ -1092,30 +1150,34 @@ def logout():
 @login_required
 def change_password():
     """Change own password"""
-    forced = request.args.get('forced') == '1'
     username = session.get('username')
+    forced = user_requires_password_change(username)
 
     if request.method == 'POST':
-        forced = request.form.get('forced') == '1'
+        forced = user_requires_password_change(username)
         new_password = request.form.get('new_password', '')
         confirm = request.form.get('confirm', '')
 
         if not forced:
             current = request.form.get('current', '')
             if not verify_user(username, current):
+                log_security_event('password_change', False, username=username)
                 return render_template('change_password.html', error='Current password is incorrect',
                                        is_admin=is_admin(), username=username, forced=forced)
 
         if new_password != confirm:
+            log_security_event('password_change', False, username=username)
             return render_template('change_password.html', error='New passwords do not match',
                                    is_admin=is_admin(), username=username, forced=forced)
 
         success, message = change_user_password(username, new_password)
         if success:
+            log_security_event('password_change', True, username=username)
             if forced:
                 return redirect(url_for('upload_page'))
             return render_template('change_password.html', success=message,
                                    is_admin=is_admin(), username=username, forced=False)
+        log_security_event('password_change', False, username=username)
         return render_template('change_password.html', error=message,
                                is_admin=is_admin(), username=username, forced=forced)
 
@@ -1147,6 +1209,8 @@ def api_create_user():
     role = data.get('role', 'user')
 
     success, message = create_user(username, password, role)
+    log_security_event('user_creation', success, username=session.get('username'),
+                       target_username=username, target_role=role)
     if success:
         return jsonify({'success': True, 'message': message})
     return jsonify({'error': message}), 400
@@ -1157,6 +1221,8 @@ def api_create_user():
 def api_delete_user(username):
     """Delete a user"""
     success, message = delete_user(username)
+    log_security_event('user_deletion', success, username=session.get('username'),
+                       target_username=username)
     if success:
         return jsonify({'success': True, 'message': message})
     return jsonify({'error': message}), 400
@@ -1169,7 +1235,9 @@ def api_reset_password(username):
     data = request.json
     new_password = data.get('password', '')
 
-    success, message = change_user_password(username, new_password)
+    success, message = change_user_password(username, new_password, require_change=True)
+    log_security_event('password_reset', success, username=session.get('username'),
+                       target_username=username)
     if success:
         return jsonify({'success': True, 'message': message})
     return jsonify({'error': message}), 400
@@ -1235,6 +1303,7 @@ def api_display_enroll():
     data = request.get_json(silent=True) if request.is_json else request.form
     submitted_secret = (data or {}).get('enrollment_secret', '')
     if not submitted_secret or not secrets.compare_digest(submitted_secret, DISPLAY_TOKEN):
+        log_security_event('display_enrollment', False)
         response = jsonify({'error': 'Invalid enrollment secret'})
         response.status_code = 401
         response.headers['Cache-Control'] = 'no-store, private'
@@ -1244,6 +1313,7 @@ def api_display_enroll():
     session['display_authenticated_at'] = int(time.time())
     session['display_session_generation'] = DISPLAY_SESSION_GENERATION
     session.permanent = True
+    log_security_event('display_enrollment', True)
 
     if request.is_json:
         response = jsonify({'success': True, 'display_url': url_for('display_page')})
@@ -1779,6 +1849,7 @@ def api_rotate_display_secret():
     DISPLAY_SESSION_GENERATION += 1
     DISPLAY_SESSION_GENERATION_FILE.write_text(str(DISPLAY_SESSION_GENERATION))
     os.chmod(DISPLAY_SESSION_GENERATION_FILE, 0o600)
+    log_security_event('display_credential_rotation', True, username=session.get('username'))
     response = jsonify({
         'success': True,
         'enrollment_secret': DISPLAY_TOKEN,
@@ -2161,7 +2232,7 @@ if _thumb_count > 0:
 # ============ Main ============
 
 if __name__ == '__main__':
-    # Ensure default admin exists
+    # Ensure the random one-time administrator exists.
     load_users()
 
     print("\n" + "="*50)
@@ -2169,7 +2240,7 @@ if __name__ == '__main__':
     print("="*50)
     print(f"Upload & Gallery: http://localhost:5000/upload")
     print(f"TV Display:       http://localhost:5000/display")
-    print(f"\nDefault login:    admin / password")
+    print("\nAdministrator bootstrap credentials are available only from the protected data volume.")
     print("="*50 + "\n")
 
     app.run(host='0.0.0.0', port=5000, debug=os.environ.get('FLASK_DEBUG', '').lower() in ('1', 'true'))
