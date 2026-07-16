@@ -12,8 +12,8 @@ import app as photo_app
 def _get_admin_client(client):
     """Get an authenticated admin client with a non-default password."""
     photo_app.load_users()
-    photo_app.change_user_password('admin', 'newpass123')
-    client.post('/login', data={'username': 'admin', 'password': 'newpass123'})
+    photo_app.change_user_password('admin', 'new-password-123')
+    client.post('/login', data={'username': 'admin', 'password': 'new-password-123'})
     return client
 
 

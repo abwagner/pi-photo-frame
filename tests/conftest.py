@@ -14,6 +14,8 @@ import sys
 sys.path.insert(0, str(Path(__file__).parent.parent))
 import app as photo_app
 
+TEST_ADMIN_PASSWORD = 'test-admin-password'
+
 
 @pytest.fixture
 def tmp_dirs(tmp_path):
@@ -37,6 +39,8 @@ def app(tmp_dirs):
     original_settings = photo_app.SETTINGS_FILE
     original_users = photo_app.USERS_FILE
     original_gallery = photo_app.GALLERY_FILE
+    original_initial_password = photo_app.INITIAL_ADMIN_PASSWORD_FILE
+    original_security_log = photo_app.SECURITY_LOG_FILE
     original_display_token_file = photo_app.DISPLAY_TOKEN_FILE
     original_display_generation_file = photo_app.DISPLAY_SESSION_GENERATION_FILE
     original_display_token = photo_app.DISPLAY_TOKEN
@@ -55,6 +59,8 @@ def app(tmp_dirs):
     photo_app.SETTINGS_FILE = data_dir / "settings.json"
     photo_app.USERS_FILE = data_dir / "users.json"
     photo_app.GALLERY_FILE = data_dir / "gallery.json"
+    photo_app.INITIAL_ADMIN_PASSWORD_FILE = data_dir / ".initial_admin_password"
+    photo_app.SECURITY_LOG_FILE = data_dir / "security-events.jsonl"
     photo_app.DISPLAY_TOKEN_FILE = data_dir / ".display_token"
     photo_app.DISPLAY_SESSION_GENERATION_FILE = data_dir / ".display_session_generation"
     photo_app.DISPLAY_TOKEN = "test-display-enrollment-secret"
@@ -80,6 +86,8 @@ def app(tmp_dirs):
     photo_app.SETTINGS_FILE = original_settings
     photo_app.USERS_FILE = original_users
     photo_app.GALLERY_FILE = original_gallery
+    photo_app.INITIAL_ADMIN_PASSWORD_FILE = original_initial_password
+    photo_app.SECURITY_LOG_FILE = original_security_log
     photo_app.DISPLAY_TOKEN_FILE = original_display_token_file
     photo_app.DISPLAY_SESSION_GENERATION_FILE = original_display_generation_file
     photo_app.DISPLAY_TOKEN = original_display_token
@@ -100,12 +108,14 @@ def client(app):
 def auth_client(app):
     """Flask test client with authenticated admin session."""
     client = app.test_client()
-    # Create default admin user by loading users (triggers default creation)
+    # Create the random bootstrap administrator, then initialize it for routine tests.
     photo_app.load_users()
+    photo_app.change_user_password('admin', TEST_ADMIN_PASSWORD)
+    photo_app.INITIAL_ADMIN_PASSWORD_FILE.unlink(missing_ok=True)
     # Log in
     client.post('/login', data={
         'username': 'admin',
-        'password': 'password'
+        'password': TEST_ADMIN_PASSWORD
     }, follow_redirects=True)
     return client
 

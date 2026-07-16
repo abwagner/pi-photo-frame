@@ -53,14 +53,17 @@ Once running, access the photo frame at:
 | **Gallery** | http://your-server:5000/gallery |
 | **TV Display** | http://your-server:5000/display |
 
-### Default Credentials
+### One-Time Administrator Credential
 
-```
-Username: admin
-Password: password
+The username is `admin`. On a new installation, the application generates a random
+one-time password in `/app/data/.initial_admin_password` with mode `0600`. The
+installer consumes, deletes, and prints it once. For a manual Compose deployment:
+
+```bash
+docker compose exec photo-frame sh -c 'cat /app/data/.initial_admin_password; rm /app/data/.initial_admin_password'
 ```
 
-⚠️ **Change the default password immediately after first login!**
+Change it on first login to a password of at least 12 characters.
 
 ---
 
@@ -291,16 +294,17 @@ The default max upload size is 50MB. If using a reverse proxy, ensure it also al
 ### Reset admin password
 
 ```bash
-# Delete the users file (will recreate with default admin/password)
+# Generate a new random one-time administrator password
 docker compose exec photo-frame rm /app/data/users.json
 docker compose restart
+docker compose exec photo-frame sh -c 'cat /app/data/.initial_admin_password; rm /app/data/.initial_admin_password'
 ```
 
 ---
 
 ## Security Recommendations
 
-1. **Change default password** immediately after setup
+1. **Consume the one-time password locally and change it** immediately after setup
 2. **Use HTTPS** via reverse proxy in production
 3. **Restrict network access** if only used locally
 4. **Regular backups** of the data volume

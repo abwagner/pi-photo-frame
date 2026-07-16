@@ -302,8 +302,8 @@ class TestAuthEdgeCases:
         """GET /logout clears session and redirects to login."""
         # Log in with a non-default password so forced change doesn't interfere
         photo_app.load_users()
-        photo_app.change_user_password('admin', 'newpass123')
-        client.post('/login', data={'username': 'admin', 'password': 'newpass123'})
+        photo_app.change_user_password('admin', 'new-password-123')
+        client.post('/login', data={'username': 'admin', 'password': 'new-password-123'})
 
         # Verify we're logged in (upload page returns 200)
         resp = client.get('/upload')

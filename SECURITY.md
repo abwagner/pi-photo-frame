@@ -19,7 +19,7 @@ We appreciate responsible disclosure and will credit reporters when we publish a
 
 ## Security Practices
 
-- Change the default `admin` / `password` immediately after first setup.
+- Consume the random one-time administrator password locally and change it on first login.
 - Keep dependencies updated (e.g. `pip install -U -r requirements.txt`).
 - Run the app behind HTTPS in production when possible.
 - Do not expose the app to the internet unless you need to; prefer local/VPN access.
@@ -40,3 +40,9 @@ enrollment credentials and browser sessions cannot register an agent or dequeue
 commands. Store the agent token in a mode-`0600` file and send it only in the
 `Authorization: Bearer` header. Never place it in JSON, query strings, service
 arguments, or logs.
+
+All password creation, change, and reset paths require at least 12 characters.
+Structured security events are stored in the protected data volume and contain a
+timestamp, event type, username when known, source IP, and outcome. They must never
+contain passwords, MFA/recovery secrets, display or CEC credentials, cookies, or
+CSRF values.
