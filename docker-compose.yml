@@ -2,7 +2,7 @@ services:
   photo-frame:
     build: .
     # Or use pre-built image (if you publish one):
-    # image: your-registry/pi-photo-frame:latest
+    # image: your-registry/openfotoframe:latest
     container_name: pi-photo-frame
     restart: unless-stopped
     volumes:

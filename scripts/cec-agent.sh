@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ============================================================
-# Pi Photo Frame - CEC Agent
+# OpenFotoFrame - CEC Agent
 # ============================================================
 #
 # Runs on the display-only Pi. Registers this device's CEC
@@ -8,7 +8,7 @@
 # and executes them locally via cec-ctl.
 #
 # Usage: ./scripts/cec-agent.sh <backend-url>
-# Token: /etc/pi-photo-frame/cec-agent-token (0600), or CEC_AGENT_TOKEN_FILE
+# Token: /etc/openfotoframe/cec-agent-token (0600), or CEC_AGENT_TOKEN_FILE
 #
 # Started automatically by start_kiosk.sh when CEC is enabled.
 # Requires: cec-utils (apt install cec-utils)
@@ -16,7 +16,10 @@
 set -euo pipefail
 
 BACKEND_URL="${1:-}"
-TOKEN_FILE="${CEC_AGENT_TOKEN_FILE:-/etc/pi-photo-frame/cec-agent-token}"
+TOKEN_FILE="${CEC_AGENT_TOKEN_FILE:-/etc/openfotoframe/cec-agent-token}"
+if [[ ! -f "$TOKEN_FILE" && -f /etc/pi-photo-frame/cec-agent-token ]]; then
+    TOKEN_FILE=/etc/pi-photo-frame/cec-agent-token
+fi
 POLL_INTERVAL=30   # seconds between polls
 CEC_DEVICE="/dev/cec0"
 
@@ -43,7 +46,7 @@ BACKEND_URL="${BACKEND_URL%/}"
 
 log() {
     echo "[CEC] $*"
-    logger -t "pi-photo-frame-cec" "$*" 2>/dev/null || true
+    logger -t "openfotoframe-cec" "$*" 2>/dev/null || true
 }
 
 # Verify cec-ctl is installed and device is accessible

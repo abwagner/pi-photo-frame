@@ -1,4 +1,4 @@
-# Contributing to Pi Photo Frame
+# Contributing to OpenFotoFrame
 
 Thanks for your interest in contributing! Here's how to get started.
 
@@ -6,8 +6,8 @@ Thanks for your interest in contributing! Here's how to get started.
 
 1. **Clone the repo**
    ```bash
-   git clone https://github.com/<your-username>/pi-photo-frame.git
-   cd pi-photo-frame
+   git clone https://github.com/<your-username>/off.git
+   cd off
    ```
 
 2. **Create a virtual environment**

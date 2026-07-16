@@ -14,7 +14,7 @@ For upgrades from tokenized kiosk releases:
 3. Enter the display enrollment secret once on each remote display. Rotate it after
    all displays are migrated; rotation immediately invalidates earlier sessions.
 4. Retrieve the separate CEC agent token, install it at
-   `/etc/pi-photo-frame/cec-agent-token` with mode `0600`, and remove old display-token
+   `/etc/openfotoframe/cec-agent-token` with mode `0600`, and remove old display-token
    arguments from services and scripts.
 5. Remove tokenized URLs from browser/shell history, generated scripts, service files,
    and retained proxy logs.
@@ -64,8 +64,8 @@ your-domain.com  (DNS A record, kept updated by Cloudflare DDNS)
 **1. Clone or copy the project to the server**
 
 ```bash
-git clone https://github.com/your-repo/pi-photo-frame.git
-cd pi-photo-frame
+git clone https://github.com/your-repo/off.git
+cd off
 ```
 
 **2. Create your `.env` file**
@@ -112,7 +112,7 @@ page. Default credentials: `admin` / `password`.
 **On the Pi — stop the backend and export volumes**
 
 ```bash
-cd ~/pi-photo-frame
+cd ~/off
 docker compose stop
 
 docker run --rm \
@@ -131,7 +131,7 @@ scp /tmp/photoframe-backup.tar.gz user@your-server:/tmp/
 **On the server — restore into the new volumes**
 
 ```bash
-cd /path/to/pi-photo-frame
+cd /path/to/off
 docker compose stop
 
 docker run --rm \
@@ -165,7 +165,7 @@ docker exec pi-photo-frame cat /app/data/.display_token
 **On the Pi — run the install script in display-only mode**
 
 ```bash
-cd ~/pi-photo-frame
+cd ~/off
 ./scripts/install.sh
 # Choose mode 2: Display only
 # Backend URL: https://photos.yourdomain.com
@@ -186,7 +186,7 @@ desktop/service files, shell history, and retained reverse-proxy access logs.
 Remove the old backend containers to free resources. The kiosk setup is kept.
 
 ```bash
-cd ~/pi-photo-frame
+cd ~/off
 docker compose down --rmi all --volumes
 ```
 
@@ -204,7 +204,7 @@ If you use the TV schedule feature (auto on/off via HDMI-CEC), be aware that
 the CEC agent runs on the Pi in display-only mode and polls the backend for
 scheduled commands to execute locally. See the display-only install prompts
 for setup. Retrieve the dedicated token from `GET /api/cec/agent-token` as an
-administrator. The installer stores it in `/etc/pi-photo-frame/cec-agent-token`,
+administrator. The installer stores it in `/etc/openfotoframe/cec-agent-token`,
 owned by the kiosk user with mode `0600`; it is never shared with display enrollment
 or included in URLs, generated scripts, logs, or process arguments.
 

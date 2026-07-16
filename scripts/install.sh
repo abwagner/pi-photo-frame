@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ============================================================
-# Pi Photo Frame - One-Command Setup
+# OpenFotoFrame - One-Command Setup
 # ============================================================
 #
 # Usage: ./scripts/install.sh
@@ -297,7 +297,7 @@ KIOSKEOF
     cat > ~/.config/autostart/photo-frame-kiosk.desktop <<EOF
 [Desktop Entry]
 Type=Application
-Name=Photo Frame Kiosk
+Name=OpenFotoFrame Kiosk
 Exec=$PROJECT_DIR/start_kiosk.sh
 X-GNOME-Autostart-enabled=true
 EOF
@@ -470,10 +470,10 @@ setup_display_only() {
             read -rsp "  CEC agent token: " cec_agent_token
             echo ""
         done
-        sudo mkdir -p /etc/pi-photo-frame
-        printf '%s\n' "$cec_agent_token" | sudo tee /etc/pi-photo-frame/cec-agent-token >/dev/null
-        sudo chmod 0600 /etc/pi-photo-frame/cec-agent-token
-        sudo chown "$USER:$(id -gn)" /etc/pi-photo-frame/cec-agent-token
+        sudo mkdir -p /etc/openfotoframe
+        printf '%s\n' "$cec_agent_token" | sudo tee /etc/openfotoframe/cec-agent-token >/dev/null
+        sudo chmod 0600 /etc/openfotoframe/cec-agent-token
+        sudo chown "$USER:$(id -gn)" /etc/openfotoframe/cec-agent-token
         unset cec_agent_token
         cec_launch="# Start CEC agent for TV power control (runs in background)
 \"$PROJECT_DIR/scripts/cec-agent.sh\" \"$backend_url\" &"
@@ -532,7 +532,7 @@ KIOSKEOF
     cat > ~/.config/autostart/photo-frame-kiosk.desktop <<EOF
 [Desktop Entry]
 Type=Application
-Name=Photo Frame Kiosk
+Name=OpenFotoFrame Kiosk
 Exec=$PROJECT_DIR/start_kiosk.sh
 X-GNOME-Autostart-enabled=true
 EOF
@@ -565,7 +565,7 @@ EOF
 main() {
     echo ""
     echo "======================================"
-    echo "  Pi Photo Frame - Setup"
+    echo "  OpenFotoFrame - Setup"
     echo "======================================"
     echo ""
     echo "  Setup mode:"

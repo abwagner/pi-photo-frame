@@ -1,4 +1,4 @@
-# 🖼️ Pi Photo Frame
+# 🖼️ OpenFotoFrame
 
 A beautiful, web-based digital photo frame with user management, gallery controls, and HTTPS support. Runs on any Linux system — commonly deployed on a Raspberry Pi connected to a TV.
 
@@ -26,8 +26,8 @@ A beautiful, web-based digital photo frame with user management, gallery control
 ## Quick Start
 
 ```bash
-git clone https://github.com/abwagner/pi-photo-frame.git
-cd pi-photo-frame
+git clone https://github.com/abwagner/off.git
+cd off
 ./scripts/install.sh
 ```
 
@@ -47,8 +47,8 @@ After setup, access at `https://<your-ip>/upload`. If your system runs Avahi/mDN
 
 ```bash
 ssh user@your-host
-git clone https://github.com/abwagner/pi-photo-frame.git
-cd pi-photo-frame
+git clone https://github.com/abwagner/off.git
+cd off
 ./scripts/install.sh
 ```
 
@@ -369,7 +369,7 @@ This uses the `/api/maintenance-window` endpoint which checks TV schedules. If n
 SSH into the Pi and run:
 
 ```bash
-cd ~/pi-photo-frame
+cd ~/off
 ./scripts/deploy.sh
 ```
 
@@ -378,7 +378,7 @@ This also checks the maintenance window before proceeding.
 ## File Structure
 
 ```
-pi-photo-frame/
+off/
 ├── app.py                  # Flask application
 ├── requirements.txt        # Python dependencies
 ├── Dockerfile              # Docker image definition
@@ -484,10 +484,14 @@ requirement because only Caddy publishes host ports.
 
 The CEC agent does not use the display enrollment secret or browser session. It
 authenticates only with `Authorization: Bearer <CEC_AGENT_TOKEN>`. In display-only
-installations, place the token in `/etc/pi-photo-frame/cec-agent-token`, owned by
+installations, place the token in `/etc/openfotoframe/cec-agent-token`, owned by
 the kiosk service user and mode `0600`. The agent reads it from that file and passes
 it to curl through standard input, so the value is absent from URLs and process
 arguments. Set `CEC_AGENT_TOKEN_FILE` only when using a different protected path.
+
+Legacy Docker container names (`pi-photo-frame`), volume names (`photoframe_*`), and
+the former CEC token path remain recognized so existing installations upgrade without
+data movement. New host-side configuration uses the OpenFotoFrame name.
 
 ### Multi-factor authentication
 
@@ -562,10 +566,10 @@ The final command consumes and displays the credential once on the local termina
 
 ## Uninstall
 
-To completely remove Pi Photo Frame (containers, images, volumes, cron jobs, and kiosk config):
+To completely remove OpenFotoFrame (containers, images, volumes, cron jobs, and kiosk config):
 
 ```bash
-cd ~/pi-photo-frame
+cd ~/off
 ./scripts/uninstall.sh
 ```
 

@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="csrf-token" content="{{ csrf_token() }}">
-    <title>Pi Photo Frame</title>
+    <title>OpenFotoFrame</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/upload.css') }}">
     <script src="{{ url_for('static', filename='js/legacy-events.js') }}" defer></script>
 </head>
@@ -22,7 +22,7 @@
                 {% endif %}
                 <a href="/logout" class="header-link">Logout</a>
             </div>
-            <h1>🖼️ Pi Photo Frame</h1>
+            <h1>🖼️ OpenFotoFrame</h1>
             <p class="subtitle">Logged in as {{ username }}</p>
             <a href="/display" class="display-link" target="_blank">Open TV Display →</a>
         </header>

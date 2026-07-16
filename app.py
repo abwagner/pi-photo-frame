@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Pi Photo Frame - A web-based photo display system for Raspberry Pi
+OpenFotoFrame - A web-based photo display system for Raspberry Pi
 Upload photos via web interface, display on TV with customizable mat colors
 """
 
@@ -2700,7 +2700,7 @@ if __name__ == '__main__':
     load_users()
 
     print("\n" + "="*50)
-    print("Pi Photo Frame Server")
+    print("OpenFotoFrame Server")
     print("="*50)
     print(f"Upload & Gallery: http://localhost:5000/upload")
     print(f"TV Display:       http://localhost:5000/display")

@@ -1,4 +1,4 @@
-# Pi Photo Frame – Agent Overview
+# OpenFotoFrame – Agent Overview
 
 Web-based digital photo frame for Raspberry Pi or any Linux system. Users upload photos via a browser; the display runs a fullscreen slideshow on a connected TV or monitor.
 
@@ -11,7 +11,7 @@ Web-based digital photo frame for Raspberry Pi or any Linux system. Users upload
 ## Project Structure
 
 ```
-pi-photo-frame/
+off/
 ├── app.py              # Main Flask app: auth, uploads, gallery, groups, display API, backup
 ├── requirements.txt
 ├── Dockerfile

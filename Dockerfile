@@ -1,4 +1,4 @@
-# Pi Photo Frame - Docker Image
+# OpenFotoFrame - Docker Image
 # Supports both AMD64 and ARM64 (Raspberry Pi 4)
 
 FROM python:3.14-slim
