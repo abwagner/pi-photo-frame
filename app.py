@@ -2129,6 +2129,37 @@ def api_backfill_snapshots():
     return jsonify({'success': True, 'generated': count})
 
 
+def _is_portrait(img_data, threshold=1.15):
+    """Return True if an image is portrait-oriented (height/width > threshold)."""
+    w = img_data.get('width') or 0
+    h = img_data.get('height') or 0
+    return h > 0 and w > 0 and (h / w) > threshold
+
+
+def _auto_pair_portraits(slides):
+    """Pair consecutive ungrouped portrait singles into synthetic side-by-side group slides."""
+    result = []
+    i = 0
+    while i < len(slides):
+        slide = slides[i]
+        next_slide = slides[i + 1] if i + 1 < len(slides) else None
+        if (slide['type'] == 'single' and _is_portrait(slide['images'][0]) and
+                next_slide and next_slide['type'] == 'single' and
+                _is_portrait(next_slide['images'][0])):
+            img1, img2 = slide['images'][0], next_slide['images'][0]
+            result.append({
+                'type': 'group',
+                'group_id': None,
+                'images': [img1, img2],
+                'mat_color': img1.get('mat_color') or img2.get('mat_color'),
+            })
+            i += 2
+        else:
+            result.append(slide)
+            i += 1
+    return result
+
+
 def _build_slides():
     """Build the ordered slides list from gallery data and settings."""
     settings = load_settings()
@@ -2192,6 +2223,9 @@ def _build_slides():
     if settings.get('shuffle'):
         daily_seed = datetime.now().strftime('%Y-%m-%d')
         random.Random(daily_seed).shuffle(slides)
+
+    # Auto-pair consecutive ungrouped portrait singles side-by-side
+    slides = _auto_pair_portraits(slides)
 
     return slides, all_images, settings
 
