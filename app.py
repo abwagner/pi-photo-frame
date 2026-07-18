@@ -896,6 +896,7 @@ DEFAULT_SETTINGS = {
     'image_order': [],
     'target_aspect_ratio': '16:9',
     'tv_schedules': [],
+    'max_backup_history': 30,
     'mfa_mode': 'disabled',
     'mfa_methods': 'either',
     'webauthn_rp_id': '',
@@ -957,11 +958,28 @@ def load_backup_log():
 
 def save_backup_log(log_data):
     """Save backup log to JSON file"""
-    # Keep only last 30 history entries
-    if len(log_data.get('history', [])) > 30:
-        log_data['history'] = log_data['history'][-30:]
+    max_history = load_settings().get('max_backup_history', 30)
+    if len(log_data.get('history', [])) > max_history:
+        log_data['history'] = log_data['history'][-max_history:]
     with open(BACKUP_LOG_FILE, 'w') as f:
         json.dump(log_data, f, indent=2)
+
+
+def _files_changed_since(since_ts, *folders, exclude_names=None):
+    """Return True if any tracked file under folders was modified after since_ts."""
+    exclude_names = set(exclude_names or [])
+    for folder in folders:
+        folder = Path(folder)
+        if not folder.exists():
+            continue
+        for path in folder.rglob('*'):
+            if path.is_file() and path.name not in exclude_names:
+                try:
+                    if path.stat().st_mtime > since_ts:
+                        return True
+                except OSError:
+                    pass
+    return False
 
 
 def is_backup_configured():
@@ -988,7 +1006,8 @@ def get_backup_settings():
     settings = load_settings()
     return {
         'backup_time': settings.get('backup_time', os.environ.get('BACKUP_TIME', '03:00')),
-        'backup_path': settings.get('backup_path', 'PhotoFrameBackup')
+        'backup_path': settings.get('backup_path', 'PhotoFrameBackup'),
+        'max_backup_history': settings.get('max_backup_history', 30),
     }
 
 
@@ -1011,6 +1030,24 @@ def run_backup():
     log = load_backup_log()
 
     try:
+        # Skip if nothing has changed since the last successful backup
+        _data_excludes = {'.backup.lock', '.secret_key', '.display_token', 'users.json'}
+        last_backup_str = log.get('last_backup')
+        if log.get('last_result') == 'success' and last_backup_str:
+            try:
+                last_ts = datetime.fromisoformat(last_backup_str).timestamp()
+                if not _files_changed_since(last_ts, UPLOAD_FOLDER) and \
+                   not _files_changed_since(last_ts, DATA_FOLDER, exclude_names=_data_excludes):
+                    log['history'].append({
+                        'timestamp': start_time.isoformat(),
+                        'result': 'no_changes',
+                        'duration_seconds': 0
+                    })
+                    save_backup_log(log)
+                    return {'success': True, 'no_changes': True}
+            except (ValueError, OSError):
+                pass  # Can't determine — proceed with backup
+
         backup_settings = get_backup_settings()
         remote_path = backup_settings['backup_path']
         config = str(RCLONE_CONFIG_FILE)
@@ -2551,7 +2588,8 @@ def api_backup_status():
         'last_error': log.get('last_error'),
         'next_scheduled': next_run,
         'backup_time': backup_settings['backup_time'],
-        'backup_path': backup_settings['backup_path']
+        'backup_path': backup_settings['backup_path'],
+        'max_backup_history': backup_settings['max_backup_history'],
     })
 
 
@@ -2658,6 +2696,14 @@ def api_backup_settings():
         path = data['backup_path'].strip()
         if path:
             settings['backup_path'] = path
+
+    if 'max_backup_history' in data:
+        try:
+            val = int(data['max_backup_history'])
+            if 1 <= val <= 200:
+                settings['max_backup_history'] = val
+        except (ValueError, TypeError):
+            return jsonify({'error': 'max_backup_history must be an integer between 1 and 200'}), 400
 
     save_settings(settings)
     return jsonify({'success': True})

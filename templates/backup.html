@@ -96,6 +96,11 @@
                 <input type="text" id="backup-path" value="PhotoFrameBackup" data-onchange="saveBackupSettings()">
                 <p class="help-text">Files are backed up to this folder in your Dropbox.</p>
             </div>
+            <div class="setting-group">
+                <label>Max history entries</label>
+                <input type="number" id="max-history" min="1" max="200" value="30" data-onchange="saveBackupSettings()">
+                <p class="help-text">How many backup log entries to keep.</p>
+            </div>
         </div>
 
         <!-- History Panel -->
