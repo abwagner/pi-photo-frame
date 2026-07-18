@@ -1639,14 +1639,15 @@
         function makeBevelLitStripHtml(bevelWidth, matColor) {
             const w = bevelWidth + 'px';
             const { highlight, shadow } = getBevelColorsLit(matColor);
+            // Top/bottom own the corners; left/right are trimmed by w on each end to avoid blowout.
             const strips = [
-                { pos: `top:0;left:0;right:0;height:${w}`,    clip: `polygon(0 0,100% 0,calc(100% - ${w}) 100%,${w} 100%)`,     grad: 'to bottom', from: highlight, to: 'rgba(255,255,255,0)' },
-                { pos: `bottom:0;left:0;right:0;height:${w}`, clip: `polygon(${w} 0,calc(100% - ${w}) 0,100% 100%,0 100%)`,     grad: 'to top',    from: shadow,    to: 'rgba(0,0,0,0)'       },
-                { pos: `top:0;left:0;bottom:0;width:${w}`,    clip: `polygon(0 0,100% ${w},100% calc(100% - ${w}),0 100%)`,     grad: 'to right',  from: highlight, to: 'rgba(255,255,255,0)' },
-                { pos: `top:0;right:0;bottom:0;width:${w}`,   clip: `polygon(0 ${w},100% 0,100% 100%,0 calc(100% - ${w}))`,     grad: 'to left',   from: shadow,    to: 'rgba(0,0,0,0)'       },
+                { pos: `top:0;left:0;right:0;height:${w}`,             grad: 'to bottom', from: highlight, to: 'rgba(255,255,255,0)' },
+                { pos: `bottom:0;left:0;right:0;height:${w}`,           grad: 'to top',    from: shadow,    to: 'rgba(0,0,0,0)'       },
+                { pos: `top:${w};left:0;bottom:${w};width:${w}`,       grad: 'to right',  from: highlight, to: 'rgba(255,255,255,0)' },
+                { pos: `top:${w};right:0;bottom:${w};width:${w}`,      grad: 'to left',   from: shadow,    to: 'rgba(0,0,0,0)'       },
             ];
-            return strips.map(({ pos, clip, grad, from, to }) =>
-                `<div style="position:absolute;${pos};clip-path:${clip};background:linear-gradient(${grad},${from},${to});pointer-events:none;z-index:1;"></div>`
+            return strips.map(({ pos, grad, from, to }) =>
+                `<div style="position:absolute;${pos};background:linear-gradient(${grad},${from},${to});pointer-events:none;z-index:1;"></div>`
             ).join('');
         }
 
