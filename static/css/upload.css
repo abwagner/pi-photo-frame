@@ -73,11 +73,27 @@
         /* ===== Preview Section ===== */
         .preview-section {
             display: none;
-            margin-bottom: 20px;
+            position: fixed;
+            inset: 0;
+            z-index: 200;
+            background: rgba(0, 0, 0, 0.78);
+            align-items: flex-start;
+            justify-content: center;
+            padding: 24px 16px;
+            overflow-y: auto;
         }
 
         .preview-section.active {
-            display: block;
+            display: flex;
+        }
+
+        .preview-modal-box {
+            background: #1a1a1a;
+            border-radius: 16px;
+            width: 100%;
+            max-width: 900px;
+            box-shadow: 0 8px 48px rgba(0, 0, 0, 0.7);
+            overflow: hidden;
         }
 
         .mat-preview {
@@ -712,9 +728,9 @@
             gap: 6px;
         }
 
-        .card-actions button {
-            flex: 1;
-            padding: 6px;
+        .card-actions button,
+        .card-actions a.btn {
+            padding: 6px 10px;
             font-size: 0.75rem;
         }
 

@@ -29,20 +29,22 @@
 
         <!-- Preview Section -->
         <div class="preview-section" id="preview-section">
-            <div class="mat-preview" id="mat-preview">
-                <div id="preview-content"></div>
-                <button class="preview-close-btn" data-onclick="closePreview()" title="Close">&times;</button>
-            </div>
-            <div class="preview-controls" id="preview-controls">
-                <div class="preview-controls-header">
-                    <h3 id="preview-controls-title">Group Controls</h3>
-                    <div class="preview-controls-actions">
-                        <button class="btn btn-refresh" data-onclick="autoMatchHeights()">Match Heights</button>
-                        <button class="btn btn-refresh" data-onclick="refreshPreview()">Refresh Preview</button>
-                        <button class="btn btn-ungroup" id="preview-ungroup-btn" data-onclick="ungroupFromPreview()" style="display:none;">Ungroup</button>
-                    </div>
+            <div class="preview-modal-box">
+                <div class="mat-preview" id="mat-preview">
+                    <div id="preview-content"></div>
+                    <button class="preview-close-btn" data-onclick="closePreview()" title="Close">&times;</button>
                 </div>
-                <div id="preview-controls-body"></div>
+                <div class="preview-controls" id="preview-controls">
+                    <div class="preview-controls-header">
+                        <h3 id="preview-controls-title">Group Controls</h3>
+                        <div class="preview-controls-actions">
+                            <button class="btn btn-refresh" data-onclick="autoMatchHeights()">Match Heights</button>
+                            <button class="btn btn-refresh" data-onclick="refreshPreview()">Refresh Preview</button>
+                            <button class="btn btn-ungroup" id="preview-ungroup-btn" data-onclick="ungroupFromPreview()" style="display:none;">Ungroup</button>
+                        </div>
+                    </div>
+                    <div id="preview-controls-body"></div>
+                </div>
             </div>
         </div>
 

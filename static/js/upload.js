@@ -28,6 +28,14 @@
         const previewControlsBody = document.getElementById('preview-controls-body');
         const previewControlsTitle = document.getElementById('preview-controls-title');
 
+        previewSection.addEventListener('click', function(e) {
+            if (e.target === previewSection) closePreview();
+        });
+
+        // Track modifier key for ctrl/cmd+click group selection
+        let _modKey = false;
+        document.addEventListener('mousedown', function(e) { _modKey = e.ctrlKey || e.metaKey; });
+
         // Neutral presets: shown by default (white to medium-brown warm tones)
         const NEUTRAL_PRESETS = [
             {color: '#ffffff', title: 'White'}, {color: '#f5f0e6', title: 'Cream'},
@@ -368,13 +376,6 @@
                             </div>
                             <div class="card-info">
                                 <div class="card-filename">Group (${count} images)</div>
-                                <div class="mat-color-row">
-                                    <label>Mat:</label>
-                                    <input type="color"
-                                           class="mat-color-picker"
-                                           value="${group.mat_color || matColorInput.value}"
-                                           data-onchange="updateGroupMatColor('${groupId}', this.value)">
-                                </div>
                                 <div class="card-actions">
                                     <button class="btn btn-edit" data-onclick="openGroupPreview('${groupId}')">Edit</button>
                                     <button class="btn btn-ungroup" data-onclick="ungroupGroup('${groupId}')">Ungroup</button>
@@ -402,19 +403,12 @@
                             <span>${formatSize(img.size)}</span>
                             <span>${img.uploaded_by || 'Unknown'}</span>
                         </div>
-                        <div class="mat-color-row">
-                            <label>Mat:</label>
-                            <input type="color"
-                                   class="mat-color-picker"
-                                   value="${img.mat_color || matColorInput.value}"
-                                   data-filename="${escAttr(img.filename)}"
-                                   data-onchange="updateMatColor('${escAttr(img.filename)}', this.value)">
-                        </div>
                         <div class="card-actions">
                             <button class="btn ${img.enabled ? 'btn-warning' : 'btn-success'}"
                                     data-onclick="toggleImage('${escAttr(img.filename)}', ${!img.enabled})">
                                 ${img.enabled ? '⊘ Hide' : '✓ Show'}
                             </button>
+                            <a class="btn btn-edit" href="/uploads/${escAttr(img.filename)}" download="${escAttr(img.filename)}" title="Download">⬇</a>
                             <button class="btn btn-danger" data-onclick="deleteImage('${escAttr(img.filename)}')">🗑</button>
                         </div>
                     </div>
@@ -583,6 +577,7 @@
                             data-onclick="toggleImage('${escAttr(filename)}', ${!img.enabled}); renderSingleControls('${escAttr(filename)}')">
                         ${img.enabled ? '⊘ Hide' : '✓ Show'}
                     </button>
+                    <a class="btn btn-edit" href="/uploads/${escAttr(filename)}" download="${escAttr(filename)}">⬇ Download</a>
                     <button class="btn btn-danger" data-onclick="deleteImage('${escAttr(filename)}')">🗑 Delete</button>
                 </div>
             `;
@@ -998,6 +993,7 @@
                     <div style="display:flex;gap:8px;width:100%;padding-left:48px;">
                         <button class="btn btn-edit" style="font-size:0.75rem;padding:4px 8px;" data-onclick="enterCropMode('${escAttr(img.filename)}')">Crop</button>
                         <button class="btn btn-warning" style="font-size:0.75rem;padding:4px 8px;${!img.crop ? 'opacity:0.5;' : ''}" data-onclick="clearCrop('${escAttr(img.filename)}')" ${!img.crop ? 'disabled' : ''}>Clear Crop</button>
+                        <a class="btn btn-edit" href="/uploads/${escAttr(img.filename)}" download="${escAttr(img.filename)}" style="font-size:0.75rem;padding:4px 8px;">⬇</a>
                     </div>
                 </div>
             `).join('');
@@ -1079,6 +1075,12 @@
         let selectMode = false;
 
         function handleCardClick(filename) {
+            if (_modKey) {
+                _modKey = false;
+                if (!selectMode) startGroupMode();
+                toggleSelect(filename);
+                return;
+            }
             if (selectMode) {
                 toggleSelect(filename);
             } else {

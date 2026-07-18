@@ -31,6 +31,10 @@ from flask.sessions import SecureCookieSessionInterface
 from werkzeug.utils import secure_filename
 import tempfile
 
+import io
+import qrcode
+import qrcode.image.svg
+
 from PIL import Image, ImageOps, UnidentifiedImageError
 from apscheduler.schedulers.background import BackgroundScheduler
 import imagehash
@@ -146,6 +150,18 @@ try:
         os.chmod(CEC_AGENT_TOKEN_FILE, 0o600)
 except OSError:
     pass
+
+# In-memory device code store for QR enrollment flow
+_device_codes = {}  # code -> {expires_at, approved, approved_by}
+_DEVICE_CODE_TTL = 300  # 5 minutes
+_BEHIND_PROXY = os.environ.get('BEHIND_PROXY', '').lower() in ('1', 'true')
+
+def _cleanup_device_codes():
+    now = time.time()
+    expired = [k for k, v in list(_device_codes.items()) if v['expires_at'] < now]
+    for k in expired:
+        del _device_codes[k]
+
 
 # Session cookie security
 app.config['SESSION_COOKIE_HTTPONLY'] = True
@@ -517,7 +533,7 @@ def login_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
         if not is_authenticated():
-            return redirect(url_for('login'))
+            return redirect(url_for('login', next=request.path))
         if has_default_password(session.get('username')) and request.path != '/change-password':
             return redirect(url_for('change_password', forced=1))
         if session.get('mfa_enrollment_required') and not request.path.startswith('/mfa'):
@@ -531,7 +547,7 @@ def admin_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
         if not is_authenticated():
-            return redirect(url_for('login'))
+            return redirect(url_for('login', next=request.path))
         if not is_admin():
             return render_template('error.html', message='Admin access required'), 403
         return f(*args, **kwargs)
@@ -1261,6 +1277,9 @@ def login():
             if mfa_required_for(username):
                 session['mfa_enrollment_required'] = True
                 return redirect(url_for('mfa_page'))
+            next_url = request.form.get('next', '').strip()
+            if next_url and next_url.startswith('/') and '//' not in next_url:
+                return redirect(next_url)
             return redirect(url_for('upload_page'))
 
         log_security_event('login', False, username=username or None)
@@ -1748,6 +1767,81 @@ def api_display_enroll():
         response = redirect(url_for('display_page'))
     response.headers['Cache-Control'] = 'no-store, private'
     return response
+
+
+@app.get('/api/display/device-code')
+@csrf.exempt
+def api_display_device_code():
+    """Generate a device code and return its QR data URL for the enrollment page."""
+    _cleanup_device_codes()
+    code = secrets.token_urlsafe(16)
+    _device_codes[code] = {
+        'expires_at': time.time() + _DEVICE_CODE_TTL,
+        'approved': False,
+        'approved_by': None,
+    }
+    approve_url = url_for('display_approve_page', code=code, _external=True)
+    factory = qrcode.image.svg.SvgPathImage
+    img = qrcode.make(approve_url, image_factory=factory)
+    svg_io = io.BytesIO()
+    img.save(svg_io)
+    qr_data_url = 'data:image/svg+xml;base64,' + base64.b64encode(svg_io.getvalue()).decode('ascii')
+    return jsonify({
+        'code': code,
+        'approve_url': approve_url,
+        'qr_data_url': qr_data_url,
+        'expires_in': _DEVICE_CODE_TTL,
+    })
+
+
+@app.get('/api/display/device-code/status/<code>')
+@csrf.exempt
+def api_display_device_code_status(code):
+    """Pi polls here. Sets display session and returns redirect URL when approved."""
+    if code not in _device_codes:
+        return jsonify({'status': 'invalid'}), 404
+    entry = _device_codes[code]
+    if entry['expires_at'] < time.time():
+        del _device_codes[code]
+        return jsonify({'status': 'expired'}), 410
+    if entry['approved']:
+        del _device_codes[code]
+        session['display_authenticated'] = True
+        session['display_authenticated_at'] = int(time.time())
+        session['display_session_generation'] = DISPLAY_SESSION_GENERATION
+        session.permanent = True
+        log_security_event('display_enrollment', True)
+        return jsonify({'status': 'approved', 'redirect': url_for('display_page')})
+    return jsonify({'status': 'pending', 'expires_in': int(entry['expires_at'] - time.time())})
+
+
+@app.get('/display/approve/<code>')
+@login_required
+def display_approve_page(code):
+    """Authenticated user sees the approval prompt for a pending device code."""
+    if code not in _device_codes or _device_codes[code]['expires_at'] < time.time():
+        _device_codes.pop(code, None)
+        return render_template('display_approve.html', error='This code has expired. The display will generate a new one automatically.')
+    remaining = int(_device_codes[code]['expires_at'] - time.time())
+    return render_template('display_approve.html', code=code, remaining=remaining,
+                           approver=session.get('username'))
+
+
+@app.post('/api/display/approve/<code>')
+@login_required
+def api_display_approve(code):
+    """Authenticated user approves a pending device code."""
+    if code not in _device_codes:
+        return jsonify({'error': 'Invalid or expired code'}), 404
+    if _device_codes[code]['expires_at'] < time.time():
+        del _device_codes[code]
+        return jsonify({'error': 'Code expired'}), 410
+    if _device_codes[code]['approved']:
+        return jsonify({'already': True}), 200
+    _device_codes[code]['approved'] = True
+    _device_codes[code]['approved_by'] = session.get('username', 'unknown')
+    log_security_event('display_enrollment_approved', True, username=session.get('username'))
+    return jsonify({'success': True})
 
 
 # --- API Routes ---
@@ -2670,6 +2764,7 @@ def apply_browser_security_headers(response):
         '/login', '/change-password', '/mfa', '/admin/users',
         '/api/display/enroll', '/api/display/enrollment-secret', '/api/display/rotate-secret',
         '/api/display/state', '/api/settings', '/api/admin/', '/api/mfa/', '/api/cec/agent-token',
+        '/display/approve/', '/api/display/approve/',
     )
     if any(request.path == path or (path.endswith('/') and request.path.startswith(path))
            for path in sensitive_paths):
