@@ -314,29 +314,6 @@
             margin-bottom: 20px;
         }
 
-        .panels {
-            display: grid;
-            grid-template-columns: 1fr 300px;
-            gap: 20px;
-        }
-
-        .main-upload-section {
-            grid-column: 1;
-        }
-
-        .settings-column {
-            grid-column: 2;
-            grid-row: 1 / -1;
-        }
-
-        @media (max-width: 900px) {
-            .panels {
-                grid-template-columns: 1fr;
-            }
-            .main-upload-section { grid-column: 1; }
-            .settings-column { grid-column: 1; }
-        }
-
         .panel {
             background: rgba(255, 255, 255, 0.05);
             border-radius: 16px;
@@ -350,12 +327,6 @@
             margin-bottom: 20px;
             padding-bottom: 10px;
             border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-        }
-
-        .settings-column {
-            display: flex;
-            flex-direction: column;
-            gap: 20px;
         }
 
         .collapsible-header {
@@ -410,35 +381,115 @@
             gap: 20px;
         }
 
-        /* ===== Upload Zone ===== */
-        .upload-zone {
-            border: 2px dashed rgba(255, 255, 255, 0.2);
-            border-radius: 12px;
-            padding: 30px;
-            text-align: center;
-            transition: all 0.3s;
-            cursor: pointer;
-            margin-bottom: 15px;
-        }
-
-        .upload-zone:hover, .upload-zone.dragover {
-            border-color: #00d4ff;
-            background: rgba(0, 212, 255, 0.1);
-        }
-
-        .upload-zone svg {
-            width: 40px;
-            height: 40px;
-            margin-bottom: 10px;
-            opacity: 0.5;
-        }
-
-        .upload-zone p {
-            color: #888;
-        }
-
         #file-input {
             display: none;
+        }
+
+        /* ===== Page Drag Overlay ===== */
+        .page-drag-overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            z-index: 500;
+            background: rgba(0, 212, 255, 0.12);
+            border: 4px dashed rgba(0, 212, 255, 0.6);
+            align-items: center;
+            justify-content: center;
+            pointer-events: none;
+        }
+        .page-drag-overlay.active {
+            display: flex;
+        }
+        .drag-overlay-inner {
+            text-align: center;
+            color: #00d4ff;
+        }
+        .drag-overlay-inner svg {
+            width: 64px;
+            height: 64px;
+            margin-bottom: 12px;
+            opacity: 0.8;
+        }
+        .drag-overlay-inner p {
+            font-size: 1.4rem;
+            font-weight: 600;
+        }
+
+        /* ===== Settings Modal ===== */
+        .settings-modal-overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            z-index: 300;
+            background: rgba(0, 0, 0, 0.75);
+            align-items: flex-start;
+            justify-content: center;
+            padding: 24px 16px;
+            overflow-y: auto;
+        }
+        .settings-modal-overlay.active {
+            display: flex;
+        }
+        .settings-modal-box {
+            background: #1a1a2e;
+            border-radius: 16px;
+            width: 100%;
+            max-width: 680px;
+            border: 1px solid rgba(255,255,255,0.1);
+            box-shadow: 0 8px 48px rgba(0,0,0,0.7);
+            overflow: hidden;
+        }
+        .settings-modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 16px 20px;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+            font-size: 1rem;
+            font-weight: 600;
+            color: #e0e0e0;
+        }
+        .settings-modal-close {
+            background: rgba(255,255,255,0.1);
+            border: none;
+            color: #aaa;
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            cursor: pointer;
+            font-size: 1.1rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .settings-modal-close:hover { background: rgba(255,255,255,0.2); color: #fff; }
+        .settings-modal-body {
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            max-height: 75vh;
+            overflow-y: auto;
+        }
+
+        /* ===== Header Actions ===== */
+        .header-actions {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 16px;
+            margin-top: 15px;
+        }
+        .btn-settings {
+            background: rgba(255,255,255,0.1);
+            color: #ccc;
+            border: 1px solid rgba(255,255,255,0.2);
+        }
+        .btn-settings:hover { background: rgba(255,255,255,0.15); color: #fff; }
+        .btn-upload {
+            background: rgba(0,212,255,0.15);
+            color: #00d4ff;
+            border: 1px solid rgba(0,212,255,0.3);
         }
 
         /* ===== Stats Bar ===== */
@@ -1283,22 +1334,6 @@
                 font-size: 0.85rem;
             }
 
-            .panels {
-                display: flex;
-                flex-direction: column;
-                gap: 12px;
-            }
-
-            /* Upload zone: compact */
-            .upload-zone {
-                padding: 15px;
-            }
-
-            .upload-zone svg {
-                width: 24px;
-                height: 24px;
-            }
-
             /* Preview: more compact */
             .mat-preview {
                 aspect-ratio: 4/3;
@@ -1357,16 +1392,6 @@
             .toolbar {
                 padding: 8px 10px;
                 gap: 8px;
-            }
-
-            /* Settings: compact */
-            .settings-column .panel {
-                padding: 12px;
-            }
-
-            .settings-column .panel h2 {
-                font-size: 1rem;
-                margin-bottom: 12px;
             }
 
             /* Color presets: smaller on mobile */

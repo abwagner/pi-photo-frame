@@ -891,6 +891,7 @@ DEFAULT_SETTINGS = {
     'slideshow_interval': 60,
     'transition_duration': 1,
     'fit_mode': 'contain',
+    'auto_mat_color': True,
     'shuffle': False,
     'image_order': [],
     'target_aspect_ratio': '16:9',
@@ -1453,6 +1454,7 @@ def mfa_page():
     response = app.make_response(render_template(
         'mfa.html', methods=user_mfa_methods(username), required=mfa_required_for(username),
         passkeys_available=passkeys_available(), settings=load_settings(),
+        is_admin=is_admin(), username=username,
     ))
     response.headers['Cache-Control'] = 'no-store, private'
     return response
@@ -1698,6 +1700,21 @@ def api_security_settings():
 
 
 # --- Admin Routes ---
+
+@app.route('/admin')
+@admin_required
+def admin_page():
+    users = load_users()
+    user_list = [
+        {'username': uname, 'role': udata.get('role', 'user'), 'created': udata.get('created_at', 'Unknown')}
+        for uname, udata in users.items()
+    ]
+    settings = load_settings()
+    return render_template('admin.html',
+                           users=user_list,
+                           username=session.get('username'),
+                           settings=settings)
+
 
 @app.route('/admin/users')
 @admin_required
@@ -1947,7 +1964,8 @@ def api_upload():
 
             # Compute perceptual hash for duplicate detection
             phash = compute_phash(filepath)
-            mat_color = suggest_mat_color(filepath)
+            settings_for_upload = load_settings()
+            mat_color = suggest_mat_color(filepath) if settings_for_upload.get('auto_mat_color', True) else None
 
             # Add metadata
             update_image_metadata(unique_name,
@@ -2355,7 +2373,7 @@ def api_settings():
     allowed_fields = ['mat_color', 'mat_finish', 'bevel_width', 'border_effect',
                       'slideshow_interval', 'transition_duration',
                       'fit_mode', 'shuffle', 'image_order',
-                      'target_aspect_ratio']
+                      'target_aspect_ratio', 'auto_mat_color']
     for field in allowed_fields:
         if field in data:
             settings[field] = data[field]

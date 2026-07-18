@@ -16,7 +16,6 @@
         };
 
         // ===== DOM Elements =====
-        const uploadZone = document.getElementById('upload-zone');
         const fileInput = document.getElementById('file-input');
         const galleryGrid = document.getElementById('gallery-grid');
         const emptyState = document.getElementById('empty-state');
@@ -91,6 +90,7 @@
         const fitModeSelect = document.getElementById('fit-mode');
         const targetAspectRatioSelect = document.getElementById('target-aspect-ratio');
         const shuffleCheckbox = document.getElementById('shuffle');
+        const autoMatColorCheckbox = document.getElementById('auto-mat-color');
         // Populate sidebar color presets dynamically
         function buildSidebarPresets() {
             const neutralContainer = document.getElementById('default-color-presets');
@@ -115,7 +115,7 @@
         }
 
         function bindSidebarPresets() {
-            document.querySelectorAll('.settings-column .color-preset').forEach(preset => {
+            document.querySelectorAll('.settings-modal-body .color-preset').forEach(preset => {
                 preset.onclick = () => {
                     matColorInput.value = preset.dataset.color;
                     updateColorPresets();
@@ -125,7 +125,7 @@
         }
         bindSidebarPresets();
 
-        const colorPresets = document.querySelectorAll('.settings-column .color-preset');
+        const colorPresets = document.querySelectorAll('.settings-modal-body .color-preset');
 
         // ===== Settings Tabs =====
         function switchSettingsTab(tab) {
@@ -157,25 +157,46 @@
         loadGallery();
 
         // ===== Upload Handling =====
-        uploadZone.addEventListener('click', () => fileInput.click());
 
-        uploadZone.addEventListener('dragover', (e) => {
-            e.preventDefault();
-            uploadZone.classList.add('dragover');
+        // Page-level drag & drop
+        let _dragCounter = 0;
+        const pageDragOverlay = document.getElementById('page-drag-overlay');
+        document.addEventListener('dragenter', (e) => {
+            if (!e.dataTransfer || !e.dataTransfer.types.includes('Files')) return;
+            _dragCounter++;
+            pageDragOverlay.classList.add('active');
         });
-
-        uploadZone.addEventListener('dragleave', () => {
-            uploadZone.classList.remove('dragover');
+        document.addEventListener('dragleave', () => {
+            _dragCounter = Math.max(0, _dragCounter - 1);
+            if (_dragCounter === 0) pageDragOverlay.classList.remove('active');
         });
-
-        uploadZone.addEventListener('drop', (e) => {
+        document.addEventListener('dragover', (e) => {
+            if (e.dataTransfer && e.dataTransfer.types.includes('Files')) e.preventDefault();
+        });
+        document.addEventListener('drop', (e) => {
+            _dragCounter = 0;
+            pageDragOverlay.classList.remove('active');
+            if (!e.dataTransfer || !e.dataTransfer.files.length) return;
             e.preventDefault();
-            uploadZone.classList.remove('dragover');
             handleFiles(e.dataTransfer.files);
         });
 
         fileInput.addEventListener('change', (e) => {
             handleFiles(e.target.files);
+        });
+
+        function openSettingsModal() {
+            document.getElementById('settings-modal-overlay').classList.add('active');
+        }
+        function closeSettingsModal() {
+            document.getElementById('settings-modal-overlay').classList.remove('active');
+        }
+        function triggerFileInput() {
+            fileInput.click();
+        }
+
+        document.getElementById('settings-modal-overlay').addEventListener('click', function(e) {
+            if (e.target === this) closeSettingsModal();
         });
 
         // Pending files for the two-phase upload flow
@@ -1483,7 +1504,8 @@
                 mat_color: matColorInput.value,
                 mat_finish: matFinishSelect.value,
                 bevel_width: parseInt(bevelWidthInput.value),
-                border_effect: borderEffectSelect.value
+                border_effect: borderEffectSelect.value,
+                auto_mat_color: autoMatColorCheckbox.checked
             };
 
             fetch('/api/settings', {
@@ -1525,7 +1547,7 @@
         targetAspectRatioSelect.addEventListener('change', updatePreviewAspectRatio);
 
         function updateColorPresets() {
-            document.querySelectorAll('.settings-column .color-preset').forEach(preset => {
+            document.querySelectorAll('.settings-modal-body .color-preset').forEach(preset => {
                 preset.classList.toggle('active', preset.dataset.color === matColorInput.value);
             });
             // If selected color is in accent presets, auto-expand

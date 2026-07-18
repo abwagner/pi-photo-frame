@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="csrf-token" content="{{ csrf_token() }}">
-    <title>User Management - OpenFotoFrame</title>
+    <title>Admin — OpenFotoFrame</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/admin_users.css') }}">
     <script src="{{ url_for('static', filename='js/legacy-events.js') }}" defer></script>
 </head>
@@ -14,11 +14,10 @@
             <div class="header-top">
                 <div>
                     <h1>OpenFotoFrame</h1>
-                    <p class="subtitle">User Management</p>
+                    <p class="subtitle">Admin</p>
                 </div>
                 <nav class="nav-links">
                     <a href="/upload">Photos</a>
-                    <a href="/admin">Admin</a>
                     <a href="/backup">Backup</a>
                     <a href="/mfa">MFA</a>
                     <a href="/change-password">Password</a>
@@ -29,9 +28,9 @@
 
         <div id="message" class="message" style="display: none;"></div>
 
-        <!-- Add User -->
+        <!-- User Management -->
         <div class="panel">
-            <h2>➕ Add New User</h2>
+            <h2>Users</h2>
             <form id="add-user-form" class="form-row">
                 <div class="form-group">
                     <label>Username</label>
@@ -48,14 +47,10 @@
                         <option value="admin">Admin</option>
                     </select>
                 </div>
-                <button type="submit" class="btn btn-primary">Add User</button>
+                <button type="submit" class="btn btn-primary">Add</button>
             </form>
-        </div>
 
-        <!-- User List -->
-        <div class="panel">
-            <h2>📋 Current Users</h2>
-            <table class="user-table">
+            <table class="user-table" style="margin-top: 20px;">
                 <thead>
                     <tr>
                         <th>Username</th>
@@ -71,10 +66,8 @@
                             <strong>{{ user.username }}</strong>
                             {% if user.username == username %}<span style="color: #888;"> (you)</span>{% endif %}
                         </td>
-                        <td>
-                            <span class="role-badge role-{{ user.role }}">{{ user.role }}</span>
-                        </td>
-                        <td style="color: #888;">{{ user.created[:10] if user.created != 'Unknown' else 'Unknown' }}</td>
+                        <td><span class="role-badge role-{{ user.role }}">{{ user.role }}</span></td>
+                        <td style="color: #888;">{{ user.created[:10] if user.created != 'Unknown' else '—' }}</td>
                         <td class="actions">
                             <button class="btn btn-secondary" data-onclick="showResetPassword('{{ user.username }}')">Reset Password</button>
                             {% if user.username != 'admin' %}
@@ -91,15 +84,15 @@
     <!-- Reset Password Modal -->
     <div class="modal-overlay" id="reset-modal">
         <div class="modal">
-            <h3>🔑 Reset Password</h3>
-            <p style="color: #888; margin-bottom: 15px;">Enter new password for <strong id="reset-username"></strong></p>
+            <h3>Reset Password</h3>
+            <p style="color: #888; margin-bottom: 15px;">New password for <strong id="reset-username"></strong></p>
             <div class="form-group">
                 <label>New Password</label>
                 <input type="password" id="reset-password" minlength="12" placeholder="Min 12 characters">
             </div>
             <div class="modal-actions">
                 <button class="btn btn-secondary" data-onclick="closeModal()">Cancel</button>
-                <button class="btn btn-primary" data-onclick="resetPassword()">Reset Password</button>
+                <button class="btn btn-primary" data-onclick="resetPassword()">Reset</button>
             </div>
         </div>
     </div>
