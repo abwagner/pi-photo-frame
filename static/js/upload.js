@@ -1502,12 +1502,16 @@
         }
 
         function applyMatSettings() {
+            const { intensity, v, h } = getLitSliderValues();
             const settings = {
                 mat_color: matColorInput.value,
                 mat_finish: matFinishSelect.value,
                 bevel_width: parseInt(bevelWidthInput.value),
                 border_effect: borderEffectSelect.value,
-                auto_mat_color: autoMatColorCheckbox.checked
+                auto_mat_color: autoMatColorCheckbox.checked,
+                bevel_lit_intensity: intensity,
+                bevel_lit_v: v,
+                bevel_lit_h: h,
             };
 
             const applyBtn = document.getElementById('apply-mat-settings');
@@ -1545,9 +1549,20 @@
         matFinishSelect.addEventListener('change', updatePreviewTexture);
         borderEffectSelect.addEventListener('change', () => {
             effectSizeLabel.textContent = borderEffectSelect.value === 'shadow' ? 'Shadow' : 'Bevel';
+            document.getElementById('bevel-lit-controls').style.display =
+                borderEffectSelect.value === 'bevel-lit' ? '' : 'none';
         });
         bevelWidthInput.addEventListener('input', () => {
             bevelValueLabel.textContent = bevelWidthInput.value + 'px';
+        });
+        document.getElementById('bevel-lit-intensity').addEventListener('input', function() {
+            document.getElementById('bevel-lit-intensity-value').textContent = this.value + '%';
+        });
+        document.getElementById('bevel-lit-v').addEventListener('input', function() {
+            document.getElementById('bevel-lit-v-value').textContent = this.value + '%';
+        });
+        document.getElementById('bevel-lit-h').addEventListener('input', function() {
+            document.getElementById('bevel-lit-h-value').textContent = this.value + '%';
         });
 
         // Slideshow settings: Apply button
@@ -1608,18 +1623,23 @@
             return { outer: 'rgba(0,0,0,0.00)', inner: `rgba(0,0,0,${innerAlpha})` };
         }
 
-        function getBevelColorsLit(matHex) {
-            let hex = matHex.replace('#', '');
-            if (hex.length === 3) hex = hex[0]+hex[0]+hex[1]+hex[1]+hex[2]+hex[2];
-            const r = parseInt(hex.substring(0, 2), 16);
-            const g = parseInt(hex.substring(2, 4), 16);
-            const b = parseInt(hex.substring(4, 6), 16);
-            const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
-            const highlightAlpha = luminance < 0.3 ? 0.45 : luminance < 0.6 ? 0.25 : 0.12;
-            const shadowAlpha    = luminance < 0.3 ? 0.25 : luminance < 0.6 ? 0.30 : 0.20;
+        function getBevelColorsLit(intensity, v, h) {
+            const i = intensity / 100;
+            const vf = (50 - v) / 50;
+            const hf = (50 - h) / 50;
+            function edge(factor) {
+                const a = +(Math.abs(factor) * i).toFixed(3);
+                if (a < 0.005) return 'transparent';
+                return factor > 0 ? `rgba(255,255,255,${a})` : `rgba(0,0,0,${a})`;
+            }
+            return { top: edge(vf), bottom: edge(-vf), left: edge(hf), right: edge(-hf) };
+        }
+
+        function getLitSliderValues() {
             return {
-                highlight: `rgba(255,255,255,${highlightAlpha})`,
-                shadow:    `rgba(0,0,0,${shadowAlpha})`,
+                intensity: parseInt(document.getElementById('bevel-lit-intensity')?.value ?? 50),
+                v:         parseInt(document.getElementById('bevel-lit-v')?.value ?? 15),
+                h:         parseInt(document.getElementById('bevel-lit-h')?.value ?? 15),
             };
         }
 
@@ -1636,15 +1656,15 @@
             ).join('');
         }
 
-        function makeBevelLitStripHtml(bevelWidth, matColor) {
+        function makeBevelLitStripHtml(bevelWidth) {
             const w = bevelWidth + 'px';
-            const { highlight, shadow } = getBevelColorsLit(matColor);
-            // Top/bottom own the corners; left/right are trimmed by w on each end to avoid blowout.
+            const { intensity, v, h } = getLitSliderValues();
+            const colors = getBevelColorsLit(intensity, v, h);
             const strips = [
-                { pos: `top:0;left:0;right:0;height:${w}`,             grad: 'to bottom', from: highlight, to: 'rgba(255,255,255,0)' },
-                { pos: `bottom:0;left:0;right:0;height:${w}`,           grad: 'to top',    from: shadow,    to: 'rgba(0,0,0,0)'       },
-                { pos: `top:${w};left:0;bottom:${w};width:${w}`,       grad: 'to right',  from: highlight, to: 'rgba(255,255,255,0)' },
-                { pos: `top:${w};right:0;bottom:${w};width:${w}`,      grad: 'to left',   from: shadow,    to: 'rgba(0,0,0,0)'       },
+                { pos: `top:0;left:0;right:0;height:${w}`,             grad: 'to bottom', from: colors.top,    to: 'transparent' },
+                { pos: `bottom:0;left:0;right:0;height:${w}`,           grad: 'to top',    from: colors.bottom, to: 'transparent' },
+                { pos: `top:${w};left:0;bottom:${w};width:${w}`,       grad: 'to right',  from: colors.left,   to: 'transparent' },
+                { pos: `top:${w};right:0;bottom:${w};width:${w}`,      grad: 'to left',   from: colors.right,  to: 'transparent' },
             ];
             return strips.map(({ pos, grad, from, to }) =>
                 `<div style="position:absolute;${pos};background:linear-gradient(${grad},${from},${to});pointer-events:none;z-index:1;"></div>`
@@ -1662,7 +1682,7 @@
             if (!bevelWidth || bevelWidth <= 0) return innerHtml;
             const bw = Math.round(bevelWidth);
             if (bevelStyle === 'bevel-lit') {
-                return `<div class="mat-bevel" style="--bevel-w:${bw}px;--bevel-mat:${matColor}">${innerHtml}${makeBevelLitStripHtml(bw, matColor)}</div>`;
+                return `<div class="mat-bevel" style="--bevel-w:${bw}px;--bevel-mat:${matColor}">${innerHtml}${makeBevelLitStripHtml(bw)}</div>`;
             }
             const bevelColors = getBevelColors(matColor);
             return `<div class="mat-bevel" style="--bevel-w:${bw}px;--bevel-mat:${matColor};--bevel-outer:${bevelColors.outer};--bevel-inner:${bevelColors.inner}">${innerHtml}${makeBevelStripHtml(bw)}</div>`;

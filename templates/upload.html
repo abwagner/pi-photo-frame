@@ -89,6 +89,23 @@
                                 <input type="range" id="bevel-width" min="0" max="16" value="{{ settings.bevel_width }}" step="1">
                             </div>
 
+                            <div id="bevel-lit-controls" style="{{ 'display:none' if settings.border_effect != 'bevel-lit' else '' }}">
+                                <div class="setting-group">
+                                    <label>Whiteness <span id="bevel-lit-intensity-value">{{ settings.bevel_lit_intensity }}%</span></label>
+                                    <input type="range" id="bevel-lit-intensity" min="0" max="100" value="{{ settings.bevel_lit_intensity }}" step="1">
+                                </div>
+                                <div class="setting-group">
+                                    <label>Vertical <span id="bevel-lit-v-value">{{ settings.bevel_lit_v }}%</span></label>
+                                    <input type="range" id="bevel-lit-v" min="0" max="100" value="{{ settings.bevel_lit_v }}" step="1">
+                                    <p style="font-size:0.72rem;color:#666;margin-top:4px;">0% = light from top · 100% = light from bottom</p>
+                                </div>
+                                <div class="setting-group">
+                                    <label>Horizontal <span id="bevel-lit-h-value">{{ settings.bevel_lit_h }}%</span></label>
+                                    <input type="range" id="bevel-lit-h" min="0" max="100" value="{{ settings.bevel_lit_h }}" step="1">
+                                    <p style="font-size:0.72rem;color:#666;margin-top:4px;">0% = light from left · 100% = light from right</p>
+                                </div>
+                            </div>
+
                             <button class="btn btn-apply" id="apply-mat-settings">Apply</button>
 
                             <p style="font-size: 0.75rem; color: #666; margin-top: 8px;">

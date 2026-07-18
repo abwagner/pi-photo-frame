@@ -121,20 +121,19 @@ let slides = [];      // Array of {type, images, mat_color, group_id?}
             return { outer: 'rgba(0,0,0,0.00)', inner: `rgba(0,0,0,${innerAlpha})` };
         }
 
-        function getBevelColorsLit(matHex) {
-            let hex = matHex.replace('#', '');
-            if (hex.length === 3) hex = hex[0]+hex[0]+hex[1]+hex[1]+hex[2]+hex[2];
-            const r = parseInt(hex.substring(0, 2), 16);
-            const g = parseInt(hex.substring(2, 4), 16);
-            const b = parseInt(hex.substring(4, 6), 16);
-            const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
-            // Dark mats need a stronger white highlight to read; light mats need a subtler one
-            const highlightAlpha = luminance < 0.3 ? 0.45 : luminance < 0.6 ? 0.25 : 0.12;
-            const shadowAlpha    = luminance < 0.3 ? 0.25 : luminance < 0.6 ? 0.30 : 0.20;
-            return {
-                highlight: `rgba(255,255,255,${highlightAlpha})`,
-                shadow:    `rgba(0,0,0,${shadowAlpha})`,
-            };
+        // Returns per-edge colors for the lit bevel using light-source sliders.
+        // intensity: 0-100, v: 0=top-lit/100=bottom-lit, h: 0=left-lit/100=right-lit
+        function getBevelColorsLit(intensity, v, h) {
+            const i = intensity / 100;
+            // vFactor: +1 at v=0 (top lit), 0 at v=50 (neutral), -1 at v=100 (bottom lit)
+            const vf = (50 - v) / 50;
+            const hf = (50 - h) / 50;
+            function edge(factor) {
+                const a = +(Math.abs(factor) * i).toFixed(3);
+                if (a < 0.005) return 'transparent';
+                return factor > 0 ? `rgba(255,255,255,${a})` : `rgba(0,0,0,${a})`;
+            }
+            return { top: edge(vf), bottom: edge(-vf), left: edge(hf), right: edge(-hf) };
         }
 
         function getShadowStyle(size) {
@@ -173,15 +172,17 @@ let slides = [];      // Array of {type, images, mat_color, group_id?}
             wrapper.appendChild(imgEl);
             const w = bevelWidth + 'px';
             if (bevelStyle === 'bevel-lit') {
-                // Directional: top/left = white highlight, bottom/right = dark shadow.
-                // Top/bottom strips own the full-width corners; left/right strips are trimmed
-                // by w on each end so they never overlap the corner pixels — avoiding blowout.
-                const { highlight, shadow } = getBevelColorsLit(matColor);
+                // Rectangular strips avoid outer-corner overlap/blowout.
+                // Left/right are inset by bevel-width so they don't share corner pixels with top/bottom.
+                const litI = settings.bevel_lit_intensity ?? 50;
+                const litV = settings.bevel_lit_v ?? 15;
+                const litH = settings.bevel_lit_h ?? 15;
+                const colors = getBevelColorsLit(litI, litV, litH);
                 const strips = [
-                    { pos: `top:0;left:0;right:0;height:${w}`,              grad: 'to bottom', from: highlight, to: 'rgba(255,255,255,0)' },
-                    { pos: `bottom:0;left:0;right:0;height:${w}`,            grad: 'to top',    from: shadow,    to: 'rgba(0,0,0,0)'       },
-                    { pos: `top:${w};left:0;bottom:${w};width:${w}`,        grad: 'to right',  from: highlight, to: 'rgba(255,255,255,0)' },
-                    { pos: `top:${w};right:0;bottom:${w};width:${w}`,       grad: 'to left',   from: shadow,    to: 'rgba(0,0,0,0)'       },
+                    { pos: `top:0;left:0;right:0;height:${w}`,             grad: 'to bottom', from: colors.top,    to: 'transparent' },
+                    { pos: `bottom:0;left:0;right:0;height:${w}`,           grad: 'to top',    from: colors.bottom, to: 'transparent' },
+                    { pos: `top:${w};left:0;bottom:${w};width:${w}`,       grad: 'to right',  from: colors.left,   to: 'transparent' },
+                    { pos: `top:${w};right:0;bottom:${w};width:${w}`,      grad: 'to left',   from: colors.right,  to: 'transparent' },
                 ];
                 strips.forEach(({ pos, grad, from, to }) => {
                     const el = document.createElement('div');
