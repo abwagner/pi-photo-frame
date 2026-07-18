@@ -36,6 +36,20 @@
         let _modKey = false;
         document.addEventListener('mousedown', function(e) { _modKey = e.ctrlKey || e.metaKey; });
 
+        // Extend ctrl/cmd+click to the whole card (not just the image thumb)
+        document.addEventListener('click', function(e) {
+            if (!_modKey) return;
+            const card = e.target.closest('.image-card');
+            if (!card) return;
+            if (e.target.closest('.card-thumb')) return; // handleCardClick already handles this
+            if (e.target.closest('.card-actions')) return; // don't hijack action buttons
+            e.stopPropagation();
+            _modKey = false;
+            const filename = card.dataset.filename;
+            if (!selectMode) startGroupMode();
+            toggleSelect(filename);
+        }, true);
+
         // Neutral presets: shown by default (white to medium-brown warm tones)
         const NEUTRAL_PRESETS = [
             {color: '#ffffff', title: 'White'}, {color: '#f5f0e6', title: 'Cream'},

@@ -32,6 +32,7 @@ from werkzeug.utils import secure_filename
 import tempfile
 
 import io
+import colorsys
 import qrcode
 import qrcode.image.svg
 
@@ -730,6 +731,54 @@ def generate_thumbnail(filepath, filename):
         return False
 
 
+def suggest_mat_color(filepath):
+    """Return a hex mat color derived from the image (brightness-aware + edge-neutral hybrid)."""
+    try:
+        with Image.open(filepath) as img:
+            img = ImageOps.exif_transpose(img)
+            img = img.convert('RGB')
+            img.thumbnail((150, 150), Image.Resampling.NEAREST)
+            w, h = img.size
+
+            # Overall brightness
+            gray_pixels = list(img.convert('L').getdata())
+            brightness = sum(gray_pixels) / len(gray_pixels)  # 0-255
+
+            # Sample outer edge strip (~15% on each side) for dominant hue/warmth
+            edge = max(1, min(15, w // 7, h // 7))
+            all_pixels = list(img.getdata())
+            edge_pixels = [
+                all_pixels[y * w + x]
+                for y in range(h)
+                for x in range(w)
+                if x < edge or x >= w - edge or y < edge or y >= h - edge
+            ]
+            if not edge_pixels:
+                edge_pixels = all_pixels
+
+            avg_r = sum(p[0] for p in edge_pixels) / len(edge_pixels)
+            avg_g = sum(p[1] for p in edge_pixels) / len(edge_pixels)
+            avg_b = sum(p[2] for p in edge_pixels) / len(edge_pixels)
+
+            h_hls, l_hls, s_hls = colorsys.rgb_to_hls(avg_r / 255, avg_g / 255, avg_b / 255)
+
+            # Map image brightness to mat lightness (inverted: bright image → dark mat)
+            if brightness > 165:
+                target_l = 0.20
+            elif brightness > 110:
+                target_l = 0.55
+            else:
+                target_l = 0.82
+
+            # Heavily desaturate, preserving a subtle warmth/cool cast from edge colors
+            target_s = min(s_hls * 0.25, 0.10)
+
+            r, g, b = colorsys.hls_to_rgb(h_hls, target_l, target_s)
+            return '#{:02x}{:02x}{:02x}'.format(int(r * 255), int(g * 255), int(b * 255))
+    except Exception:
+        return None
+
+
 def backfill_thumbnails():
     """Generate thumbnails for any uploaded images missing them."""
     if not UPLOAD_FOLDER.exists():
@@ -742,6 +791,23 @@ def backfill_thumbnails():
             thumb_jpg = thumb_path.with_suffix('.jpg')
             if not thumb_path.exists() and not thumb_jpg.exists():
                 if generate_thumbnail(f, f.name):
+                    count += 1
+    return count
+
+
+def backfill_mat_colors():
+    """Suggest and store mat_color for any images that don't have one yet."""
+    if not UPLOAD_FOLDER.exists():
+        return 0
+    gallery = load_gallery()
+    count = 0
+    for filename, meta in gallery.get('images', {}).items():
+        if meta.get('mat_color') is None:
+            filepath = UPLOAD_FOLDER / filename
+            if filepath.exists():
+                color = suggest_mat_color(filepath)
+                if color:
+                    update_image_metadata(filename, mat_color=color)
                     count += 1
     return count
 
@@ -1881,6 +1947,7 @@ def api_upload():
 
             # Compute perceptual hash for duplicate detection
             phash = compute_phash(filepath)
+            mat_color = suggest_mat_color(filepath)
 
             # Add metadata
             update_image_metadata(unique_name,
@@ -1890,7 +1957,8 @@ def api_upload():
                 uploaded_by=username,
                 width=width,
                 height=height,
-                phash=phash
+                phash=phash,
+                mat_color=mat_color
             )
 
             # Generate display snapshot with default settings
@@ -2786,6 +2854,14 @@ def apply_browser_security_headers(response):
 _thumb_count = backfill_thumbnails()
 if _thumb_count > 0:
     print(f"Generated {_thumb_count} missing thumbnail(s)")
+
+# Backfill mat colors for existing images on startup (runs in background to avoid slowing boot)
+def _backfill_mat_colors_bg():
+    count = backfill_mat_colors()
+    if count > 0:
+        print(f"Suggested mat colors for {count} existing image(s)")
+
+threading.Thread(target=_backfill_mat_colors_bg, daemon=True).start()
 
 
 # ============ Main ============
