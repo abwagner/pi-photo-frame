@@ -121,6 +121,22 @@ let slides = [];      // Array of {type, images, mat_color, group_id?}
             return { outer: 'rgba(0,0,0,0.00)', inner: `rgba(0,0,0,${innerAlpha})` };
         }
 
+        function getBevelColorsLit(matHex) {
+            let hex = matHex.replace('#', '');
+            if (hex.length === 3) hex = hex[0]+hex[0]+hex[1]+hex[1]+hex[2]+hex[2];
+            const r = parseInt(hex.substring(0, 2), 16);
+            const g = parseInt(hex.substring(2, 4), 16);
+            const b = parseInt(hex.substring(4, 6), 16);
+            const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+            // Dark mats need a stronger white highlight to read; light mats need a subtler one
+            const highlightAlpha = luminance < 0.3 ? 0.45 : luminance < 0.6 ? 0.25 : 0.12;
+            const shadowAlpha    = luminance < 0.3 ? 0.25 : luminance < 0.6 ? 0.30 : 0.20;
+            return {
+                highlight: `rgba(255,255,255,${highlightAlpha})`,
+                shadow:    `rgba(0,0,0,${shadowAlpha})`,
+            };
+        }
+
         function getShadowStyle(size) {
             const blur = size * 2;
             const spread = Math.round(size * 0.5);
@@ -141,37 +157,52 @@ let slides = [];      // Array of {type, images, mat_color, group_id?}
             if (borderEffect === 'shadow') {
                 return wrapInShadow(imgEl, effectSize);
             }
-            return wrapInBevel(imgEl, effectSize, matColor);
+            return wrapInBevel(imgEl, effectSize, matColor, borderEffect);
         }
 
-        function wrapInBevel(imgEl, bevelWidth, matColor) {
+        function wrapInBevel(imgEl, bevelWidth, matColor, bevelStyle) {
             const wrapper = document.createElement('div');
             wrapper.className = 'mat-bevel';
             wrapper.style.setProperty('--bevel-w', bevelWidth + 'px');
             wrapper.style.setProperty('--bevel-mat', matColor);
-            const bevelColors = getBevelColors(matColor);
-            wrapper.style.setProperty('--bevel-outer', bevelColors.outer);
-            wrapper.style.setProperty('--bevel-inner', bevelColors.inner);
             // Round element dimensions to integers so bevel strips always meet the edge cleanly
             const elW = parseFloat(imgEl.style.width);
             const elH = parseFloat(imgEl.style.height);
             if (!isNaN(elW)) imgEl.style.width  = Math.round(elW) + 'px';
             if (!isNaN(elH)) imgEl.style.height = Math.round(elH) + 'px';
             wrapper.appendChild(imgEl);
-            // Four gradient strips, each clipped to a trapezoid with exact 45° miter corners.
-            // No overlap between strips — corners are handled cleanly by the clip-path geometry.
             const w = bevelWidth + 'px';
-            const strips = [
-                { pos: `top:0;left:0;right:0;height:${w}`,    clip: `polygon(0 0,100% 0,calc(100% - ${w}) 100%,${w} 100%)`,         grad: 'to bottom'  },
-                { pos: `bottom:0;left:0;right:0;height:${w}`, clip: `polygon(${w} 0,calc(100% - ${w}) 0,100% 100%,0 100%)`,         grad: 'to top'     },
-                { pos: `top:0;left:0;bottom:0;width:${w}`,    clip: `polygon(0 0,100% ${w},100% calc(100% - ${w}),0 100%)`,         grad: 'to right'   },
-                { pos: `top:0;right:0;bottom:0;width:${w}`,   clip: `polygon(0 ${w},100% 0,100% 100%,0 calc(100% - ${w}))`,         grad: 'to left'    },
-            ];
-            strips.forEach(({ pos, clip, grad }) => {
-                const el = document.createElement('div');
-                el.style.cssText = `position:absolute;${pos};clip-path:${clip};background:linear-gradient(${grad},var(--bevel-outer),var(--bevel-inner));pointer-events:none;z-index:1;`;
-                wrapper.appendChild(el);
-            });
+            if (bevelStyle === 'bevel-lit') {
+                // Directional: top/left = white highlight fading in, bottom/right = dark shadow fading in
+                const { highlight, shadow } = getBevelColorsLit(matColor);
+                const strips = [
+                    { pos: `top:0;left:0;right:0;height:${w}`,    clip: `polygon(0 0,100% 0,calc(100% - ${w}) 100%,${w} 100%)`,     grad: 'to bottom', from: highlight, to: 'rgba(255,255,255,0)' },
+                    { pos: `bottom:0;left:0;right:0;height:${w}`, clip: `polygon(${w} 0,calc(100% - ${w}) 0,100% 100%,0 100%)`,     grad: 'to top',    from: shadow,    to: 'rgba(0,0,0,0)'       },
+                    { pos: `top:0;left:0;bottom:0;width:${w}`,    clip: `polygon(0 0,100% ${w},100% calc(100% - ${w}),0 100%)`,     grad: 'to right',  from: highlight, to: 'rgba(255,255,255,0)' },
+                    { pos: `top:0;right:0;bottom:0;width:${w}`,   clip: `polygon(0 ${w},100% 0,100% 100%,0 calc(100% - ${w}))`,     grad: 'to left',   from: shadow,    to: 'rgba(0,0,0,0)'       },
+                ];
+                strips.forEach(({ pos, clip, grad, from, to }) => {
+                    const el = document.createElement('div');
+                    el.style.cssText = `position:absolute;${pos};clip-path:${clip};background:linear-gradient(${grad},${from},${to});pointer-events:none;z-index:1;`;
+                    wrapper.appendChild(el);
+                });
+            } else {
+                // Classic: uniform dark inward shadow on all four sides
+                const bevelColors = getBevelColors(matColor);
+                wrapper.style.setProperty('--bevel-outer', bevelColors.outer);
+                wrapper.style.setProperty('--bevel-inner', bevelColors.inner);
+                const strips = [
+                    { pos: `top:0;left:0;right:0;height:${w}`,    clip: `polygon(0 0,100% 0,calc(100% - ${w}) 100%,${w} 100%)`,     grad: 'to bottom' },
+                    { pos: `bottom:0;left:0;right:0;height:${w}`, clip: `polygon(${w} 0,calc(100% - ${w}) 0,100% 100%,0 100%)`,     grad: 'to top'    },
+                    { pos: `top:0;left:0;bottom:0;width:${w}`,    clip: `polygon(0 0,100% ${w},100% calc(100% - ${w}),0 100%)`,     grad: 'to right'  },
+                    { pos: `top:0;right:0;bottom:0;width:${w}`,   clip: `polygon(0 ${w},100% 0,100% 100%,0 calc(100% - ${w}))`,     grad: 'to left'   },
+                ];
+                strips.forEach(({ pos, clip, grad }) => {
+                    const el = document.createElement('div');
+                    el.style.cssText = `position:absolute;${pos};clip-path:${clip};background:linear-gradient(${grad},var(--bevel-outer),var(--bevel-inner));pointer-events:none;z-index:1;`;
+                    wrapper.appendChild(el);
+                });
+            }
             return wrapper;
         }
 

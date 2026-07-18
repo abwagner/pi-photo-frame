@@ -78,7 +78,8 @@
                             <div class="setting-group">
                                 <label>Border Effect</label>
                                 <select id="border-effect">
-                                    <option value="bevel" {% if settings.border_effect == 'bevel' %}selected{% endif %}>Bevel</option>
+                                    <option value="bevel" {% if settings.border_effect == 'bevel' %}selected{% endif %}>Bevel (classic)</option>
+                                    <option value="bevel-lit" {% if settings.border_effect == 'bevel-lit' %}selected{% endif %}>Bevel (lit)</option>
                                     <option value="shadow" {% if settings.border_effect == 'shadow' %}selected{% endif %}>Shadow</option>
                                 </select>
                             </div>

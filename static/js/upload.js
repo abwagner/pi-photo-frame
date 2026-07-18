@@ -589,7 +589,8 @@
                         <select style="flex:1;padding:6px;border:1px solid rgba(255,255,255,0.1);border-radius:6px;background:rgba(0,0,0,0.3);color:#e0e0e0;font-size:0.8rem;"
                                 data-onchange="updateImageField('${escAttr(filename)}','border_effect',this.value||null); renderSingleControls('${escAttr(filename)}')">
                             <option value="" ${!currentBorderEffect ? 'selected' : ''}>Default</option>
-                            <option value="bevel" ${currentBorderEffect==='bevel' ? 'selected' : ''}>Bevel</option>
+                            <option value="bevel" ${currentBorderEffect==='bevel' ? 'selected' : ''}>Bevel (classic)</option>
+                            <option value="bevel-lit" ${currentBorderEffect==='bevel-lit' ? 'selected' : ''}>Bevel (lit)</option>
                             <option value="shadow" ${currentBorderEffect==='shadow' ? 'selected' : ''}>Shadow</option>
                         </select>
                     </div>
@@ -999,7 +1000,8 @@
                         <select style="flex:1;padding:6px;border:1px solid rgba(255,255,255,0.1);border-radius:6px;background:rgba(0,0,0,0.3);color:#e0e0e0;font-size:0.8rem;"
                                 data-onchange="updateGroupField('${groupId}','border_effect',this.value||null); renderGroupControls('${groupId}')">
                             <option value="" ${!currentBorderEffect ? 'selected' : ''}>Default</option>
-                            <option value="bevel" ${currentBorderEffect==='bevel' ? 'selected' : ''}>Bevel</option>
+                            <option value="bevel" ${currentBorderEffect==='bevel' ? 'selected' : ''}>Bevel (classic)</option>
+                            <option value="bevel-lit" ${currentBorderEffect==='bevel-lit' ? 'selected' : ''}>Bevel (lit)</option>
                             <option value="shadow" ${currentBorderEffect==='shadow' ? 'selected' : ''}>Shadow</option>
                         </select>
                     </div>
@@ -1600,6 +1602,21 @@
             return { outer: 'rgba(0,0,0,0.00)', inner: `rgba(0,0,0,${innerAlpha})` };
         }
 
+        function getBevelColorsLit(matHex) {
+            let hex = matHex.replace('#', '');
+            if (hex.length === 3) hex = hex[0]+hex[0]+hex[1]+hex[1]+hex[2]+hex[2];
+            const r = parseInt(hex.substring(0, 2), 16);
+            const g = parseInt(hex.substring(2, 4), 16);
+            const b = parseInt(hex.substring(4, 6), 16);
+            const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+            const highlightAlpha = luminance < 0.3 ? 0.45 : luminance < 0.6 ? 0.25 : 0.12;
+            const shadowAlpha    = luminance < 0.3 ? 0.25 : luminance < 0.6 ? 0.30 : 0.20;
+            return {
+                highlight: `rgba(255,255,255,${highlightAlpha})`,
+                shadow:    `rgba(0,0,0,${shadowAlpha})`,
+            };
+        }
+
         function makeBevelStripHtml(bevelWidth) {
             const w = bevelWidth + 'px';
             const strips = [
@@ -1613,6 +1630,20 @@
             ).join('');
         }
 
+        function makeBevelLitStripHtml(bevelWidth, matColor) {
+            const w = bevelWidth + 'px';
+            const { highlight, shadow } = getBevelColorsLit(matColor);
+            const strips = [
+                { pos: `top:0;left:0;right:0;height:${w}`,    clip: `polygon(0 0,100% 0,calc(100% - ${w}) 100%,${w} 100%)`,     grad: 'to bottom', from: highlight, to: 'rgba(255,255,255,0)' },
+                { pos: `bottom:0;left:0;right:0;height:${w}`, clip: `polygon(${w} 0,calc(100% - ${w}) 0,100% 100%,0 100%)`,     grad: 'to top',    from: shadow,    to: 'rgba(0,0,0,0)'       },
+                { pos: `top:0;left:0;bottom:0;width:${w}`,    clip: `polygon(0 0,100% ${w},100% calc(100% - ${w}),0 100%)`,     grad: 'to right',  from: highlight, to: 'rgba(255,255,255,0)' },
+                { pos: `top:0;right:0;bottom:0;width:${w}`,   clip: `polygon(0 ${w},100% 0,100% 100%,0 calc(100% - ${w}))`,     grad: 'to left',   from: shadow,    to: 'rgba(0,0,0,0)'       },
+            ];
+            return strips.map(({ pos, clip, grad, from, to }) =>
+                `<div style="position:absolute;${pos};clip-path:${clip};background:linear-gradient(${grad},${from},${to});pointer-events:none;z-index:1;"></div>`
+            ).join('');
+        }
+
         function getShadowStyle(size) {
             const blur = size * 2;
             const spread = Math.round(size * 0.5);
@@ -1620,9 +1651,12 @@
             return `0 ${yOffset}px ${blur}px ${spread}px rgba(0,0,0,0.35)`;
         }
 
-        function makeBevelHtml(innerHtml, bevelWidth, matColor) {
+        function makeBevelHtml(innerHtml, bevelWidth, matColor, bevelStyle) {
             if (!bevelWidth || bevelWidth <= 0) return innerHtml;
             const bw = Math.round(bevelWidth);
+            if (bevelStyle === 'bevel-lit') {
+                return `<div class="mat-bevel" style="--bevel-w:${bw}px;--bevel-mat:${matColor}">${innerHtml}${makeBevelLitStripHtml(bw, matColor)}</div>`;
+            }
             const bevelColors = getBevelColors(matColor);
             return `<div class="mat-bevel" style="--bevel-w:${bw}px;--bevel-mat:${matColor};--bevel-outer:${bevelColors.outer};--bevel-inner:${bevelColors.inner}">${innerHtml}${makeBevelStripHtml(bw)}</div>`;
         }
@@ -1642,7 +1676,7 @@
                 }
                 return `<div class="mat-shadow" style="box-shadow:${shadow};display:inline-flex;line-height:0;">${innerHtml}</div>`;
             }
-            return makeBevelHtml(innerHtml, effectSize, matColor);
+            return makeBevelHtml(innerHtml, effectSize, matColor, borderEffect);
         }
 
         function updatePreviewTexture() {
