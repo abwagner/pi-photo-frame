@@ -1046,10 +1046,9 @@
             background: linear-gradient(90deg, #7b2cbf, #00d4ff);
             color: white;
             border: none;
-            margin-top: 12px;
+            margin: 12px auto 0;
             font-weight: 600;
             display: block;
-            margin-left: auto;
             transition: background 0.3s, transform 0.2s;
         }
         .btn-apply.confirmed {
