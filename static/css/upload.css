@@ -55,7 +55,6 @@
 
         .display-link {
             display: inline-block;
-            margin-top: 15px;
             padding: 10px 25px;
             background: linear-gradient(90deg, #7b2cbf, #00d4ff);
             color: white;
@@ -481,11 +480,16 @@
             margin-top: 15px;
         }
         .btn-settings {
-            background: rgba(255,255,255,0.1);
-            color: #ccc;
-            border: 1px solid rgba(255,255,255,0.2);
+            background: linear-gradient(90deg, #7b2cbf, #00d4ff);
+            color: white;
+            border: none;
+            border-radius: 25px;
+            padding: 10px 25px;
         }
-        .btn-settings:hover { background: rgba(255,255,255,0.15); color: #fff; }
+        .btn-settings:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 20px rgba(123, 44, 191, 0.4);
+        }
         .btn-upload {
             background: rgba(0,212,255,0.15);
             color: #00d4ff;
@@ -1004,9 +1008,10 @@
             width: 28px;
             height: 28px;
             border-radius: 50%;
-            border: 2px solid transparent;
+            border: none;
             cursor: pointer;
-            transition: transform 0.2s, border-color 0.2s;
+            transition: transform 0.2s, box-shadow 0.2s;
+            box-shadow: 0 0 0 2px transparent;
         }
 
         .color-preset:hover {
@@ -1014,7 +1019,7 @@
         }
 
         .color-preset.active {
-            border-color: #00d4ff;
+            box-shadow: 0 0 0 2px #1a1a2e, 0 0 0 4px #00d4ff;
         }
 
         .btn-more-colors {
@@ -1041,9 +1046,14 @@
             background: linear-gradient(90deg, #7b2cbf, #00d4ff);
             color: white;
             border: none;
-            width: 100%;
             margin-top: 12px;
             font-weight: 600;
+            display: block;
+            margin-left: auto;
+            transition: background 0.3s, transform 0.2s;
+        }
+        .btn-apply.confirmed {
+            background: #00b060;
         }
 
         .toggle-group {

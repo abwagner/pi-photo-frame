@@ -1510,12 +1510,18 @@
                 auto_mat_color: autoMatColorCheckbox.checked
             };
 
+            const applyBtn = document.getElementById('apply-mat-settings');
             fetch('/api/settings', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(settings)
             }).then(() => {
-                showStatus('Mat settings applied', 'success');
+                applyBtn.textContent = '✓ Applied';
+                applyBtn.classList.add('confirmed');
+                setTimeout(() => {
+                    applyBtn.textContent = 'Apply';
+                    applyBtn.classList.remove('confirmed');
+                }, 1500);
                 // Re-render preview if an image/group is shown and uses defaults
                 if (previewFilename) {
                     const img = images.find(i => i.filename === previewFilename);
