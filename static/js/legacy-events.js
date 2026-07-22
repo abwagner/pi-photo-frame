@@ -7,12 +7,12 @@
         'openSettingsModal','previousSlide','proceedUpload','refreshPreview','removeTvSchedule',
         'resetPassword','saveBackupSettings','showResetPassword','startGroupMode',
         'switchSettingsTab','testCec','toggleGalleryView','toggleImage','toggleMoreColors',
-        'togglePause','toggleScheduleDay','toggleSelect','triggerBackup','triggerFileInput',
+        'toggleFullscreen','togglePause','toggleScheduleDay','toggleSelect','triggerBackup','triggerFileInput','updateCropAspectLock','updateCropAspectRatio','updateCropPreviewZoom',
         'triggerRestore','ungroupFromPreview','ungroupGroup','updateGroupField',
         'updateGroupMatColor','updateGroupScale','updateGroupScalePreview','updateImageField',
         'updateMatColor','updateScheduleField','updateSingleScale','updateSingleScalePreview',
         'renderSinglePreviewImage','renderSingleControls','renderGroupControls',
-        'previewSingleBevel','previewGroupBevel'
+        'previewSingleBevel','previewGroupBevel','resetAllMatColors','switchTab'
     ]);
     const splitTopLevel = (value, delimiter) => {
         const parts = []; let current = ''; let quote = null; let depth = 0;

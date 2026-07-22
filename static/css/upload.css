@@ -36,9 +36,8 @@
             transition: color 0.2s;
         }
 
-        .header-link:hover {
-            color: #00d4ff;
-        }
+        .header-link:hover  { color: #00d4ff; }
+        .header-link.active { color: #00d4ff; font-weight: 500; }
 
         h1 {
             font-size: 2.5rem;
@@ -166,12 +165,41 @@
             display: flex;
             gap: 8px;
             z-index: 25;
+            background: rgba(20, 20, 30, 0.8);
+            border-radius: 8px;
+            padding: 8px 12px;
         }
 
         .crop-toolbar .btn {
             padding: 8px 20px;
             font-size: 0.9rem;
             font-weight: 600;
+        }
+
+        .crop-aspect-toggle {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            color: #e0e0e0;
+            font-size: 0.85rem;
+            cursor: pointer;
+            white-space: nowrap;
+        }
+
+        .crop-aspect-toggle input[type="checkbox"] {
+            width: 15px;
+            height: 15px;
+            cursor: pointer;
+        }
+
+        #crop-aspect-select {
+            background: #2a2a3a;
+            color: #e0e0e0;
+            border: 1px solid #555;
+            border-radius: 4px;
+            padding: 4px 8px;
+            font-size: 0.85rem;
+            cursor: pointer;
         }
 
         /* Bevel wrapper in preview - matches display.html rendering */
@@ -1022,6 +1050,19 @@
             box-shadow: 0 0 0 2px #1a1a2e, 0 0 0 4px #00d4ff;
         }
 
+        .btn-reset-mat {
+            background: none;
+            border: none;
+            color: #e07050;
+            font-size: 0.75rem;
+            cursor: pointer;
+            padding: 0;
+            margin-bottom: 12px;
+            opacity: 0.8;
+            transition: opacity 0.2s;
+        }
+        .btn-reset-mat:hover { opacity: 1; }
+        .btn-reset-mat:disabled { opacity: 0.4; cursor: default; }
         .btn-more-colors {
             background: none;
             border: none;

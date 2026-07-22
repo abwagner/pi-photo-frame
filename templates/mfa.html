@@ -10,22 +10,13 @@
 </head>
 <body data-passkeys-available="{{ 'true' if passkeys_available else 'false' }}">
     <div class="container">
-        <header>
-            <div class="header-top">
-                <div>
-                    <h1>OpenFotoFrame</h1>
-                    <p class="subtitle">Multi-factor Authentication</p>
-                </div>
-                <nav class="nav-links">
-                    <a href="/upload">Photos</a>
-                    {% if is_admin %}
-                    <a href="/admin">Admin</a>
-                    {% endif %}
-                    <a href="/change-password">Password</a>
-                    <a href="/logout">Logout</a>
-                </nav>
-            </div>
-        </header>
+        <div class="header-top">
+            <a href="/upload" class="header-link">Photos</a>
+            {% if is_admin %}<a href="/admin" class="header-link">Admin</a>{% endif %}
+            <a href="/mfa" class="header-link active">MFA</a>
+            <a href="/change-password" class="header-link">Password</a>
+            <a href="/logout" class="header-link">Logout</a>
+        </div>
 
         {% if required %}
         <div class="message" style="display:block; background: rgba(255,193,7,0.1); border: 1px solid rgba(255,193,7,0.2); color: #ffc107; padding: 12px 15px; border-radius: 8px; margin-bottom: 20px;">
@@ -70,7 +61,6 @@
         {% endif %}
 
         <pre id="mfa-output" style="color: #888; font-size: 0.85rem; margin-top: 12px;"></pre>
-        <p style="margin-top: 20px;"><a href="{{ url_for('upload_page') }}" style="color: #00d4ff;">← Back to Photos</a></p>
     </div>
     <script src="{{ url_for('static', filename='js/mfa.js') }}" defer></script>
 </body>

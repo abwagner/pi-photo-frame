@@ -476,20 +476,50 @@
             const img = images.find(i => i.filename === filename);
             if (!img) return;
 
+            const noMat = !!img.no_mat;
             const matColor = img.mat_color || matColorInput.value;
-            const rawEffectSize = img.bevel_width ?? parseInt(bevelWidthInput.value);
-            const effectSize = previewScaledEffect(rawEffectSize);
-            const borderEffect = img.border_effect || borderEffectSelect.value;
             const finish = img.mat_finish || matFinishSelect.value;
-            const scale = img.scale || 1.0;
 
             matPreview.style.backgroundColor = matColor;
             matPreview.classList.remove('mat-eggshell', 'mat-linen', 'mat-suede', 'mat-silk');
             if (finish !== 'flat') matPreview.classList.add('mat-' + finish);
 
-            // Compute pixel dimensions — photo+effect must fit in frame
             const containerW = previewContent.clientWidth;
             const containerH = previewContent.clientHeight;
+            const rawRatio = (img.width && img.height) ? img.width / img.height : 4 / 3;
+            const crop = img.crop;
+
+            if (noMat) {
+                // Cover mode — fill the entire preview container, no mat visible
+                let imgHtml;
+                if (crop) {
+                    const cropRatio = rawRatio * crop.w / crop.h;
+                    let dW, dH;
+                    if (cropRatio > containerW / containerH) {
+                        dH = containerH; dW = containerH * cropRatio;
+                    } else {
+                        dW = containerW; dH = containerW / cropRatio;
+                    }
+                    const fullW = Math.round(dW / crop.w);
+                    const fullH = Math.round(dH / crop.h);
+                    const offsetX = Math.round(-crop.x * fullW);
+                    const offsetY = Math.round(-crop.y * fullH);
+                    imgHtml = `<div style="width:${containerW}px;height:${containerH}px;overflow:hidden;line-height:0;">` +
+                              `<img src="/uploads/${filename}" alt="${filename}" style="width:${fullW}px;height:${fullH}px;margin-left:${offsetX}px;margin-top:${offsetY}px;display:block;max-width:none;max-height:none;">` +
+                              `</div>`;
+                } else {
+                    imgHtml = `<img src="/uploads/${filename}" alt="${filename}" style="width:${containerW}px;height:${containerH}px;object-fit:cover;display:block;">`;
+                }
+                previewContent.innerHTML = imgHtml;
+                return;
+            }
+
+            const rawEffectSize = img.bevel_width ?? parseInt(bevelWidthInput.value);
+            const effectSize = previewScaledEffect(rawEffectSize);
+            const borderEffect = img.border_effect || borderEffectSelect.value;
+            const scale = img.scale || 1.0;
+
+            // Compute pixel dimensions — photo+effect must fit in frame
             const effectSpace = borderEffect === 'shadow' ? Math.round(effectSize * 2) : effectSize;
             const effect2 = (effectSpace > 0 ? effectSpace : 0) * 2;
 
@@ -503,8 +533,6 @@
             const scaledW = Math.max(1, Math.min(baseW * scale, maxPhotoW));
             const scaledH = Math.max(1, Math.min(baseH * scale, maxPhotoH));
 
-            const rawRatio = (img.width && img.height) ? img.width / img.height : 4 / 3;
-            const crop = img.crop;
             const imgRatio = crop ? (rawRatio * crop.w / crop.h) : rawRatio;
             let displayW, displayH;
             if (imgRatio > scaledW / scaledH) {
@@ -537,6 +565,7 @@
             if (!img) return;
 
             const scale = img.scale || 1.0;
+            const noMat = !!img.no_mat;
             previewControlsTitle.textContent = cleanFilename(filename);
             document.querySelector('.preview-controls-actions').style.display = 'none';
             const currentFinish = img.mat_finish || '';
@@ -550,11 +579,17 @@
                 <div class="group-edit-item">
                     <img class="group-edit-thumb" src="/uploads/${filename}" alt="${filename}">
                     <div class="group-edit-controls">
-                        <input type="range" min="0.25" max="3" step="0.05"
-                               value="${scale}"
-                               data-oninput="updateSingleScalePreview('${filename}', this.value); this.nextElementSibling.textContent = parseFloat(this.value).toFixed(2) + 'x'"
-                               data-onchange="updateSingleScale('${filename}', this.value)">
-                        <span class="scale-value">${parseFloat(scale).toFixed(2)}x</span>
+                        <label style="font-size:0.75rem;color:#aaa;white-space:nowrap;display:flex;align-items:center;gap:5px;">
+                            <input type="checkbox" ${noMat ? 'checked' : ''}
+                                   data-onchange="updateImageField('${escAttr(filename)}','no_mat',this.checked); renderSinglePreviewImage('${escAttr(filename)}'); renderSingleControls('${escAttr(filename)}')">
+                            No mat
+                        </label>
+                        <label style="font-size:0.75rem;color:#aaa;white-space:nowrap;">Zoom</label>
+                        <input type="range" min="${noMat ? '1' : '0.25'}" max="3" step="0.05"
+                               value="${Math.max(noMat ? 1.0 : 0.25, scale)}"
+                               data-oninput="updateSingleScalePreview('${escAttr(filename)}', this.value); this.nextElementSibling.textContent = parseFloat(this.value).toFixed(2) + 'x'"
+                               data-onchange="updateSingleScale('${escAttr(filename)}', this.value)">
+                        <span class="scale-value">${parseFloat(Math.max(noMat ? 1.0 : 0.25, scale)).toFixed(2)}x</span>
                     </div>
                 </div>
                 <div class="group-edit-item" style="flex-direction:column;gap:8px;">
@@ -620,14 +655,21 @@
         }
 
         // ===== Crop Mode =====
-        let cropState = null; // {filename, x, y, w, h, imgRect}
+        let cropState = null; // {filename, x, y, w, h, imgRect, imgWidth, imgHeight}
+        let cropAspectLocked = false;
+        let cropAspectRatio = '16:9';
+        let cropZoom = 1.0;
 
         function enterCropMode(filename) {
             const img = images.find(i => i.filename === filename);
             if (!img) return;
 
             const existing = img.crop || {x: 0, y: 0, w: 1, h: 1};
-            cropState = { filename, x: existing.x, y: existing.y, w: existing.w, h: existing.h };
+            cropState = {
+                filename,
+                x: existing.x, y: existing.y, w: existing.w, h: existing.h,
+                imgWidth: img.width || 1, imgHeight: img.height || 1,
+            };
 
             // Show uncropped image in preview
             matPreview.style.backgroundColor = '#111';
@@ -651,6 +693,12 @@
             // Store image rect for coordinate conversion
             cropState.imgRect = {x: offsetX, y: offsetY, w: dispW, h: dispH};
 
+            // Portrait display: toolbar on the right side; landscape: bottom center
+            const isPortraitDisplay = dispH > dispW;
+            const toolbarStyle = isPortraitDisplay
+                ? 'left:auto;right:12px;top:50%;bottom:auto;transform:translateY(-50%);flex-direction:column;align-items:stretch;'
+                : '';
+
             previewContent.style.position = 'relative';
             previewContent.innerHTML = `
                 <img id="crop-image" src="/uploads/${filename}"
@@ -666,7 +714,26 @@
                     <div class="crop-handle e" data-handle="e"></div>
                     <div class="crop-handle w" data-handle="w"></div>
                 </div>
-                <div class="crop-toolbar">
+                <div class="crop-toolbar" ${toolbarStyle ? `style="${toolbarStyle}"` : ''}>
+                    <label class="crop-aspect-toggle">
+                        <input type="checkbox" id="crop-lock-aspect" data-onchange="updateCropAspectLock(this.checked)" ${cropAspectLocked ? 'checked' : ''}>
+                        Lock ratio
+                    </label>
+                    <select id="crop-aspect-select" data-onchange="updateCropAspectRatio(this.value)" style="display:${cropAspectLocked ? 'inline-block' : 'none'}">
+                        <option value="1:1" ${cropAspectRatio==='1:1' ? 'selected' : ''}>1:1</option>
+                        <option value="4:3" ${cropAspectRatio==='4:3' ? 'selected' : ''}>4:3</option>
+                        <option value="3:2" ${cropAspectRatio==='3:2' ? 'selected' : ''}>3:2</option>
+                        <option value="16:9" ${cropAspectRatio==='16:9' ? 'selected' : ''}>16:9</option>
+                        <option value="9:16" ${cropAspectRatio==='9:16' ? 'selected' : ''}>9:16</option>
+                        <option value="2:3" ${cropAspectRatio==='2:3' ? 'selected' : ''}>2:3</option>
+                        <option value="3:4" ${cropAspectRatio==='3:4' ? 'selected' : ''}>3:4</option>
+                    </select>
+                    <label class="crop-aspect-toggle" style="margin-left:8px;">
+                        🔍 <input type="range" id="crop-zoom-slider" min="1" max="4" step="0.1"
+                               value="${cropZoom}"
+                               style="width:70px;accent-color:#00d4ff;vertical-align:middle;"
+                               data-oninput="updateCropPreviewZoom(this.value)">
+                    </label>
                     <button class="btn btn-success" data-onclick="applyCrop()">Apply</button>
                     <button class="btn btn-warning" data-onclick="cancelCrop()">Cancel</button>
                 </div>
@@ -752,6 +819,24 @@
                         nh = Math.max(minSize, Math.min(1 - startCrop.y, startCrop.h + dy));
                     }
 
+                    if (cropAspectLocked) {
+                        const [arw, arh] = cropAspectRatio.split(':').map(Number);
+                        const iw = cropState.imgWidth, ih = cropState.imgHeight;
+                        // normRatio = nw/nh when pixel aspect = arw:arh
+                        const normRatio = (arw * ih) / (arh * iw);
+                        if (dragMode.includes('e') || dragMode.includes('w')) {
+                            nh = Math.max(minSize, nw / normRatio);
+                            nw = nh * normRatio;
+                            if (dragMode.includes('n')) ny = startCrop.y + startCrop.h - nh;
+                        } else {
+                            nw = Math.max(minSize, nh * normRatio);
+                            nh = nw / normRatio;
+                            nx = startCrop.x + (startCrop.w - nw) / 2;
+                        }
+                        nx = Math.max(0, Math.min(1 - nw, nx));
+                        ny = Math.max(0, Math.min(1 - nh, ny));
+                    }
+
                     cropState.x = nx;
                     cropState.y = ny;
                     cropState.w = nw;
@@ -829,6 +914,65 @@
                 renderSinglePreviewImage(fn);
                 renderSingleControls(fn);
             }
+        }
+
+        function updateCropAspectLock(checked) {
+            cropAspectLocked = checked;
+            const sel = document.getElementById('crop-aspect-select');
+            if (sel) sel.style.display = checked ? 'inline-block' : 'none';
+            if (checked && cropState) {
+                const [arw, arh] = cropAspectRatio.split(':').map(Number);
+                const iw = cropState.imgWidth, ih = cropState.imgHeight;
+                const normRatio = (arw * ih) / (arh * iw);
+                let nh = cropState.w / normRatio;
+                if (cropState.y + nh > 1) {
+                    nh = 1 - cropState.y;
+                    cropState.w = Math.min(1, nh * normRatio);
+                }
+                cropState.h = Math.max(0.05, nh);
+                updateCropSelection();
+            }
+        }
+
+        function updateCropAspectRatio(value) {
+            cropAspectRatio = value;
+            if (cropAspectLocked && cropState) {
+                updateCropAspectLock(true);
+            }
+        }
+
+        function updateCropPreviewZoom(value) {
+            cropZoom = parseFloat(value) || 1.0;
+            if (!cropState) return;
+            const img = images.find(i => i.filename === cropState.filename);
+            if (!img) return;
+            const containerW = previewContent.clientWidth;
+            const containerH = previewContent.clientHeight;
+            const imgRatio = (img.width || 1) / (img.height || 1);
+            let baseW, baseH;
+            if (imgRatio > containerW / containerH) {
+                baseW = containerW * 0.92;
+                baseH = baseW / imgRatio;
+            } else {
+                baseH = containerH * 0.92;
+                baseW = baseH * imgRatio;
+            }
+            const dispW = baseW * cropZoom;
+            const dispH = baseH * cropZoom;
+            // Center view on the crop selection
+            const selCX = (cropState.x + cropState.w / 2) * dispW;
+            const selCY = (cropState.y + cropState.h / 2) * dispH;
+            const offsetX = Math.min(0, Math.max(containerW - dispW, containerW / 2 - selCX));
+            const offsetY = Math.min(0, Math.max(containerH - dispH, containerH / 2 - selCY));
+            cropState.imgRect = {x: offsetX, y: offsetY, w: dispW, h: dispH};
+            const imgEl = document.getElementById('crop-image');
+            if (imgEl) {
+                imgEl.style.left = offsetX + 'px';
+                imgEl.style.top = offsetY + 'px';
+                imgEl.style.width = dispW + 'px';
+                imgEl.style.height = dispH + 'px';
+            }
+            updateCropSelection();
         }
 
         async function clearCrop(filename) {
@@ -1501,6 +1645,25 @@
             });
         }
 
+        async function resetAllMatColors() {
+            if (!confirm('Reset all mat colors to the default? This clears every per-image color — it cannot be undone.')) return;
+            const btn = document.getElementById('reset-mat-colors');
+            btn.disabled = true;
+            btn.textContent = 'Resetting…';
+            try {
+                await fetch('/api/reset-mat-colors', { method: 'POST' });
+                btn.textContent = '✓ Reset';
+                setTimeout(() => {
+                    btn.textContent = 'Reset all to default';
+                    btn.disabled = false;
+                }, 1500);
+                loadGallery();
+            } catch {
+                btn.textContent = 'Reset all to default';
+                btn.disabled = false;
+            }
+        }
+
         function applyMatSettings() {
             const { intensity, v, h } = getLitSliderValues();
             const settings = {
@@ -1557,13 +1720,65 @@
         });
         document.getElementById('bevel-lit-intensity').addEventListener('input', function() {
             document.getElementById('bevel-lit-intensity-value').textContent = this.value + '%';
+            updatePreviewTexture();
         });
-        document.getElementById('bevel-lit-v').addEventListener('input', function() {
-            document.getElementById('bevel-lit-v-value').textContent = this.value + '%';
-        });
-        document.getElementById('bevel-lit-h').addEventListener('input', function() {
-            document.getElementById('bevel-lit-h-value').textContent = this.value + '%';
-        });
+
+        // Light direction circular picker
+        (function initLightPicker() {
+            const picker = document.getElementById('light-picker');
+            const handle = document.getElementById('light-handle');
+            const vInput = document.getElementById('bevel-lit-v');
+            const hInput = document.getElementById('bevel-lit-h');
+            if (!picker) return;
+
+            function setHandleFromVH(v, h) {
+                // map 0-100 → -1..1, clamped to 85% of radius so dot stays inside
+                const nx = ((h / 100) * 2 - 1) * 0.85;
+                const ny = ((v / 100) * 2 - 1) * 0.85;
+                const len = Math.sqrt(nx * nx + ny * ny);
+                const scale = len > 0.85 ? 0.85 / len : 1;
+                handle.style.left = ((nx * scale / 0.85 + 1) / 2 * 100) + '%';
+                handle.style.top  = ((ny * scale / 0.85 + 1) / 2 * 100) + '%';
+            }
+
+            function updateFromClientXY(clientX, clientY, save) {
+                const rect = picker.getBoundingClientRect();
+                const cx = rect.left + rect.width  / 2;
+                const cy = rect.top  + rect.height / 2;
+                const r  = rect.width / 2;
+                let nx = (clientX - cx) / r;
+                let ny = (clientY - cy) / r;
+                const len = Math.sqrt(nx * nx + ny * ny);
+                if (len > 0.85) { nx = nx / len * 0.85; ny = ny / len * 0.85; }
+                handle.style.left = ((nx / 0.85 + 1) / 2 * 100) + '%';
+                handle.style.top  = ((ny / 0.85 + 1) / 2 * 100) + '%';
+                hInput.value = Math.round((nx / 0.85 + 1) / 2 * 100);
+                vInput.value = Math.round((ny / 0.85 + 1) / 2 * 100);
+                if (save) applyMatSettings(); else updatePreviewTexture();
+            }
+
+            // Init from saved values
+            setHandleFromVH(parseInt(vInput.value || 15), parseInt(hInput.value || 15));
+
+            let dragging = false;
+            picker.addEventListener('mousedown', e => {
+                dragging = true;
+                updateFromClientXY(e.clientX, e.clientY, false);
+                e.preventDefault();
+            });
+            picker.addEventListener('touchstart', e => {
+                dragging = true;
+                updateFromClientXY(e.touches[0].clientX, e.touches[0].clientY, false);
+            }, { passive: true });
+            document.addEventListener('mousemove', e => {
+                if (dragging) updateFromClientXY(e.clientX, e.clientY, false);
+            });
+            document.addEventListener('touchmove', e => {
+                if (dragging) updateFromClientXY(e.touches[0].clientX, e.touches[0].clientY, false);
+            });
+            document.addEventListener('mouseup',  () => { if (dragging) { dragging = false; applyMatSettings(); } });
+            document.addEventListener('touchend', () => { if (dragging) { dragging = false; applyMatSettings(); } });
+        })();
 
         // Slideshow settings: Apply button
         document.getElementById('apply-slideshow-settings').addEventListener('click', saveSlideshowSettings);
@@ -1625,14 +1840,27 @@
 
         function getBevelColorsLit(intensity, v, h) {
             const i = intensity / 100;
-            const vf = (50 - v) / 50;
-            const hf = (50 - h) / 50;
-            function edge(factor) {
-                const a = +(Math.abs(factor) * i).toFixed(3);
-                if (a < 0.005) return 'transparent';
-                return factor > 0 ? `rgba(255,255,255,${a})` : `rgba(0,0,0,${a})`;
+            // vf/hf: positive = lit side is at top/left; light source direction is opposite
+            const vf = (v - 50) / 50;
+            const hf = (h - 50) / 50;
+            function edgeColor(factor) {
+                if (factor > 0) {
+                    const a = +(factor * i).toFixed(3);
+                    return a < 0.005 ? 'transparent' : `rgba(255,255,255,${a})`;
+                } else {
+                    // shadow range: 50% at brightness=0 → 10% at brightness=100
+                    // so bevel retains definition at full brightness instead of disappearing
+                    const a = +((1 - factor) / 2 * (0.1 + 0.4 * (1 - i))).toFixed(3);
+                    return a < 0.005 ? 'transparent' : `rgba(0,0,0,${a})`;
+                }
             }
-            return { top: edge(vf), bottom: edge(-vf), left: edge(hf), right: edge(-hf) };
+            // Corner colors blend the two adjacent face factors at each 45° corner
+            return {
+                tl: edgeColor((vf + hf) / 2),
+                tr: edgeColor((vf - hf) / 2),
+                bl: edgeColor((hf - vf) / 2),
+                br: edgeColor(-(vf + hf) / 2),
+            };
         }
 
         function getLitSliderValues() {
@@ -1659,16 +1887,33 @@
         function makeBevelLitStripHtml(bevelWidth) {
             const w = bevelWidth + 'px';
             const { intensity, v, h } = getLitSliderValues();
-            const colors = getBevelColorsLit(intensity, v, h);
+            const { tl, tr, bl, br } = getBevelColorsLit(intensity, v, h);
+            // Each strip: background gradient runs ALONG the strip (corner-to-corner);
+            // mask gradient runs ACROSS the strip (outer opaque → inner transparent) for depth.
             const strips = [
-                { pos: `top:0;left:0;right:0;height:${w}`,             grad: 'to bottom', from: colors.top,    to: 'transparent' },
-                { pos: `bottom:0;left:0;right:0;height:${w}`,           grad: 'to top',    from: colors.bottom, to: 'transparent' },
-                { pos: `top:${w};left:0;bottom:${w};width:${w}`,       grad: 'to right',  from: colors.left,   to: 'transparent' },
-                { pos: `top:${w};right:0;bottom:${w};width:${w}`,      grad: 'to left',   from: colors.right,  to: 'transparent' },
+                { pos: `top:0;left:0;right:0;height:${w}`,    clip: `polygon(0 0,100% 0,calc(100% - ${w}) 100%,${w} 100%)`,  bg: `to right,${tl},${tr}`,  mask: 'to bottom' },
+                { pos: `bottom:0;left:0;right:0;height:${w}`, clip: `polygon(${w} 0,calc(100% - ${w}) 0,100% 100%,0 100%)`,  bg: `to right,${bl},${br}`,  mask: 'to top'    },
+                { pos: `top:0;left:0;bottom:0;width:${w}`,    clip: `polygon(0 0,100% ${w},100% calc(100% - ${w}),0 100%)`,  bg: `to bottom,${tl},${bl}`, mask: 'to right'  },
+                { pos: `top:0;right:0;bottom:0;width:${w}`,   clip: `polygon(0 ${w},100% 0,100% 100%,0 calc(100% - ${w}))`,  bg: `to bottom,${tr},${br}`, mask: 'to left'   },
             ];
-            return strips.map(({ pos, grad, from, to }) =>
-                `<div style="position:absolute;${pos};background:linear-gradient(${grad},${from},${to});pointer-events:none;z-index:1;"></div>`
+            const stripHtml = strips.map(({ pos, clip, bg, mask }) => {
+                const msk = `linear-gradient(${mask},black,transparent)`;
+                // drop-shadow outlines the clip-path shape: outer edge + angled corner cuts
+                return `<div style="position:absolute;${pos};clip-path:${clip};background:linear-gradient(${bg});-webkit-mask-image:${msk};mask-image:${msk};filter:drop-shadow(0 0 1.5px rgba(0,0,0,0.45));pointer-events:none;z-index:1;"></div>`;
+            }).join('');
+            // Inner edge accent (inside = inner bevel opening)
+            const accent = `<div style="position:absolute;inset:${w};box-shadow:0 0 0 1px rgba(0,0,0,0.12),inset 0 0 0 1px rgba(0,0,0,0.06);pointer-events:none;z-index:3;"></div>`;
+            // 45° corner cut lines — one per corner, same weight as inner accent
+            const d = Math.round(bevelWidth * Math.SQRT2) + 'px';
+            const cornerLines = [
+                `left:0;top:0;transform-origin:0 50%;transform:rotate(45deg)`,
+                `right:0;top:0;transform-origin:100% 50%;transform:rotate(-45deg)`,
+                `left:0;bottom:0;transform-origin:0 50%;transform:rotate(-45deg)`,
+                `right:0;bottom:0;transform-origin:100% 50%;transform:rotate(45deg)`,
+            ].map(pos =>
+                `<div style="position:absolute;${pos};width:${d};height:1px;background:rgba(0,0,0,0.12);pointer-events:none;z-index:4;"></div>`
             ).join('');
+            return stripHtml + accent + cornerLines;
         }
 
         function getShadowStyle(size) {
@@ -1682,7 +1927,7 @@
             if (!bevelWidth || bevelWidth <= 0) return innerHtml;
             const bw = Math.round(bevelWidth);
             if (bevelStyle === 'bevel-lit') {
-                return `<div class="mat-bevel" style="--bevel-w:${bw}px;--bevel-mat:${matColor}">${innerHtml}${makeBevelLitStripHtml(bw)}</div>`;
+                return `<div class="mat-bevel" data-bevel-lit="${bw}" style="--bevel-w:${bw}px;--bevel-mat:${matColor}">${innerHtml}${makeBevelLitStripHtml(bw)}</div>`;
             }
             const bevelColors = getBevelColors(matColor);
             return `<div class="mat-bevel" style="--bevel-w:${bw}px;--bevel-mat:${matColor};--bevel-outer:${bevelColors.outer};--bevel-inner:${bevelColors.inner}">${innerHtml}${makeBevelStripHtml(bw)}</div>`;
@@ -1712,6 +1957,12 @@
             if (finish !== 'flat') {
                 matPreview.classList.add('mat-' + finish);
             }
+            // Rebuild bevel-lit strips live (picker drag, intensity slider)
+            document.querySelectorAll('[data-bevel-lit]').forEach(bevelDiv => {
+                const bw = parseInt(bevelDiv.dataset.bevelLit);
+                while (bevelDiv.children.length > 1) bevelDiv.removeChild(bevelDiv.lastChild);
+                bevelDiv.insertAdjacentHTML('beforeend', makeBevelLitStripHtml(bw));
+            });
         }
 
         // ===== Status Messages =====

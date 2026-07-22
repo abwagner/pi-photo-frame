@@ -11,10 +11,8 @@
 <body>
     <div class="frame-container">
         <div class="image-wrapper" id="image-wrapper">
-            <div class="loading" id="loading">
-                <div class="loading-spinner"></div>
-                Loading photos...
-            </div>
+            <img id="slide-a" class="snapshot-img active" alt="">
+            <img id="slide-b" class="snapshot-img" alt="">
         </div>
     </div>
 
@@ -23,6 +21,7 @@
         <button class="control-btn" data-onclick="togglePause()">⏯ Pause</button>
         <button class="control-btn" data-onclick="nextSlide()">Next →</button>
         <button class="control-btn" data-onclick="location.reload()">↻ Refresh</button>
+        <button class="control-btn" id="fullscreen-btn" data-onclick="toggleFullscreen()">⛶ Full</button>
     </div>
     <script src="{{ url_for('static', filename='js/display.js') }}" defer></script>
 </body>

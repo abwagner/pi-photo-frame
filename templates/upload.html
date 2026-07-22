@@ -12,15 +12,12 @@
     <div class="container">
         <header>
             <div class="header-top">
-                {% if is_admin %}
-                <a href="/admin" class="header-link">Admin</a>
-                {% endif %}
+                <a href="/upload" class="header-link active">Photos</a>
+                {% if is_admin %}<a href="/admin" class="header-link">Admin</a>{% endif %}
                 <a href="/mfa" class="header-link">MFA</a>
                 <a href="/change-password" class="header-link">Password</a>
                 <a href="/logout" class="header-link">Logout</a>
             </div>
-            <h1>🖼️ OpenFotoFrame</h1>
-            <p class="subtitle">Logged in as {{ username }}</p>
             <div class="header-actions">
                 <button class="btn btn-settings" data-onclick="openSettingsModal()">⚙ Settings</button>
                 <a href="/display" class="display-link" target="_blank">Open TV Display →</a>
@@ -62,7 +59,8 @@
                                     <span class="toggle-slider"></span>
                                 </label>
                             </div>
-                            <p style="font-size: 0.75rem; color: #666; margin-top: -10px; margin-bottom: 14px;">When off, new uploads use the default mat color above.</p>
+                            <p style="font-size: 0.75rem; color: #666; margin-top: -10px; margin-bottom: 6px;">When off, new uploads use the default mat color above.</p>
+                            <button type="button" class="btn-reset-mat" id="reset-mat-colors" data-onclick="resetAllMatColors()">Reset all to default</button>
 
                             <div class="setting-group">
                                 <label>Mat Finish</label>
@@ -91,19 +89,27 @@
 
                             <div id="bevel-lit-controls" style="{{ 'display:none' if settings.border_effect != 'bevel-lit' else '' }}">
                                 <div class="setting-group">
-                                    <label>Whiteness <span id="bevel-lit-intensity-value">{{ settings.bevel_lit_intensity }}%</span></label>
+                                    <label>Brightness <span id="bevel-lit-intensity-value">{{ settings.bevel_lit_intensity }}%</span></label>
                                     <input type="range" id="bevel-lit-intensity" min="0" max="100" value="{{ settings.bevel_lit_intensity }}" step="1">
                                 </div>
                                 <div class="setting-group">
-                                    <label>Vertical <span id="bevel-lit-v-value">{{ settings.bevel_lit_v }}%</span></label>
-                                    <input type="range" id="bevel-lit-v" min="0" max="100" value="{{ settings.bevel_lit_v }}" step="1">
-                                    <p style="font-size:0.72rem;color:#666;margin-top:4px;">0% = light from top · 100% = light from bottom</p>
+                                    <label style="margin-bottom:8px;display:block;">Light Direction</label>
+                                    <div id="light-picker" style="width:88px;height:88px;border-radius:50%;border:1px solid rgba(255,255,255,0.15);background:rgba(0,0,0,0.25);position:relative;cursor:crosshair;user-select:none;">
+                                        <!-- crosshair lines -->
+                                        <div style="position:absolute;top:50%;left:8px;right:8px;height:1px;background:rgba(255,255,255,0.08);transform:translateY(-50%);pointer-events:none;"></div>
+                                        <div style="position:absolute;left:50%;top:8px;bottom:8px;width:1px;background:rgba(255,255,255,0.08);transform:translateX(-50%);pointer-events:none;"></div>
+                                        <!-- corner labels -->
+                                        <span style="position:absolute;top:4px;left:50%;transform:translateX(-50%);font-size:9px;color:#555;pointer-events:none;">T</span>
+                                        <span style="position:absolute;bottom:4px;left:50%;transform:translateX(-50%);font-size:9px;color:#555;pointer-events:none;">B</span>
+                                        <span style="position:absolute;left:5px;top:50%;transform:translateY(-50%);font-size:9px;color:#555;pointer-events:none;">L</span>
+                                        <span style="position:absolute;right:5px;top:50%;transform:translateY(-50%);font-size:9px;color:#555;pointer-events:none;">R</span>
+                                        <!-- draggable dot -->
+                                        <div id="light-handle" style="width:14px;height:14px;border-radius:50%;background:#ffe066;box-shadow:0 0 6px 3px rgba(255,220,80,0.55);position:absolute;transform:translate(-50%,-50%);pointer-events:none;"></div>
+                                    </div>
                                 </div>
-                                <div class="setting-group">
-                                    <label>Horizontal <span id="bevel-lit-h-value">{{ settings.bevel_lit_h }}%</span></label>
-                                    <input type="range" id="bevel-lit-h" min="0" max="100" value="{{ settings.bevel_lit_h }}" step="1">
-                                    <p style="font-size:0.72rem;color:#666;margin-top:4px;">0% = light from left · 100% = light from right</p>
-                                </div>
+                                <!-- hidden inputs consumed by getLitSliderValues() -->
+                                <input type="hidden" id="bevel-lit-v" value="{{ settings.bevel_lit_v }}">
+                                <input type="hidden" id="bevel-lit-h" value="{{ settings.bevel_lit_h }}">
                             </div>
 
                             <button class="btn btn-apply" id="apply-mat-settings">Apply</button>

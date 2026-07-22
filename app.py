@@ -52,6 +52,7 @@ from webauthn.helpers.structs import (
 from render_display import (
     render_snapshot as _render_snapshot,
     render_group_snapshot as _render_group_snapshot,
+    render_pair_slide_snapshot as _render_pair_slide_snapshot,
     delete_snapshot as _delete_snapshot,
     delete_group_snapshot as _delete_group_snapshot,
     get_groups_containing,
@@ -799,6 +800,8 @@ def backfill_mat_colors():
     """Suggest and store mat_color for any images that don't have one yet."""
     if not UPLOAD_FOLDER.exists():
         return 0
+    if not load_settings().get('auto_mat_color', True):
+        return 0
     gallery = load_gallery()
     count = 0
     for filename, meta in gallery.get('images', {}).items():
@@ -839,6 +842,21 @@ def regenerate_snapshots_for_groups_containing(filename):
     gallery = load_gallery()
     for group_id in get_groups_containing(filename, gallery):
         generate_group_display_snapshot(group_id)
+
+
+def _get_slide_snapshot_url(slide):
+    """Return the /snapshots/ URL for a slide if its snapshot file exists, else None."""
+    if slide is None:
+        return None
+    if slide['type'] == 'group':
+        group_id = slide.get('group_id')
+        if not group_id:
+            return None
+        snap_path = SNAPSHOT_FOLDER / f'{group_id}.display.png'
+    else:
+        filename = slide['images'][0]['filename']
+        snap_path = SNAPSHOT_FOLDER / f'{filename}.display.png'
+    return f'/snapshots/{snap_path.name}' if snap_path.exists() else None
 
 
 def get_uploaded_images():
@@ -889,8 +907,8 @@ DEFAULT_SETTINGS = {
     'bevel_width': 4,
     'border_effect': 'bevel',
     'bevel_lit_intensity': 50,
-    'bevel_lit_v': 15,
-    'bevel_lit_h': 15,
+    'bevel_lit_v': 50,
+    'bevel_lit_h': 50,
     'slideshow_interval': 60,
     'transition_duration': 1,
     'fit_mode': 'contain',
@@ -2140,27 +2158,63 @@ def _is_portrait(img_data, threshold=1.15):
 
 
 def _auto_pair_portraits(slides):
-    """Pair consecutive ungrouped portrait singles into synthetic side-by-side group slides."""
+    """Pair all ungrouped portrait singles into synthetic side-by-side group slides.
+
+    Collects every portrait single (regardless of adjacency), pairs them in order
+    of their position in the shuffled list, and replaces the first portrait's slot
+    with the pair. The second portrait's original slot is removed.
+    """
+    portrait_indices = [
+        idx for idx, slide in enumerate(slides)
+        if slide['type'] == 'single' and _is_portrait(slide['images'][0])
+    ]
+
+    if len(portrait_indices) < 2:
+        return slides
+
+    paired_indices = set()
+    pair_insertions = {}  # index of first portrait -> pair slide
+    for k in range(0, len(portrait_indices) - 1, 2):
+        i, j = portrait_indices[k], portrait_indices[k + 1]
+        img1 = slides[i]['images'][0]
+        img2 = slides[j]['images'][0]
+        pair_key = img1['filename'] + '|' + img2['filename']
+        synthetic_id = '__pair_' + hashlib.sha1(pair_key.encode()).hexdigest()[:16]
+        paired_indices.update([i, j])
+        pair_insertions[i] = {
+            'type': 'group',
+            'group_id': synthetic_id,
+            'images': [img1, img2],
+            'mat_color': img1.get('mat_color') or img2.get('mat_color'),
+        }
+
     result = []
-    i = 0
-    while i < len(slides):
-        slide = slides[i]
-        next_slide = slides[i + 1] if i + 1 < len(slides) else None
-        if (slide['type'] == 'single' and _is_portrait(slide['images'][0]) and
-                next_slide and next_slide['type'] == 'single' and
-                _is_portrait(next_slide['images'][0])):
-            img1, img2 = slide['images'][0], next_slide['images'][0]
-            result.append({
-                'type': 'group',
-                'group_id': None,
-                'images': [img1, img2],
-                'mat_color': img1.get('mat_color') or img2.get('mat_color'),
-            })
-            i += 2
-        else:
+    for idx, slide in enumerate(slides):
+        if idx in pair_insertions:
+            result.append(pair_insertions[idx])
+        elif idx not in paired_indices:
             result.append(slide)
-            i += 1
     return result
+
+
+def _ensure_auto_pair_snapshots(slides):
+    """Generate snapshots for any synthetic portrait-pair slides that are missing one.
+
+    Runs in a background thread; safe to call on every state poll since it's a no-op
+    when the snapshot file already exists.
+    """
+    settings = load_settings()
+    missing = [
+        s for s in slides
+        if s['type'] == 'group'
+        and s.get('group_id', '').startswith('__pair_')
+        and not (SNAPSHOT_FOLDER / f"{s['group_id']}.display.png").exists()
+    ]
+    for slide in missing:
+        try:
+            _render_pair_slide_snapshot(slide, settings, UPLOAD_FOLDER, SNAPSHOT_FOLDER)
+        except Exception as e:
+            logging.warning('Auto-pair snapshot failed for %s: %s', slide.get('group_id'), e)
 
 
 def _build_slides():
@@ -2182,7 +2236,8 @@ def _build_slides():
             'bevel_width': img.get('bevel_width'),
             'border_effect': img.get('border_effect'),
             'scale': img.get('scale', 1.0),
-            'crop': img.get('crop')
+            'crop': img.get('crop'),
+            'no_mat': img.get('no_mat'),
         }
 
     # Find which filenames are in groups
@@ -2210,7 +2265,9 @@ def _build_slides():
                 'type': 'group',
                 'group_id': group_id,
                 'images': group_images,
-                'mat_color': group.get('mat_color')
+                'mat_color': group.get('mat_color'),
+                'bevel_width': group.get('bevel_width'),
+                'border_effect': group.get('border_effect'),
             })
 
     # Add ungrouped singles
@@ -2265,13 +2322,13 @@ def api_update_image(filename):
         return jsonify({'error': 'Image not found'}), 404
 
     data = request.json
-    allowed_fields = ['enabled', 'title', 'mat_color', 'scale', 'mat_finish', 'bevel_width', 'border_effect', 'crop']
+    allowed_fields = ['enabled', 'title', 'mat_color', 'scale', 'mat_finish', 'bevel_width', 'border_effect', 'crop', 'no_mat']
     updates = {k: v for k, v in data.items() if k in allowed_fields}
 
     update_image_metadata(filename, **updates)
 
     # Re-render display snapshot if any display-affecting field changed
-    display_fields = {'mat_color', 'scale', 'mat_finish', 'bevel_width', 'border_effect', 'crop'}
+    display_fields = {'mat_color', 'scale', 'mat_finish', 'bevel_width', 'border_effect', 'crop', 'no_mat'}
     if display_fields & updates.keys():
         generate_display_snapshot(filename)
         regenerate_snapshots_for_groups_containing(filename)
@@ -2443,29 +2500,59 @@ def api_settings():
 
     settings = load_settings()
     data = request.json
+    prev_auto_mat = settings.get('auto_mat_color', True)
 
     allowed_fields = ['mat_color', 'mat_finish', 'bevel_width', 'border_effect',
                       'slideshow_interval', 'transition_duration',
                       'fit_mode', 'shuffle', 'image_order',
-                      'target_aspect_ratio', 'auto_mat_color']
+                      'target_aspect_ratio', 'auto_mat_color',
+                      'bevel_lit_intensity', 'bevel_lit_v', 'bevel_lit_h']
     for field in allowed_fields:
         if field in data:
             settings[field] = data[field]
 
     save_settings(settings)
 
+    # If auto-mat was just enabled, backfill images that don't have a mat color yet
+    if data.get('auto_mat_color') is True and not prev_auto_mat:
+        threading.Thread(target=backfill_mat_colors, daemon=True).start()
+
     # If display-affecting global settings changed, re-render all snapshots in background
     display_settings = {'mat_color', 'mat_finish', 'bevel_width', 'border_effect',
-                        'fit_mode', 'target_aspect_ratio'}
+                        'fit_mode', 'target_aspect_ratio',
+                        'bevel_lit_intensity', 'bevel_lit_v', 'bevel_lit_h'}
     if display_settings & data.keys():
         def _rerender_all():
             gallery = load_gallery()
             new_settings = load_settings()
             _regenerate_all_snapshots(gallery, new_settings, UPLOAD_FOLDER, SNAPSHOT_FOLDER)
+            slides, _, _ = _build_slides()
+            _ensure_auto_pair_snapshots(slides)
         thread = threading.Thread(target=_rerender_all, daemon=True)
         thread.start()
 
     return jsonify(settings)
+
+
+@app.route('/api/reset-mat-colors', methods=['POST'])
+@api_login_required
+def api_reset_mat_colors():
+    """Clear all per-image mat colors so they fall back to the global default."""
+    gallery = load_gallery()
+    count = 0
+    for filename, meta in gallery.get('images', {}).items():
+        if meta.get('mat_color') is not None:
+            meta['mat_color'] = None
+            count += 1
+    if count:
+        save_gallery(gallery)
+        # Re-render snapshots in background
+        def _rerender():
+            g = load_gallery()
+            s = load_settings()
+            _regenerate_all_snapshots(g, s, UPLOAD_FOLDER, SNAPSHOT_FOLDER)
+        threading.Thread(target=_rerender, daemon=True).start()
+    return jsonify({'reset': count})
 
 
 @app.route('/api/reorder', methods=['POST'])
@@ -2512,6 +2599,20 @@ def serve_thumbnail(filename):
     return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
 
 
+@app.route('/snapshots/<filename>')
+@display_api_required
+def serve_snapshot(filename):
+    """Serve pre-rendered display snapshots (PNG files baked by render_display.py)."""
+    if not filename.endswith('.display.png'):
+        return jsonify({'error': 'Not found'}), 404
+    snap_path = SNAPSHOT_FOLDER / filename
+    if not snap_path.exists():
+        return jsonify({'error': 'Not found'}), 404
+    response = send_from_directory(SNAPSHOT_FOLDER, filename)
+    response.headers['Cache-Control'] = 'public, max-age=300'
+    return response
+
+
 @app.get('/api/display/enrollment-secret')
 @api_admin_required
 def api_display_enrollment_secret():
@@ -2545,13 +2646,21 @@ def api_rotate_display_secret():
 @app.route('/api/display/state')
 @display_api_required
 def api_display_state():
-    """Get current slideshow state (index, paused, total slides)."""
-    slides, _, _ = _build_slides()
+    """Get current slideshow state including the pre-rendered snapshot URL."""
+    slides, _, settings = _build_slides()
     total = len(slides)
+    index = _get_effective_index(total)
+    current_slide = slides[index] if total > 0 else None
+    # Generate any missing auto-pair snapshots in the background (no-op if all exist).
+    threading.Thread(target=_ensure_auto_pair_snapshots, args=(slides,), daemon=True).start()
     return jsonify({
-        'index': _get_effective_index(total),
+        'index': index,
         'paused': _display_state['paused'],
         'total': total,
+        'snapshot_url': _get_slide_snapshot_url(current_slide),
+        'mat_color': (current_slide.get('mat_color') if current_slide else None)
+                     or settings.get('mat_color', '#ffffff'),
+        'transition_duration': settings.get('transition_duration', 1),
     })
 
 
@@ -2585,9 +2694,21 @@ def api_display_control():
         _display_state['paused'] = False
         _display_state['last_advanced_at'] = now
 
+    index = _get_effective_index(total)
+    current_slide = slides[index] if total > 0 else None
+    snapshot_url = _get_slide_snapshot_url(current_slide)
+    if snapshot_url is None and current_slide is not None:
+        gid = current_slide.get('group_id', '')
+        if gid.startswith('__pair_'):
+            try:
+                _render_pair_slide_snapshot(current_slide, load_settings(), UPLOAD_FOLDER, SNAPSHOT_FOLDER)
+                snapshot_url = _get_slide_snapshot_url(current_slide)
+            except Exception:
+                pass
     return jsonify({
-        'index': _get_effective_index(total),
+        'index': index,
         'paused': _display_state['paused'],
+        'snapshot_url': snapshot_url,
     })
 
 
@@ -2596,10 +2717,8 @@ def api_display_control():
 @app.route('/backup')
 @admin_required
 def backup_page():
-    """Render the backup settings page"""
-    return render_template('backup.html',
-                           is_admin=True,
-                           username=session.get('username'))
+    from flask import redirect
+    return redirect('/admin#backup')
 
 
 @app.route('/api/backup/status', methods=['GET'])
