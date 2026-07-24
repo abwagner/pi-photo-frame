@@ -226,12 +226,15 @@ def _lerp_rgba(c0, c1, t):
 def _edge_color_lit(factor, i):
     """Maps a signed face-factor to a shadow RGBA overlay color.
 
-    All faces get shadow; lit sides (positive factor) get less shadow than
-    unlit sides (negative factor), but never zero — so the bevel always reads
-    as dimensional even on the brightest face.
+    Positive factors are highlights and negative factors are shadows. This
+    matches the browser preview's getBevelColorsLit() implementation.
     """
-    a = (1.0 - factor) / 2.0 * (0.1 + 0.4 * (1.0 - i))
-    return (0, 0, 0, int(a * 255)) if a >= 0.005 else (0, 0, 0, 0)
+    if factor > 0:
+        alpha = factor * i * 0.55
+        return (255, 255, 255, int(alpha * 255)) if alpha >= 0.005 else (0, 0, 0, 0)
+
+    alpha = (1.0 - factor) / 2.0 * (0.04 + 0.20 * (1.0 - i))
+    return (0, 0, 0, int(alpha * 255)) if alpha >= 0.005 else (0, 0, 0, 0)
 
 
 def _draw_lit_strip(overlay, side, fw, fh, bw, from_color, to_color):
@@ -334,7 +337,10 @@ def draw_bevel_lit(image, bevel_width, mat_color, settings):
     bl = _edge_color_lit((hf - vf) / 2, i)
     br = _edge_color_lit(-(vf + hf) / 2, i)
 
-    frame = Image.new('RGBA', (fw, fh), hex_to_rgb(mat_color) + (255,))
+    # Give the bevel its own plane: slightly darker than the surrounding mat.
+    # Directional highlights/shadows are composited over this base.
+    bevel_rgb = tuple(round(channel * 0.92) for channel in hex_to_rgb(mat_color))
+    frame = Image.new('RGBA', (fw, fh), bevel_rgb + (255,))
     frame.paste(img, (bw, bw), img)
 
     overlay = Image.new('RGBA', (fw, fh), (0, 0, 0, 0))
@@ -346,14 +352,14 @@ def draw_bevel_lit(image, bevel_width, mat_color, settings):
 
     draw = ImageDraw.Draw(frame)
     # Inner accent at the bevel/image boundary
-    draw.rectangle([bw, bw, bw + iw - 1, bw + ih - 1], outline=(0, 0, 0, 30), width=1)
+    draw.rectangle([bw, bw, bw + iw - 1, bw + ih - 1], outline=(0, 0, 0, 40), width=1)
     # 45° corner diagonal lines — each runs from the outer frame corner inward to the
     # point where the two adjacent bevel strips meet.
     for (x0, y0, x1, y1) in [
-        (0,  0,  bw,      bw      ),   # top-left:     outer(0,0) → inner(bw,bw)
-        (fw, 0,  fw - bw, bw      ),   # top-right:    outer(fw,0) → inner(fw-bw,bw)
-        (0,  fh, bw,      fh - bw ),   # bottom-left:  outer(0,fh) → inner(bw,fh-bw)
-        (fw, fh, fw - bw, fh - bw ),   # bottom-right: outer(fw,fh) → inner(fw-bw,fh-bw)
+        (0,      0,      bw,          bw),          # top-left
+        (fw - 1, 0,      fw - bw - 1, bw),          # top-right
+        (0,      fh - 1, bw,          fh - bw - 1), # bottom-left
+        (fw - 1, fh - 1, fw - bw - 1, fh - bw - 1), # bottom-right
     ]:
         draw.line([(x0, y0), (x1, y1)], fill=(0, 0, 0, 30), width=1)
 
@@ -458,8 +464,8 @@ def create_texture_tile(finish):
     return None, 0
 
 
-def apply_texture(canvas, finish):
-    """Apply a tiled texture overlay to the entire canvas."""
+def apply_texture(canvas, finish, photo_mask=None):
+    """Apply texture to the mat and bevel, excluding original photo pixels."""
     tile, opacity = create_texture_tile(finish)
     if tile is None or opacity <= 0:
         return canvas
@@ -476,6 +482,8 @@ def apply_texture(canvas, finish):
     # Apply at the specified opacity
     alpha = texture.split()[3]
     alpha = alpha.point(lambda a: int(a * opacity))
+    if photo_mask is not None:
+        alpha = ImageChops.multiply(alpha, ImageChops.invert(photo_mask))
     texture.putalpha(alpha)
 
     return Image.alpha_composite(canvas.convert('RGBA'), texture)
@@ -529,6 +537,7 @@ def render_single_slide(img_data, settings, upload_folder, screen_size):
 
     orig_w, orig_h = photo.size
 
+    photo_mask = Image.new('L', (screen_w, screen_h), 0)
     # Create canvas with mat background
     canvas = Image.new('RGBA', (screen_w, screen_h), hex_to_rgb(mat_color) + (255,))
 
@@ -547,7 +556,9 @@ def render_single_slide(img_data, settings, upload_folder, screen_size):
         top = max(0, (new_h - screen_h) // 2)
         photo = photo.crop((left, top, left + screen_w, top + screen_h))
         effected, pad = apply_effect(photo, effect_size, mat_color, border_effect, settings)
-        _center_paste(canvas, effected, pad)
+        _center_paste(canvas, effected, pad, photo=photo,
+                      photo_offset=_effect_photo_offset(effect_size, border_effect, pad),
+                      photo_mask=photo_mask)
     else:
         # Contain mode — photo within mat
         effect_space = round(effect_size * 2) if border_effect == 'shadow' else effect_size
@@ -567,24 +578,44 @@ def render_single_slide(img_data, settings, upload_folder, screen_size):
             cropped = crop_image(photo, crop_data)
             cropped = cropped.resize((photo_w, photo_h), Image.Resampling.LANCZOS)
             effected, pad = apply_effect(cropped, effect_size, mat_color, border_effect, settings)
+            displayed_photo = cropped
         else:
             scaled = photo.resize((photo_w, photo_h), Image.Resampling.LANCZOS)
             effected, pad = apply_effect(scaled, effect_size, mat_color, border_effect, settings)
+            displayed_photo = scaled
 
-        _center_paste(canvas, effected, pad)
+        _center_paste(canvas, effected, pad, photo=displayed_photo,
+                      photo_offset=_effect_photo_offset(effect_size, border_effect, pad),
+                      photo_mask=photo_mask)
 
-    return apply_texture(canvas, mat_finish)
+    return apply_texture(canvas, mat_finish, photo_mask)
 
 
-def _center_paste(canvas, element, shadow_pad=0):
-    """Paste element centered on canvas, accounting for shadow padding."""
+def _center_paste(canvas, element, shadow_pad=0, photo=None, photo_offset=0,
+                  photo_mask=None):
+    """Paste an effect element and optionally mark its original-photo pixels."""
     cw, ch = canvas.size
     ew, eh = element.size
     x = (cw - ew) // 2
     y = (ch - eh) // 2
     element = element.convert('RGBA')
     canvas.paste(element, (x, y), element)
+    if photo_mask is not None and photo is not None:
+        _mark_photo(photo_mask, photo, x + photo_offset, y + photo_offset)
 
+
+def _mark_photo(photo_mask, photo, x, y):
+    """Mark opaque original-photo pixels on a canvas-sized L-mode mask."""
+    alpha = photo.convert('RGBA').getchannel('A')
+    photo_mask.paste(alpha, (round(x), round(y)), alpha)
+
+
+def _effect_photo_offset(effect_size, border_effect, shadow_pad):
+    """Return the original photo's inset within an effected image."""
+    if effect_size <= 0:
+        return 0
+
+    return shadow_pad if border_effect == 'shadow' else effect_size
 
 def _blank_canvas(w, h, mat_color, mat_finish):
     """Return an empty mat canvas (used when image file is missing)."""
@@ -607,21 +638,22 @@ def render_group_slide(slide, settings, upload_folder, screen_size):
     # Group-level bevel settings override per-image — ensures visual consistency within the group
     group_bevel = slide.get('bevel_width')
     group_effect = slide.get('border_effect')
+    photo_mask = Image.new('L', (screen_w, screen_h), 0)
 
     canvas = Image.new('RGBA', (screen_w, screen_h), hex_to_rgb(mat_color) + (255,))
 
     if count <= 3:
         _render_group_row(canvas, images, settings, upload_folder, mat_color,
-                          screen_w, screen_h, group_bevel, group_effect)
+                          screen_w, screen_h, group_bevel, group_effect, photo_mask)
     else:
         _render_group_grid(canvas, images, settings, upload_folder, mat_color,
-                           screen_w, screen_h, group_bevel, group_effect)
+                           screen_w, screen_h, group_bevel, group_effect, photo_mask)
 
-    return apply_texture(canvas, mat_finish)
+    return apply_texture(canvas, mat_finish, photo_mask)
 
 
 def _render_group_row(canvas, images, settings, upload_folder, mat_color,
-                      screen_w, screen_h, group_bevel=None, group_effect=None):
+                      screen_w, screen_h, group_bevel=None, group_effect=None, photo_mask=None):
     """Render 1-3 images in a row with matched heights (flex space-evenly).
 
     Ports the count <= 3 branch of showSlide.
@@ -683,7 +715,7 @@ def _render_group_row(canvas, images, settings, upload_folder, mat_color,
 
         effected, pad = apply_effect(scaled, info['effect_size'], mat_color,
                                      info['border_effect'], settings)
-        elements.append((effected, pad))
+        elements.append((effected, pad, scaled, info['effect_size'], info['border_effect']))
 
     if not elements:
         return
@@ -694,16 +726,17 @@ def _render_group_row(canvas, images, settings, upload_folder, mat_color,
     gap = total_gap / (len(elements) + 1) if len(elements) + 1 > 0 else 0
 
     x = gap
-    for elem, pad in elements:
+    for elem, pad, photo, effect_size, border_effect in elements:
         ew, eh = elem.size
         y = (screen_h - eh) / 2
         elem = elem.convert('RGBA')
         canvas.paste(elem, (round(x), round(y)), elem)
+        _mark_photo(photo_mask, photo, x + _effect_photo_offset(effect_size, border_effect, pad), y + _effect_photo_offset(effect_size, border_effect, pad))
         x += ew + gap
 
 
 def _render_group_grid(canvas, images, settings, upload_folder, mat_color,
-                       screen_w, screen_h, group_bevel=None, group_effect=None):
+                       screen_w, screen_h, group_bevel=None, group_effect=None, photo_mask=None):
     """Render 4+ images in a grid (CSS grid equivalent).
 
     Ports the count >= 4 branch of showSlide.
@@ -770,6 +803,7 @@ def _render_group_grid(canvas, images, settings, upload_folder, mat_color,
         y = round(cell_cy - eh / 2)
 
         effected = effected.convert('RGBA')
+        _mark_photo(photo_mask, scaled, x + _effect_photo_offset(effect_size, border_effect, pad), y + _effect_photo_offset(effect_size, border_effect, pad))
         canvas.paste(effected, (x, y), effected)
 
 

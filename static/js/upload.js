@@ -1845,12 +1845,12 @@
             const hf = (h - 50) / 50;
             function edgeColor(factor) {
                 if (factor > 0) {
-                    const a = +(factor * i).toFixed(3);
+                    const a = +(factor * i * 0.55).toFixed(3);
                     return a < 0.005 ? 'transparent' : `rgba(255,255,255,${a})`;
                 } else {
-                    // shadow range: 50% at brightness=0 → 10% at brightness=100
-                    // so bevel retains definition at full brightness instead of disappearing
-                    const a = +((1 - factor) / 2 * (0.1 + 0.4 * (1 - i))).toFixed(3);
+                    // shadow range: 24% at brightness=0 → 4% at brightness=100.
+                    // The darker bezel base supplies the rest of the separation.
+                    const a = +((1 - factor) / 2 * (0.04 + 0.20 * (1 - i))).toFixed(3);
                     return a < 0.005 ? 'transparent' : `rgba(0,0,0,${a})`;
                 }
             }
@@ -1898,11 +1898,13 @@
             ];
             const stripHtml = strips.map(({ pos, clip, bg, mask }) => {
                 const msk = `linear-gradient(${mask},black,transparent)`;
-                // drop-shadow outlines the clip-path shape: outer edge + angled corner cuts
-                return `<div style="position:absolute;${pos};clip-path:${clip};background:linear-gradient(${bg});-webkit-mask-image:${msk};mask-image:${msk};filter:drop-shadow(0 0 1.5px rgba(0,0,0,0.45));pointer-events:none;z-index:1;"></div>`;
+                // Keep the faces clean. A shadow on every clipped strip makes the
+                // joins read as dark seams instead of one continuous bevel.
+                return `<div style="position:absolute;${pos};clip-path:${clip};background:linear-gradient(${bg});-webkit-mask-image:${msk};mask-image:${msk};pointer-events:none;z-index:1;"></div>`;
             }).join('');
-            // Inner edge accent (inside = inner bevel opening)
-            const accent = `<div style="position:absolute;inset:${w};box-shadow:0 0 0 1px rgba(0,0,0,0.12),inset 0 0 0 1px rgba(0,0,0,0.06);pointer-events:none;z-index:3;"></div>`;
+            // A single restrained contact shadow gives the mat depth without
+            // outlining each face or muddying the corner joints.
+            const accent = `<div style="position:absolute;inset:${w};box-shadow:0 0 0 1px rgba(0,0,0,0.16),inset 0 1px 2px rgba(0,0,0,0.12);pointer-events:none;z-index:3;"></div>`;
             // 45° corner cut lines — one per corner, same weight as inner accent
             const d = Math.round(bevelWidth * Math.SQRT2) + 'px';
             const cornerLines = [

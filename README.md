@@ -492,9 +492,11 @@ the kiosk service user and mode `0600`. The agent reads it from that file and pa
 it to curl through standard input, so the value is absent from URLs and process
 arguments. Set `CEC_AGENT_TOKEN_FILE` only when using a different protected path.
 
-Legacy Docker container names (`pi-photo-frame`), volume names (`photoframe_*`), and
-the former CEC token path remain recognized so existing installations upgrade without
-data movement. New host-side configuration uses the OpenFotoFrame name.
+Existing installations may retain the named volumes (`photoframe_*`) while recreating
+the app container as `openfotoframe`; this preserves all uploaded photos and settings.
+The CEC agent also falls back to the former `/etc/pi-photo-frame/cec-agent-token`
+path so existing display-only Pis continue to work. New host-side configuration uses
+the OpenFotoFrame name.
 
 ### Multi-factor authentication
 

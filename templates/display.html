@@ -18,9 +18,8 @@
 
     <div class="controls">
         <button class="control-btn" data-onclick="previousSlide()">← Prev</button>
-        <button class="control-btn" data-onclick="togglePause()">⏯ Pause</button>
+        <button class="control-btn" id="pause-btn" data-onclick="togglePause()" aria-label="Pause slideshow">⏸ Pause</button>
         <button class="control-btn" data-onclick="nextSlide()">Next →</button>
-        <button class="control-btn" data-onclick="location.reload()">↻ Refresh</button>
         <button class="control-btn" id="fullscreen-btn" data-onclick="toggleFullscreen()">⛶ Full</button>
     </div>
     <script src="{{ url_for('static', filename='js/display.js') }}" defer></script>

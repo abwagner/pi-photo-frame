@@ -856,7 +856,10 @@ def _get_slide_snapshot_url(slide):
     else:
         filename = slide['images'][0]['filename']
         snap_path = SNAPSHOT_FOLDER / f'{filename}.display.png'
-    return f'/snapshots/{snap_path.name}' if snap_path.exists() else None
+    if not snap_path.exists():
+        return None
+    # Change the URL whenever a snapshot is regenerated so displays reload it.
+    return f'/snapshots/{snap_path.name}?v={snap_path.stat().st_mtime_ns}'
 
 
 def get_uploaded_images():
@@ -2197,20 +2200,20 @@ def _auto_pair_portraits(slides):
     return result
 
 
-def _ensure_auto_pair_snapshots(slides):
-    """Generate snapshots for any synthetic portrait-pair slides that are missing one.
+def _ensure_auto_pair_snapshots(slides, force=False):
+    """Generate missing synthetic portrait-pair snapshots, or refresh all when forced.
 
     Runs in a background thread; safe to call on every state poll since it's a no-op
-    when the snapshot file already exists.
+    when the snapshot file already exists unless ``force`` is requested.
     """
     settings = load_settings()
-    missing = [
+    pair_slides = [
         s for s in slides
         if s['type'] == 'group'
         and s.get('group_id', '').startswith('__pair_')
-        and not (SNAPSHOT_FOLDER / f"{s['group_id']}.display.png").exists()
+        and (force or not (SNAPSHOT_FOLDER / f"{s['group_id']}.display.png").exists())
     ]
-    for slide in missing:
+    for slide in pair_slides:
         try:
             _render_pair_slide_snapshot(slide, settings, UPLOAD_FOLDER, SNAPSHOT_FOLDER)
         except Exception as e:
@@ -2527,7 +2530,7 @@ def api_settings():
             new_settings = load_settings()
             _regenerate_all_snapshots(gallery, new_settings, UPLOAD_FOLDER, SNAPSHOT_FOLDER)
             slides, _, _ = _build_slides()
-            _ensure_auto_pair_snapshots(slides)
+            _ensure_auto_pair_snapshots(slides, force=True)
         thread = threading.Thread(target=_rerender_all, daemon=True)
         thread.start()
 

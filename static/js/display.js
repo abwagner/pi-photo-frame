@@ -4,13 +4,20 @@ let isPaused = false;
 let activeSlot = 'a';
 
 const imgA = document.getElementById('slide-a');
+const pauseButton = document.getElementById('pause-btn');
 const imgB = document.getElementById('slide-b');
 const controls = document.querySelector('.controls');
 
 async function pollState() {
+function setPaused(paused) {
+    isPaused = paused;
+    pauseButton.textContent = paused ? '▶ Play' : '⏸ Pause';
+    pauseButton.setAttribute('aria-label', paused ? 'Play slideshow' : 'Pause slideshow');
+}
+
     try {
         const state = await fetch('/api/display/state').then(r => r.json());
-        isPaused = state.paused;
+        setPaused(state.paused);
         if (state.mat_color) {
             document.body.style.setProperty('--mat-color', state.mat_color);
             document.body.style.background = state.mat_color;
@@ -48,7 +55,7 @@ async function sendControl(action) {
         });
         if (!resp.ok) return;
         const state = await resp.json();
-        isPaused = state.paused;
+        setPaused(state.paused);
         if (state.snapshot_url && state.snapshot_url !== currentUrl) {
             currentUrl = state.snapshot_url;
             crossfadeTo(state.snapshot_url);
