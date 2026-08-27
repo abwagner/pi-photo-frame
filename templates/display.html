@@ -8,7 +8,7 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/display.css') }}">
     <script src="{{ url_for('static', filename='js/legacy-events.js') }}" defer></script>
 </head>
-<body>
+<body data-display-id="{{ request.args.get('display', '') }}">
     <div class="frame-container">
         <div class="image-wrapper" id="image-wrapper">
             <img id="slide-a" class="snapshot-img active" alt="">

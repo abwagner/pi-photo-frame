@@ -147,6 +147,8 @@
         // ===== State =====
         let images = [];
         let groups = {};  // group_id -> {images: [...], mat_color, created_at}
+        let displayProfiles = [];
+        let activeDisplayId = null;
         let selectedImages = new Set();
         let currentFilter = 'all';
         let previewFilename = null;
@@ -154,7 +156,7 @@
 
         // ===== Initialize =====
         updatePreviewAspectRatio();
-        loadGallery();
+        loadDisplayProfiles().then(loadGallery);
 
         // ===== Upload Handling =====
 
@@ -204,21 +206,27 @@
 
         async function handleFiles(files) {
             pendingUploadFiles = Array.from(files);
+            if (!pendingUploadFiles.length) return;
 
             // Phase 1: Check for duplicates and dimensions
             showStatus('Checking for duplicates...', 'success');
-            const formData = new FormData();
-            for (const file of pendingUploadFiles) {
-                formData.append('files', file);
-            }
-
             let checkResults = null;
             try {
-                const resp = await fetch('/api/check-duplicates', {
-                    method: 'POST',
-                    body: formData
-                });
-                checkResults = await resp.json();
+                // Check one image at a time. A mobile camera roll can easily exceed
+                // the request-size limit when all selected images are bundled.
+                const results = {};
+                for (const file of pendingUploadFiles) {
+                    const formData = new FormData();
+                    formData.append('files', file);
+                    const resp = await fetch('/api/check-duplicates', {
+                        method: 'POST',
+                        body: formData
+                    });
+                    if (!resp.ok) throw new Error(`Could not check ${file.name}`);
+                    const data = await resp.json();
+                    Object.assign(results, data.results || {});
+                }
+                checkResults = { results };
             } catch (err) {
                 // If check fails, fall through to direct upload
             }
@@ -318,27 +326,33 @@
         }
 
         async function doUpload(files) {
-            const formData = new FormData();
-            for (const file of files) {
-                formData.append('files', file);
-            }
-
-            showStatus('Uploading...', 'success');
+            const uploaded = [];
+            const errors = [];
 
             try {
-                const response = await fetch('/api/upload', {
-                    method: 'POST',
-                    body: formData
-                });
-                const data = await response.json();
-
-                if (data.uploaded.length > 0) {
-                    showStatus(`Uploaded ${data.uploaded.length} image(s)`, 'success');
-                    loadGallery();
+                // Upload independently so a large multi-select does not exceed the
+                // server request limit or leave the whole batch stalled.
+                for (let index = 0; index < files.length; index++) {
+                    const file = files[index];
+                    showStatus(`Uploading ${index + 1} of ${files.length}…`, 'success');
+                    const formData = new FormData();
+                    formData.append('files', file);
+                    const response = await fetch('/api/upload', { method: 'POST', body: formData });
+                    const contentType = response.headers.get('content-type') || '';
+                    const data = contentType.includes('application/json') ? await response.json() : {};
+                    if (!response.ok) {
+                        errors.push(data.error || (data.errors || []).join(', ') || `${file.name}: upload failed (${response.status})`);
+                        continue;
+                    }
+                    uploaded.push(...(data.uploaded || []));
+                    errors.push(...(data.errors || []));
                 }
-                if (data.errors.length > 0) {
-                    showStatus(data.errors.join(', '), 'error');
+                if (uploaded.length) {
+                    showStatus(`Uploaded ${uploaded.length} image(s)`, 'success');
+                    await loadDisplayProfiles();
+                    await loadGallery();
                 }
+                if (errors.length) showStatus(errors.join(', '), 'error');
             } catch (err) {
                 showStatus('Upload failed: ' + err.message, 'error');
             }
@@ -348,6 +362,20 @@
         }
 
         // ===== Gallery Loading =====
+        async function loadDisplayProfiles() {
+            const response = await fetch("/api/displays");
+            const data = await response.json();
+            displayProfiles = data.displays || [];
+            renderDisplayProfiles();
+            activeDisplayId = (displayProfiles.find(d => d.active) || displayProfiles[0] || {}).id || null;
+        }
+
+        function renderDisplayProfiles() { const list=document.getElementById("display-profiles-list"); if (!list) return; list.innerHTML=displayProfiles.map(d => `<div class="group-edit-item" style="flex-wrap:wrap"><b>${d.name}</b><label>Width <input id="display-width-${d.id}" type="number" value="${d.width}" style="width:88px"></label><label>Height <input id="display-height-${d.id}" type="number" value="${d.height}" style="width:88px"></label><button class="btn btn-edit" data-onclick="saveDisplayProfile('${d.id}')">Save</button><button class="btn btn-edit" data-onclick="toggleDisplayProfile('${d.id}', ${!d.active})">${d.active ? "Deactivate" : "Activate"}</button><a class="btn btn-edit" target="_blank" href="/display?display=${d.id}">Open</a><button class="btn btn-danger" data-onclick="deleteDisplayProfile('${d.id}')">Delete</button></div>`).join(""); }
+        function applyDisplayPreset(value) { if (!value) return; const [width,height]=value.split("x"); document.getElementById("new-display-width").value=width; document.getElementById("new-display-height").value=height; }
+        async function saveDisplayProfile(id) { const width=+document.getElementById(`display-width-${id}`).value, height=+document.getElementById(`display-height-${id}`).value; const r=await fetch(`/api/displays/${id}`,{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({width,height})}); if(!r.ok) return showStatus("Could not save display size","error"); await loadDisplayProfiles(); showStatus("Display size updated","success"); }
+        async function createDisplayProfile() { const b={name:document.getElementById("new-display-name").value,width:+document.getElementById("new-display-width").value,height:+document.getElementById("new-display-height").value,synchronized:document.getElementById("new-display-sync").checked}; const r=await fetch("/api/displays",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(b)}); if (!r.ok) return showStatus("Could not create display","error"); await loadDisplayProfiles(); renderDisplayProfiles(); }
+        async function toggleDisplayProfile(id, active) { const r=await fetch(`/api/displays/${id}`,{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({active})}); if (!r.ok) return showStatus("At least one display must remain active","error"); await loadDisplayProfiles(); }
+        async function deleteDisplayProfile(id) { if (!confirm("Delete this display?")) return; const r=await fetch(`/api/displays/${id}`,{method:"DELETE"}); if (!r.ok) return showStatus("Could not delete display","error"); await loadDisplayProfiles(); }
         async function loadGallery() {
             try {
                 const response = await fetch('/api/gallery');
@@ -472,9 +500,15 @@
             renderSingleControls(filename);
         }
 
-        function renderSinglePreviewImage(filename) {
+        function renderSinglePreviewImage(filename, forceLocalPreview = false) {
             const img = images.find(i => i.filename === filename);
             if (!img) return;
+            const profile = displayProfiles.find(d => d.id === activeDisplayId);
+            if (profile && !forceLocalPreview) {
+                matPreview.style.aspectRatio = `${profile.width} / ${profile.height}`;
+                previewContent.innerHTML = `<img src="/snapshots/${filename}.${profile.id}.display.png?v=${Date.now()}" alt="${filename}" style="width:100%;height:100%;object-fit:contain;display:block;">`;
+                return;
+            }
 
             const noMat = !!img.no_mat;
             const matColor = img.mat_color || matColorInput.value;
@@ -574,10 +608,11 @@
             const effectLabel = (currentBorderEffect || borderEffectSelect.value) === 'shadow' ? 'Shadow' : 'Bevel';
 
             const currentMatColor = img.mat_color || matColorInput.value;
+            const profileOptions = displayProfiles.filter(d => d.active).map(d => `<option value="${d.id}" ${d.id === activeDisplayId ? "selected" : ""}>${d.name} (${d.width}×${d.height})</option>`).join("");
 
             previewControlsBody.innerHTML = `
+                <div class="group-edit-item" style="flex-wrap:wrap;gap:8px;"><label>Display</label><select style="flex:1" data-onchange="selectEditorDisplay(this.value, '${escAttr(filename)}')">${profileOptions}</select><button class="btn btn-edit" data-onclick="rotateForDisplay('${escAttr(filename)}', -90)">↺</button><button class="btn btn-edit" data-onclick="rotateForDisplay('${escAttr(filename)}', 90)">↻</button></div>
                 <div class="group-edit-item">
-                    <img class="group-edit-thumb" src="/uploads/${filename}" alt="${filename}">
                     <div class="group-edit-controls">
                         <label style="font-size:0.75rem;color:#aaa;white-space:nowrap;display:flex;align-items:center;gap:5px;">
                             <input type="checkbox" ${noMat ? 'checked' : ''}
@@ -670,6 +705,7 @@
                 x: existing.x, y: existing.y, w: existing.w, h: existing.h,
                 imgWidth: img.width || 1, imgHeight: img.height || 1,
             };
+            previewSection.classList.add('crop-editing');
 
             // Show uncropped image in preview
             matPreview.style.backgroundColor = '#111';
@@ -889,9 +925,17 @@
             cropState = null;
 
             const img = images.find(i => i.filename === fn);
+            const previousCrop = img ? img.crop : null;
             if (img) img.crop = saveCrop;
 
-            await updateImageField(fn, 'crop', saveCrop);
+            // Crop is image metadata shared by every display, not a per-display override.
+            const saved = await updateImageField(fn, 'crop', saveCrop);
+            if (!saved) {
+                if (img) img.crop = previousCrop;
+                showStatus('Could not save crop. Please try again.', 'error');
+                return;
+            }
+            previewSection.classList.remove('crop-editing');
             if (previewGroupId) {
                 renderGroupPreviewImage(previewGroupId);
                 renderGroupControls(previewGroupId);
@@ -907,6 +951,7 @@
             const groupId = previewGroupId;
             if (cropState._cleanup) cropState._cleanup();
             cropState = null;
+            previewSection.classList.remove('crop-editing');
             if (groupId) {
                 renderGroupPreviewImage(groupId);
                 renderGroupControls(groupId);
@@ -1220,6 +1265,9 @@
         }
 
         function closePreview() {
+            if (cropState?._cleanup) cropState._cleanup();
+            cropState = null;
+            previewSection.classList.remove('crop-editing');
             previewSection.classList.remove('active');
             previewSection.classList.remove('has-controls');
             previewControls.classList.remove('active');
@@ -1447,7 +1495,7 @@
                 if (response.ok) {
                     selectedImages.clear();
                     showStatus(`Created group with ${filenames.length} images`, 'success');
-                    loadGallery();
+                    loadDisplayProfiles().then(loadGallery);
                 }
             } catch (err) {
                 showStatus('Failed to create group', 'error');
@@ -1466,7 +1514,7 @@
                 if (response.ok) {
                     if (previewGroupId === groupId) closePreview();
                     showStatus('Group dissolved', 'success');
-                    loadGallery();
+                    loadDisplayProfiles().then(loadGallery);
                 }
             } catch (err) {
                 showStatus('Failed to ungroup', 'error');
@@ -1487,7 +1535,7 @@
                 await fetch(`/api/groups/${groupId}`, { method: 'DELETE' });
                 if (previewGroupId === groupId) closePreview();
                 showStatus('Group and images deleted', 'success');
-                loadGallery();
+                loadDisplayProfiles().then(loadGallery);
             } catch (err) {
                 showStatus('Failed to delete group', 'error');
             }
@@ -1524,23 +1572,17 @@
             const img = images.find(i => i.filename === filename);
             if (!img) return;
             img.scale = parseFloat(scaleValue);
-            renderSinglePreviewImage(filename);
+            // The normal profile preview is a server snapshot, so use the local
+            // renderer while dragging to make both smaller and larger zoom visible.
+            renderSinglePreviewImage(filename, true);
         }
 
         async function updateSingleScale(filename, scaleValue) {
             const img = images.find(i => i.filename === filename);
             if (!img) return;
-            img.scale = parseFloat(scaleValue);
-            try {
-                await fetch(`/api/gallery/${filename}`, {
-                    method: 'PATCH',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ scale: img.scale })
-                });
-                renderSinglePreviewImage(filename);
-            } catch (err) {
-                showStatus('Failed to update scale', 'error');
-            }
+            const scale = parseFloat(scaleValue);
+            const saved = await updateImageField(filename, 'scale', scale);
+            if (saved) renderSinglePreviewImage(filename);
         }
 
         async function moveGroupImage(groupId, currentIdx, direction) {
@@ -1657,7 +1699,7 @@
                     btn.textContent = 'Reset all to default';
                     btn.disabled = false;
                 }, 1500);
-                loadGallery();
+                loadDisplayProfiles().then(loadGallery);
             } catch {
                 btn.textContent = 'Reset all to default';
                 btn.disabled = false;
@@ -1803,17 +1845,40 @@
             if (img) img[field] = value;
 
             try {
-                await fetch(`/api/gallery/${filename}`, {
+                const response = await fetch(`/api/gallery/${encodeURIComponent(filename)}`, {
                     method: 'PATCH',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ [field]: value })
                 });
+                if (!response.ok) throw new Error(`Request failed (${response.status})`);
                 // Re-render preview
                 if (previewFilename === filename) renderSinglePreviewImage(filename);
                 showStatus(`${field.replace('_', ' ')} updated`, 'success');
+                return true;
             } catch (err) {
                 showStatus(`Failed to update ${field}`, 'error');
+                return false;
             }
+        }
+
+        function selectEditorDisplay(id, filename) {
+            activeDisplayId = id;
+            renderSinglePreviewImage(filename);
+            renderSingleControls(filename);
+        }
+        async function updateDisplayOverride(filename, updates) {
+            if (!activeDisplayId) return;
+            const img = images.find(i => i.filename === filename);
+            if (img) { img.display_overrides ||= {}; img.display_overrides[activeDisplayId] = { ...(img.display_overrides[activeDisplayId] || {}), ...updates }; }
+            const response = await fetch(`/api/gallery//displays/`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(updates) });
+            if (!response.ok) throw new Error("Could not save display override");
+            renderSinglePreviewImage(filename);
+        }
+        async function rotateForDisplay(filename, delta) {
+            const img = images.find(i => i.filename === filename);
+            const current = ((img?.display_overrides || {})[activeDisplayId] || {}).rotation || 0;
+            await updateDisplayOverride(filename, { rotation: (current + delta + 360) % 360 });
+            renderSingleControls(filename);
         }
 
         function previewSingleBevel(filename, val) {

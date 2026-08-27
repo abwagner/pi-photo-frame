@@ -2,21 +2,23 @@ const csrfToken = document.querySelector('meta[name="csrf-token"]').content;
 let currentUrl = null;
 let isPaused = false;
 let activeSlot = 'a';
+const displayId = document.body.dataset.displayId;
+const displayQuery = displayId ? '?display=' + encodeURIComponent(displayId) : '';
 
 const imgA = document.getElementById('slide-a');
 const pauseButton = document.getElementById('pause-btn');
 const imgB = document.getElementById('slide-b');
 const controls = document.querySelector('.controls');
 
-async function pollState() {
 function setPaused(paused) {
     isPaused = paused;
     pauseButton.textContent = paused ? '▶ Play' : '⏸ Pause';
     pauseButton.setAttribute('aria-label', paused ? 'Play slideshow' : 'Pause slideshow');
 }
 
+async function pollState() {
     try {
-        const state = await fetch('/api/display/state').then(r => r.json());
+        const state = await fetch('/api/display/state' + displayQuery).then(r => r.json());
         setPaused(state.paused);
         if (state.mat_color) {
             document.body.style.setProperty('--mat-color', state.mat_color);
@@ -51,7 +53,7 @@ async function sendControl(action) {
         const resp = await fetch('/api/display/control', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
-            body: JSON.stringify({ action }),
+            body: JSON.stringify({ action, display: displayId || undefined }),
         });
         if (!resp.ok) return;
         const state = await resp.json();

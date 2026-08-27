@@ -1402,25 +1402,23 @@
                 padding: 10px;
             }
 
-            /* Gallery: horizontal thumbnail strip */
+            /* Gallery: compact grid */
             .gallery-grid {
-                display: flex !important;
-                overflow-x: auto;
+                display: grid !important;
+                grid-template-columns: repeat(2, minmax(0, 1fr));
                 gap: 8px;
                 padding: 8px 0;
-                -webkit-overflow-scrolling: touch;
-                scrollbar-width: thin;
             }
 
             .gallery-grid .image-card,
             .gallery-grid .group-card {
-                flex: 0 0 auto;
-                width: 72px;
+                width: auto;
                 border-radius: 8px;
             }
 
             .gallery-grid .card-info {
-                display: none;
+                display: block;
+                padding: 8px;
             }
 
             .gallery-grid .card-thumb {
@@ -1442,10 +1440,6 @@
                 padding: 2px 5px;
             }
 
-            /* Hide view toggle on mobile (always horizontal) */
-            .btn-view-toggle {
-                display: none;
-            }
 
             /* Toolbar: compact */
             .toolbar {
@@ -1472,4 +1466,15 @@
         body.select-mode .image-card.selected {
             border-color: #00d4ff;
             box-shadow: 0 0 0 2px rgba(0, 212, 255, 0.3);
+        }
+        @media (max-width: 768px) {
+            .preview-section { padding: 0; align-items: stretch; }
+            .preview-modal-box { max-width: none; min-height: 100dvh; border-radius: 0; display: flex; flex-direction: column; }
+            .mat-preview { border-radius: 0; max-height: 58dvh; flex: 0 0 auto; }
+            .preview-controls { flex: 1; overflow-y: auto; padding-bottom: max(16px, env(safe-area-inset-bottom)); }
+            /* Crop gets the full modal on mobile, without the busy settings panel. */
+            .preview-section.crop-editing .preview-controls { display: none; }
+            .preview-section.crop-editing .mat-preview { height: 100dvh; max-height: none; flex: 1 1 auto; }
+            .crop-toolbar { position: fixed; left: 8px; right: 8px; bottom: max(8px, env(safe-area-inset-bottom)); transform: none; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: center; gap: 8px; }
+            .crop-toolbar .btn, .crop-toolbar .crop-aspect-toggle, #crop-aspect-select { min-width: 0; width: 100%; }
         }

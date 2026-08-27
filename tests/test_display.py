@@ -461,3 +461,30 @@ class TestDisplayControl:
         data = resp.get_json()
         assert data['index'] == 0
         assert data['total'] == 0
+
+    def test_state_renders_synthetic_portrait_pair(self, app, tmp_path, monkeypatch):
+        """Profile snapshots must use the synthetic pair renderer."""
+        snapshot_folder = tmp_path / 'display_snapshots'
+        monkeypatch.setattr(photo_app, 'SNAPSHOT_FOLDER', snapshot_folder)
+        profile = {'id': 'default', 'width': 1920, 'height': 1080}
+        slide = {
+            'type': 'group',
+            'group_id': '__pair_test',
+            'images': [
+                {'filename': 'one.jpg'},
+                {'filename': 'two.jpg'},
+            ],
+        }
+
+        def fake_pair_renderer(slide_data, settings, upload_folder, output_folder):
+            output_folder.mkdir(parents=True, exist_ok=True)
+            path = output_folder / '__pair_test.default.display.png'
+            path.write_bytes(b'PNG')
+            return path
+
+        monkeypatch.setattr(photo_app, '_render_pair_slide_snapshot', fake_pair_renderer)
+        monkeypatch.setattr(photo_app, '_render_group_snapshot', lambda *args: None)
+
+        url = photo_app._profile_snapshot_url(slide, profile)
+
+        assert url.startswith('/snapshots/__pair_test.default.display.png?v=')

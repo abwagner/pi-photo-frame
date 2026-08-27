@@ -535,6 +535,9 @@ def render_single_slide(img_data, settings, upload_folder, screen_size):
     if photo is None:
         return _blank_canvas(screen_w, screen_h, mat_color, mat_finish)
 
+    rotation = int(img_data.get("rotation", 0)) % 360
+    if rotation:
+        photo = photo.rotate(-rotation, expand=True)
     orig_w, orig_h = photo.size
 
     photo_mask = Image.new('L', (screen_w, screen_h), 0)
@@ -555,10 +558,10 @@ def render_single_slide(img_data, settings, upload_folder, screen_size):
         left = max(0, (new_w - screen_w) // 2)
         top = max(0, (new_h - screen_h) // 2)
         photo = photo.crop((left, top, left + screen_w, top + screen_h))
-        effected, pad = apply_effect(photo, effect_size, mat_color, border_effect, settings)
-        _center_paste(canvas, effected, pad, photo=photo,
-                      photo_offset=_effect_photo_offset(effect_size, border_effect, pad),
-                      photo_mask=photo_mask)
+        # No-mat is intentionally effect-free: the photo must occupy every pixel
+        # of the canvas, without a bevel, shadow, or mat-colour edge.
+        canvas.paste(photo, (0, 0), photo)
+        _mark_photo(photo_mask, photo, 0, 0)
     else:
         # Contain mode — photo within mat
         effect_space = round(effect_size * 2) if border_effect == 'shadow' else effect_size
@@ -820,8 +823,11 @@ def render_snapshot(filename, gallery, settings, upload_folder, snapshot_folder)
     if not img_meta:
         return None
 
-    screen_w, screen_h = parse_aspect_ratio(settings.get('target_aspect_ratio', '16:9'))
+    screen_w, screen_h = int(settings.get("screen_width") or 0), int(settings.get("screen_height") or 0)
+    if not screen_w or not screen_h:
+        screen_w, screen_h = parse_aspect_ratio(settings.get('target_aspect_ratio', '16:9'))
 
+    override = img_meta.get("display_overrides", {}).get(settings.get("_display_id"), {})
     img_data = {
         'filename': filename,
         'width': img_meta.get('width'),
@@ -830,9 +836,10 @@ def render_snapshot(filename, gallery, settings, upload_folder, snapshot_folder)
         'mat_finish': img_meta.get('mat_finish'),
         'bevel_width': img_meta.get('bevel_width'),
         'border_effect': img_meta.get('border_effect'),
-        'scale': img_meta.get('scale', 1.0),
-        'crop': img_meta.get('crop'),
-        'no_mat': img_meta.get('no_mat'),
+        'scale': override.get('scale', img_meta.get('scale', 1.0)),
+        'crop': override.get('crop', img_meta.get('crop')),
+        'no_mat': override.get('no_mat', img_meta.get('no_mat')),
+        'rotation': override.get('rotation', 0),
     }
 
     result = render_single_slide(img_data, settings, upload_folder, (screen_w, screen_h))
@@ -841,7 +848,8 @@ def render_snapshot(filename, gallery, settings, upload_folder, snapshot_folder)
 
     snapshot_folder = Path(snapshot_folder)
     snapshot_folder.mkdir(parents=True, exist_ok=True)
-    out_path = snapshot_folder / f'{filename}.display.png'
+    suffix = settings.get('_display_id')
+    out_path = snapshot_folder / f'{filename}.{suffix}.display.png' if suffix else snapshot_folder / f'{filename}.display.png'
     result.convert('RGB').save(out_path, 'PNG')
     return out_path
 
@@ -857,7 +865,9 @@ def render_group_snapshot(group_id, gallery, settings, upload_folder, snapshot_f
         return None
 
     images_meta = gallery.get('images', {})
-    screen_w, screen_h = parse_aspect_ratio(settings.get('target_aspect_ratio', '16:9'))
+    screen_w, screen_h = int(settings.get("screen_width") or 0), int(settings.get("screen_height") or 0)
+    if not screen_w or not screen_h:
+        screen_w, screen_h = parse_aspect_ratio(settings.get('target_aspect_ratio', '16:9'))
 
     scales = group.get('scales', {})
     group_images = []
@@ -894,7 +904,8 @@ def render_group_snapshot(group_id, gallery, settings, upload_folder, snapshot_f
 
     snapshot_folder = Path(snapshot_folder)
     snapshot_folder.mkdir(parents=True, exist_ok=True)
-    out_path = snapshot_folder / f'{group_id}.display.png'
+    suffix = settings.get('_display_id')
+    out_path = snapshot_folder / f'{group_id}.{suffix}.display.png' if suffix else snapshot_folder / f'{group_id}.display.png'
     result.convert('RGB').save(out_path, 'PNG')
     return out_path
 
@@ -911,8 +922,11 @@ def render_pair_slide_snapshot(slide, settings, upload_folder, snapshot_folder):
         return None
     snapshot_folder = Path(snapshot_folder)
     snapshot_folder.mkdir(parents=True, exist_ok=True)
-    out_path = snapshot_folder / f'{group_id}.display.png'
-    screen_w, screen_h = parse_aspect_ratio(settings.get('target_aspect_ratio', '16:9'))
+    suffix = settings.get('_display_id')
+    out_path = snapshot_folder / f'{group_id}.{suffix}.display.png' if suffix else snapshot_folder / f'{group_id}.display.png'
+    screen_w, screen_h = int(settings.get("screen_width") or 0), int(settings.get("screen_height") or 0)
+    if not screen_w or not screen_h:
+        screen_w, screen_h = parse_aspect_ratio(settings.get('target_aspect_ratio', '16:9'))
     try:
         result = render_group_slide(slide, settings, upload_folder, (screen_w, screen_h))
     except Exception:
@@ -961,17 +975,16 @@ def backfill_snapshots(gallery, settings, upload_folder, snapshot_folder):
             continue
         if filename in grouped_filenames:
             continue
-        out_path = snapshot_folder / f'{filename}.display.png'
+        out_path = snapshot_folder / f"{filename}.display.png"
         if not out_path.exists():
             if render_snapshot(filename, gallery, settings, upload_folder, snapshot_folder):
                 count += 1
 
     # Groups
-    for group_id in gallery.get('groups', {}):
-        out_path = snapshot_folder / f'{group_id}.display.png'
+    for group_id in gallery.get("groups", {}):
+        out_path = snapshot_folder / f"{group_id}.display.png"
         if not out_path.exists():
-            if render_group_snapshot(group_id, gallery, settings, upload_folder,
-                                     snapshot_folder):
+            if render_group_snapshot(group_id, gallery, settings, upload_folder, snapshot_folder):
                 count += 1
 
     return count

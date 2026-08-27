@@ -844,6 +844,17 @@ def regenerate_snapshots_for_groups_containing(filename):
         generate_group_display_snapshot(group_id)
 
 
+def regenerate_profile_snapshots_for_image(filename):
+    """Refresh every active display profile after an image presentation change."""
+    gallery = load_gallery()
+    settings = load_settings()
+    for profile in display_profiles(settings, active_only=True):
+        profile_settings = display_settings(settings, profile)
+        _render_snapshot(filename, gallery, profile_settings, UPLOAD_FOLDER, SNAPSHOT_FOLDER)
+        for group_id in get_groups_containing(filename, gallery):
+            _render_group_snapshot(group_id, gallery, profile_settings, UPLOAD_FOLDER, SNAPSHOT_FOLDER)
+
+
 def _get_slide_snapshot_url(slide):
     """Return the /snapshots/ URL for a slide if its snapshot file exists, else None."""
     if slide is None:
@@ -925,17 +936,46 @@ DEFAULT_SETTINGS = {
     'mfa_methods': 'either',
     'webauthn_rp_id': '',
     'webauthn_origin': '',
+    'displays': [],
 }
 
 
-def load_settings():
-    """Load settings from JSON file"""
-    if SETTINGS_FILE.exists():
-        with open(SETTINGS_FILE, 'r') as f:
-            settings = json.load(f)
-            return {**DEFAULT_SETTINGS, **settings}
-    return DEFAULT_SETTINGS.copy()
+def _legacy_display(settings):
+    """Translate the former single global target into a display profile."""
+    aspect = settings.get("target_aspect_ratio", "16:9")
+    width, height = {"16:9": (1920, 1080), "21:9": (2560, 1080), "4:3": (1600, 1200), "1:1": (1200, 1200)}.get(aspect, (1920, 1080))
+    return {"id": "default", "name": "Main display", "active": True, "width": width, "height": height, "synchronized": True}
 
+def display_profiles(settings, active_only=False):
+    profiles = settings.get("displays") or [_legacy_display(settings)]
+    return [p for p in profiles if p.get("active", True)] if active_only else profiles
+
+def get_display_profile(settings, display_id=None):
+    profiles = display_profiles(settings)
+    if display_id:
+        profile = next((p for p in profiles if p.get("id") == display_id), None)
+        if profile:
+            return profile
+    return next((p for p in profiles if p.get("active", True)), profiles[0])
+
+def display_settings(settings, profile):
+    """Return settings for one render target without mutating global settings."""
+    result = dict(settings)
+    result.update(profile.get("settings", {}))
+    result["screen_width"] = int(profile.get("width", 1920))
+    result["screen_height"] = int(profile.get("height", 1080))
+    result["_display_id"] = profile["id"]
+    return result
+
+def load_settings():
+    """Load settings, exposing a migrated default display for legacy installs."""
+    settings = {}
+    if SETTINGS_FILE.exists():
+        with open(SETTINGS_FILE, "r") as f:
+            settings = json.load(f)
+    settings = {**DEFAULT_SETTINGS, **settings}
+    settings.setdefault("displays", [_legacy_display(settings)])
+    return settings
 
 def save_settings(settings):
     """Save settings to JSON file"""
@@ -952,19 +992,43 @@ _display_state = {
 }
 
 
-def _get_effective_index(total_slides):
-    """Compute current slide index with lazy auto-advance."""
+def _get_effective_index(total_slides, state=None, settings=None):
+    """Compute a profile slideshow index with lazy auto-advance."""
     if total_slides == 0:
         return 0
-    state = _display_state
-    if state['paused'] or total_slides <= 1:
-        return state['index'] % total_slides
-    settings = load_settings()
-    interval = settings.get('slideshow_interval', 10)
-    elapsed = time.time() - state['last_advanced_at']
+    state = state or _display_state
+    if state["paused"] or total_slides <= 1:
+        return state["index"] % total_slides
+    settings = settings or load_settings()
+    interval = settings.get("slideshow_interval", 10)
+    elapsed = time.time() - state["last_advanced_at"]
     advances = int(elapsed / interval)
-    return (state['index'] + advances) % total_slides
+    return (state["index"] + advances) % total_slides
 
+
+_independent_display_states = {}
+
+def _profile_state(profile):
+    if profile.get("synchronized", True):
+        return _display_state
+    return _independent_display_states.setdefault(profile["id"], {"index": 0, "paused": False, "last_advanced_at": time.time()})
+
+def _profile_snapshot_url(slide, profile):
+    if slide is None: return None
+    base = slide.get("group_id") if slide.get("type") == "group" else slide["images"][0]["filename"]
+    path = SNAPSHOT_FOLDER / f"{base}.{profile["id"]}.display.png"
+    if not path.exists():
+        settings = display_settings(load_settings(), profile)
+        if slide.get("type") == "group":
+            if base.startswith("__pair_"):
+                # Auto-paired portrait slides are synthetic and have no entry in
+                # gallery["groups"]. Render from the slide data itself.
+                _render_pair_slide_snapshot(slide, settings, UPLOAD_FOLDER, SNAPSHOT_FOLDER)
+            else:
+                _render_group_snapshot(base, load_gallery(), settings, UPLOAD_FOLDER, SNAPSHOT_FOLDER)
+        else:
+            _render_snapshot(base, load_gallery(), settings, UPLOAD_FOLDER, SNAPSHOT_FOLDER)
+    return f"/snapshots/{path.name}?v={path.stat().st_mtime_ns}" if path.exists() else None
 
 # ============ Backup Management ============
 
@@ -2335,6 +2399,7 @@ def api_update_image(filename):
     if display_fields & updates.keys():
         generate_display_snapshot(filename)
         regenerate_snapshots_for_groups_containing(filename)
+        regenerate_profile_snapshots_for_image(filename)
 
     return jsonify({'success': True})
 
@@ -2646,73 +2711,87 @@ def api_rotate_display_secret():
     return response
 
 
-@app.route('/api/display/state')
+@app.route("/api/displays", methods=["GET", "POST"])
+@api_login_required
+def api_displays():
+    settings = load_settings(); profiles = display_profiles(settings)
+    if request.method == "GET": return jsonify({"displays": profiles})
+    data = request.json or {}
+    try: width, height = int(data.get("width", 1920)), int(data.get("height", 1080))
+    except (TypeError, ValueError): return jsonify({"error": "Width and height must be numbers"}), 400
+    if not 100 <= width <= 10000 or not 100 <= height <= 10000: return jsonify({"error": "Invalid display dimensions"}), 400
+    profile = {"id": uuid.uuid4().hex[:12], "name": str(data.get("name") or "New display")[:80], "active": bool(data.get("active", True)), "width": width, "height": height, "synchronized": bool(data.get("synchronized", True))}
+    settings["displays"] = profiles + [profile]; save_settings(settings)
+    return jsonify({"display": profile}), 201
+
+@app.route("/api/displays/<display_id>", methods=["PATCH", "DELETE"])
+@api_login_required
+def api_display_profile(display_id):
+    settings = load_settings(); profiles = display_profiles(settings)
+    profile = next((p for p in profiles if p["id"] == display_id), None)
+    if not profile: return jsonify({"error": "Display not found"}), 404
+    if request.method == "DELETE":
+        if len(profiles) == 1: return jsonify({"error": "At least one display is required"}), 400
+        settings["displays"] = [p for p in profiles if p["id"] != display_id]; save_settings(settings)
+        return jsonify({"success": True})
+    data = request.json or {}
+    for key in ("name", "active", "synchronized"):
+        if key in data: profile[key] = str(data[key])[:80] if key == "name" else bool(data[key])
+    for key in ("width", "height"):
+        if key in data:
+            try: profile[key] = int(data[key])
+            except (TypeError, ValueError): return jsonify({"error": f"{key} must be a number"}), 400
+    if not any(p.get("active", True) for p in profiles): return jsonify({"error": "At least one display must remain active"}), 400
+    settings["displays"] = profiles; save_settings(settings)
+    return jsonify({"display": profile})
+
+@app.route("/api/display/state")
 @display_api_required
 def api_display_state():
-    """Get current slideshow state including the pre-rendered snapshot URL."""
-    slides, _, settings = _build_slides()
-    total = len(slides)
-    index = _get_effective_index(total)
-    current_slide = slides[index] if total > 0 else None
-    # Generate any missing auto-pair snapshots in the background (no-op if all exist).
-    threading.Thread(target=_ensure_auto_pair_snapshots, args=(slides,), daemon=True).start()
-    return jsonify({
-        'index': index,
-        'paused': _display_state['paused'],
-        'total': total,
-        'snapshot_url': _get_slide_snapshot_url(current_slide),
-        'mat_color': (current_slide.get('mat_color') if current_slide else None)
-                     or settings.get('mat_color', '#ffffff'),
-        'transition_duration': settings.get('transition_duration', 1),
-    })
-
-
-@app.route('/api/display/control', methods=['POST'])
-@display_api_required
-def api_display_control():
-    """Control the slideshow: next, prev, pause, play."""
-    data = request.json or {}
-    action = data.get('action')
-    if action not in ('next', 'prev', 'pause', 'play'):
-        return jsonify({'error': 'Invalid action. Use next, prev, pause, or play.'}), 400
-
+    """Return the current render for this display profile."""
+    settings = load_settings()
+    profile = get_display_profile(settings, request.args.get("display"))
+    profile_settings = display_settings(settings, profile)
+    state = _profile_state(profile)
     slides, _, _ = _build_slides()
     total = len(slides)
-    if total == 0:
-        return jsonify({'index': 0, 'paused': _display_state['paused']})
-
-    now = time.time()
-    current = _get_effective_index(total)
-
-    if action == 'next':
-        _display_state['index'] = (current + 1) % total
-        _display_state['last_advanced_at'] = now
-    elif action == 'prev':
-        _display_state['index'] = (current - 1) % total
-        _display_state['last_advanced_at'] = now
-    elif action == 'pause':
-        _display_state['index'] = current
-        _display_state['paused'] = True
-    elif action == 'play':
-        _display_state['paused'] = False
-        _display_state['last_advanced_at'] = now
-
-    index = _get_effective_index(total)
-    current_slide = slides[index] if total > 0 else None
-    snapshot_url = _get_slide_snapshot_url(current_slide)
-    if snapshot_url is None and current_slide is not None:
-        gid = current_slide.get('group_id', '')
-        if gid.startswith('__pair_'):
-            try:
-                _render_pair_slide_snapshot(current_slide, load_settings(), UPLOAD_FOLDER, SNAPSHOT_FOLDER)
-                snapshot_url = _get_slide_snapshot_url(current_slide)
-            except Exception:
-                pass
+    index = _get_effective_index(total, state, profile_settings)
+    current_slide = slides[index] if total else None
     return jsonify({
-        'index': index,
-        'paused': _display_state['paused'],
-        'snapshot_url': snapshot_url,
+        "display": profile, "index": index, "paused": state["paused"], "total": total,
+        "snapshot_url": _profile_snapshot_url(current_slide, profile),
+        "mat_color": (current_slide.get("mat_color") if current_slide else None) or profile_settings.get("mat_color", "#ffffff"),
+        "transition_duration": profile_settings.get("transition_duration", 1),
     })
+
+@app.route("/api/display/control", methods=["POST"])
+@display_api_required
+def api_display_control():
+    data = request.json or {}
+    action = data.get("action")
+    if action not in ("next", "prev", "pause", "play"):
+        return jsonify({"error": "Invalid action. Use next, prev, pause, or play."}), 400
+    settings = load_settings()
+    profile = get_display_profile(settings, data.get("display") or request.args.get("display"))
+    profile_settings = display_settings(settings, profile)
+    state = _profile_state(profile)
+    slides, _, _ = _build_slides()
+    total = len(slides)
+    if not total:
+        return jsonify({"index": 0, "paused": state["paused"]})
+    now, current = time.time(), _get_effective_index(total, state, profile_settings)
+    if action == "next":
+        state["index"] = (current + 1) % total
+        state["last_advanced_at"] = now
+    elif action == "prev":
+        state["index"] = (current - 1) % total
+        state["last_advanced_at"] = now
+    elif action == "pause":
+        state["index"], state["paused"] = current, True
+    else:
+        state["paused"], state["last_advanced_at"] = False, now
+    index = _get_effective_index(total, state, profile_settings)
+    return jsonify({"index": index, "paused": state["paused"], "snapshot_url": _profile_snapshot_url(slides[index], profile)})
 
 
 # --- Backup Routes ---
